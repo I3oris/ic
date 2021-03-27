@@ -1,4 +1,4 @@
-# File take from https://github.com/crystal-community/icr/blob/master/src/icr/executer.cr
+# File retake from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
 # thanks!
 class ICR::Highlighter
   record Highlight,
@@ -21,19 +21,15 @@ class ICR::Highlighter
     end
   end
 
-  getter highlight_stack : Array(Highlight)
+  class_getter highlight_stack = [] of Highlight
 
-  @num_line = 0
-  setter invitation
+  @@num_line = 0
+  class_setter invitation : Proc(Int32, String) = ->(nb : Int32) { "" }
 
-  def invitation
-    i = @invitation.call(@num_line)
-    @num_line += 1
+  def self.invitation
+    i = @@invitation.call(@@num_line)
+    @@num_line += 1
     i
-  end
-
-  def initialize(@invitation : Proc(Int32, String) = ->(nb : Int32) { "" })
-    @highlight_stack = [] of Highlight
   end
 
   KEYWORDS = Set{
@@ -59,23 +55,24 @@ class ICR::Highlighter
     :"[]", :"[]?", :"[]=", :"<=>", :"===",
   }
 
-  def highlight(code, @num_line)
+  def self.highlight(code, @@num_line = 0,*, no_invitation = false)
+    highlight_stack.clear
     lexer = Crystal::Lexer.new(code)
     lexer.comments_enabled = true
     lexer.count_whitespace = true
     lexer.wants_raw = true
 
     String.build do |io|
-      io.print self.invitation
+      io.print self.invitation unless no_invitation
       begin
         highlight_normal_state lexer, io
         io.puts "\e[m"
       rescue Crystal::SyntaxException
       end
-    end
+    end.chomp("\n")
   end
 
-  private def highlight_normal_state(lexer, io, break_on_rcurly = false)
+  private def self.highlight_normal_state(lexer, io, break_on_rcurly = false)
     last_is_def = false
 
     while true
@@ -121,6 +118,7 @@ class ICR::Highlighter
         end
       when :"}"
         if break_on_rcurly
+          highlight token, :interpolation, io
           break
         else
           io << token
@@ -144,7 +142,7 @@ class ICR::Highlighter
     end
   end
 
-  private def highlight_delimiter_state(lexer, token, io)
+  private def self.highlight_delimiter_state(lexer, token, io)
     start_highlight :string, io
 
     print_raw io, token.raw
@@ -161,7 +159,6 @@ class ICR::Highlighter
         highlight "\#{", :interpolation, io
         highlight_normal_state lexer, io, break_on_rcurly: true
         start_highlight :string, io
-        highlight "}", :interpolation, io
       when :EOF
         break
       else
@@ -170,7 +167,7 @@ class ICR::Highlighter
     end
   end
 
-  private def highlight_string_array(lexer, token, io)
+  private def self.highlight_string_array(lexer, token, io)
     start_highlight :string, io
     print_raw io, token.raw
     first = true
@@ -192,27 +189,27 @@ class ICR::Highlighter
     end
   end
 
-  private def print_raw(io, raw)
+  private def self.print_raw(io, raw)
     io << raw.to_s.gsub("\n", "\n#{self.invitation}")
   end
 
-  private def highlight(token, type, io)
+  private def self.highlight(token, type, io)
     start_highlight type, io
     io << token
     end_highlight io
   end
 
-  private def start_highlight(type, io)
-    @highlight_stack << highlight_type(type)
-    io << "\e[0;#{@highlight_stack.last}m"
+  private def self.start_highlight(type, io)
+    @@highlight_stack << highlight_type(type)
+    io << "\e[0;#{@@highlight_stack.last}m"
   end
 
-  private def end_highlight(io)
-    @highlight_stack.pop
-    io << "\e[0;#{@highlight_stack.last?}m"
+  private def self.end_highlight(io)
+    @@highlight_stack.pop
+    io << "\e[0;#{@@highlight_stack.last?}m"
   end
 
-  private def highlight_type(type)
+  private def self.highlight_type(type)
     case type
     when :comment
       Highlight.new(:black, bold: true)
@@ -231,7 +228,7 @@ class ICR::Highlighter
     when :operator
       Highlight.new(:red)
     when :method
-      Highlight.new(:green)
+      Highlight.new(:green, bold: true)
     when :literal
       Highlight.new(:cyan, bold: true)
     else

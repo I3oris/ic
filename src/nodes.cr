@@ -77,36 +77,38 @@ end
 
 class Crystal::Call
   def run
-    if obj = self.obj
-      receiver = obj.run
-      type = receiver.get_type
+    {% unless flag?(:no_semantic) %}
+      if obj = self.obj
+        receiver = obj.run
+        type = receiver.get_type
 
-      if type.has_def? name
-        type.lookup_defs(name).each do |a_def|
-          if a = a_def.annotations(ICR.program.primitive_annotation)
-            return ICR::Primitives.call(a[0].args[0].as(Crystal::SymbolLiteral).to_s, a_def, receiver, args.map &.run)
-          else
-            return ICR.run_method(receiver, a_def, args.map &.run)
-            # raise_error "Method call not implemented!!"
+        if type.has_def? name
+          type.lookup_defs(name).each do |a_def|
+            if a = a_def.annotations(ICR.program.primitive_annotation)
+              return ICR::Primitives.call(a[0].args[0].as(Crystal::SymbolLiteral).to_s, a_def, receiver, args.map &.run)
+            else
+              return ICR.run_method(receiver, a_def, args.map &.run)
+              # raise_error "Method call not implemented!!"
+            end
           end
+        else
+          raise_error "Method not found #{name}"
         end
       else
-        raise_error "Method not found #{name}"
-      end
-    else
-      # top level call
-      if ICR.program.has_def? name
-        # defs = ICR.program.defs[name]?
+        # top level call
+        if ICR.program.has_def? name
+          # defs = ICR.program.defs[name]?
 
-        ICR.program.lookup_defs(name).each do |a_def|
-          # TODO find good overload
-          # raise_error "Top level method not implemented!"
-          return ICR.run_top_level_method(a_def, args.map &.run)
+          ICR.program.lookup_defs(name).each do |a_def|
+            # TODO find good overload
+            # raise_error "Top level method not implemented!"
+            return ICR.run_top_level_method(a_def, args.map &.run)
+          end
+        else
+          raise_error "top level method not found #{name}"
         end
-      else
-        raise_error "top level method not found #{name}"
       end
-    end
+    {% end %}
     ICR.nil
   rescue e : ICR::Return
     return e.return_value
