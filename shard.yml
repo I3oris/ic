@@ -1,0 +1,17 @@
+name: my_icr
+version: 0.1.0
+
+authors:
+  - your-name-here <your-email-here>
+
+targets:
+  my_icr:
+    main: src/my_icr.cr
+
+dependencies:
+  term-reader:
+    github: crystal-term/reader
+
+crystal: 1.0.0
+
+license: MIT
