@@ -1,21 +1,39 @@
-{% unless flag?(:no_semantic) %}
-  require "compiler/crystal/*"
-  require "compiler/crystal/codegen/*"
-  require "compiler/crystal/macros/*"
-  require "compiler/crystal/semantic/*"
-{% end %}
+require "compiler/crystal/*"
+require "compiler/crystal/codegen/*"
+require "compiler/crystal/macros/*"
+require "compiler/crystal/semantic/*"
 require "compiler/crystal/syntax"
+
 require "./nodes"
 require "./objects"
 require "./primitives"
+require "./execution"
 require "./highlighter"
 require "./shell"
 require "colorize"
 
-{% unless flag?(:no_semantic) %}
-  ICR.run_file "./program.cr"
-{% end %}
+ICR.run_file "./prelude.cr"
+ICR.run_file ARGV[0] if ARGV[0]?
 ICR.run
+
+class Crystal::MainVisitor
+  # Don't raise when undersore:
+  def visit(node : Underscore)
+    if @in_type_args == 0
+      # node.raise "can't read from _"
+      node
+    else
+      node.raise "can't use underscore as generic type argument"
+    end
+  end
+end
+
+class Crystal::CleanupTransformer
+  # Don't cleanup underscore:
+  def untyped_expression(node, msg = nil)
+    node
+  end
+end
 
 def raise_error(arg)
   ::raise arg
@@ -24,20 +42,13 @@ end
 module ICR
   VERSION = "0.1.0"
 
-  {% unless flag?(:no_semantic) %}
-    class_property program = Crystal::Program.new
-  {% end %}
-  class_property args_context = [{} of String => ICRObject]
-  class_property receiver_context = [] of ICRObject
-
-  # class_property type_context = [] of Crystal::Type
+  class_property program = Crystal::Program.new
+  class_getter? busy = false
 
   def self.parse(text)
     ast_node = Crystal::Parser.parse text
-    {% unless flag?(:no_semantic) %}
-      ast_node = @@program.normalize(ast_node)
-      ast_node = @@program.semantic(ast_node)
-    {% end %}
+    ast_node = @@program.normalize(ast_node)
+    ast_node = @@program.semantic(ast_node)
     ast_node
   end
 
@@ -45,11 +56,11 @@ module ICR
     ICR.parse(File.read(path)).run
   end
 
-  @@result : ICRObject? = nil
+  class_getter result : ICRObject = ICR.nil
 
   def self.display_result
     if r = @@result
-      print "\n => #{Highlighter.highlight(r.get_value.inspect, no_invitation: true)}"
+      print "\n => #{Highlighter.highlight(r.result, no_invitation: true)}"
     end
   end
 
@@ -58,19 +69,28 @@ module ICR
     last_ast_node = nil
 
     Shell.new.run(->self.display_result) do |line|
+      ICR.clear_context
       ast_node = ICR.parse(code + "\n" + line)
       run_last_expression(expressionize(last_ast_node), expressionize(ast_node))
       last_ast_node = ast_node
       code += "\n" + line
 
       :line
+    rescue Cancel
+      @@busy = false
+      next :lineX
     rescue e
-      @@result = nil
       if unterminated?(e)
         :multiline
       else
         puts
-        puts e.message.colorize.yellow.bold
+
+        # this kind of message need to display more informations
+        if e.message.try &.starts_with?("instantiating") || e.message == "expanding macro"
+          puts e.colorize.yellow.bold
+        else
+          puts e.message.colorize.yellow.bold
+        end
         :error
       end
     end
@@ -97,8 +117,10 @@ module ICR
     l_size = last_ast_node.expressions.size
     size = ast_node.expressions.size
     if l_size != size
+      @@busy = true
       final = ast_node.expressions[l_size..].map(&.run)[-1]
       @@result = final
+      @@busy = false
     end
   end
 
@@ -117,59 +139,8 @@ module ICR
       "unterminated array literal",
       "unterminated macro",
       "Unterminated string interpolation",
-      "unknown token: '\u{0}'",
-    })
-  end
-
-  def self.run_method(receiver, a_def, args)
-    if a_def.args.size != args.size
-      raise_error "TODO: default values & named argument"
-    end
-    hash = {} of String => ICRObject
-    a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
-
-    @@args_context << hash
-    @@receiver_context << receiver
-
-    ret = a_def.body.run
-
-    @@args_context.pop
-    @@receiver_context.pop
-    ret
-  end
-
-  def self.run_top_level_method(a_def, args)
-    if a_def.args.size != args.size
-      raise_error "TODO: default values & named argument"
-    end
-    hash = {} of String => ICRObject
-    a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
-    @@args_context << hash
-
-    ret = a_def.body.run
-
-    @@args_context.pop
-    ret
-  end
-
-  def self.get_var(name)
-    if name == "self"
-      return @@receiver_context.last? || raise_error "self into a empty context"
-    elsif h = @@args_context.last?
-      # args = d.args.select(&.name == name)
-      if value = h[name]?
-        # puts "found #{name}"
-        # i = d.args.index_of(arg[0])
-        return value
-      else
-        raise_error "Cannot found def arg #{name}"
-      end
-    else
-      raise_error "BUG: Context stack is empty"
-    end
-  end
-
-  def self.assign_var(name, value)
-    @@args_context.last[name] = value
+      "invalid trailing comma in call",
+      "unknown token: '\\u{0}'",
+    }) || error.message.try &.matches? /Unterminated heredoc: can't find ".*" anywhere before the end of file/
   end
 end

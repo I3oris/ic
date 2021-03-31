@@ -23,12 +23,13 @@ class ICR::Highlighter
 
   class_getter highlight_stack = [] of Highlight
 
-  @@num_line = 0
-  class_setter invitation : Proc(Int32, String) = ->(nb : Int32) { "" }
+  class_getter? is_str = false
+  class_getter line_number = 0
+  class_setter invitation : Proc(String) = ->{ "" }
 
   def self.invitation
-    i = @@invitation.call(@@num_line)
-    @@num_line += 1
+    i = @@invitation.call
+    @@line_number += 1
     i
   end
 
@@ -53,23 +54,44 @@ class ICR::Highlighter
     :"=", :"==", :"<", :"<=", :">", :">=", :"!", :"!=", :"=~", :"!~",
     :"&", :"|", :"^", :"~", :"**", :">>", :"<<", :"%",
     :"[]", :"[]?", :"[]=", :"<=>", :"===",
+    :"+=", :"-=", :"*=", :"/=", :"//=", :"|=", :"&=", :"%=",
   }
 
-  def self.highlight(code, @@num_line = 0,*, no_invitation = false)
+  def self.highlight(code, *, no_invitation = false)
+    @@is_str = false
+    @@line_number = 0
     highlight_stack.clear
+    invit = no_invitation ? "" : self.invitation
+    error = false
+
     lexer = Crystal::Lexer.new(code)
     lexer.comments_enabled = true
     lexer.count_whitespace = true
     lexer.wants_raw = true
 
-    String.build do |io|
-      io.print self.invitation unless no_invitation
+    colorized = String.build do |io|
+      io.print invit
       begin
         highlight_normal_state lexer, io
         io.puts "\e[m"
       rescue Crystal::SyntaxException
+        error = true
       end
-    end.chomp("\n")
+    end
+
+    if error
+      # uncolorize:
+      colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
+
+      # remove icr invitation:
+      colorless = colorless.gsub(/icr\([0-9\.]+\):[0-9]{2,}[>\*"] /, "")
+
+      # re-add missing characters
+      colorized += code[colorless.size...].gsub('\n', "\n#{self.invitation}")
+    end
+
+    @@line_number = 0
+    return colorized.chomp("\n")
   end
 
   private def self.highlight_normal_state(lexer, io, break_on_rcurly = false)
@@ -97,8 +119,10 @@ class ICR::Highlighter
       when :CONST, :"::"
         highlight token, :const, io
       when :DELIMITER_START
+        @@is_str = true
         highlight_delimiter_state lexer, token, io
       when :STRING_ARRAY_START, :SYMBOL_ARRAY_START
+        @@is_str = true
         highlight_string_array lexer, token, io
       when :EOF
         break
@@ -123,6 +147,10 @@ class ICR::Highlighter
         else
           io << token
         end
+      when :INSTANCE_VAR, :CLASS_VAR
+        io << token.value
+      when :GLOBAL, :GLOBAL_MATCH_DATA_INDEX
+        io << token.value
       else
         if OPERATORS.includes? token.type
           highlight token, :operator, io
@@ -153,16 +181,19 @@ class ICR::Highlighter
       when :DELIMITER_END
         print_raw io, token.raw
         end_highlight io
+        @@is_str = false
         break
       when :INTERPOLATION_START
         end_highlight io
         highlight "\#{", :interpolation, io
+        @@is_str = false
         highlight_normal_state lexer, io, break_on_rcurly: true
+        @@is_str = true
         start_highlight :string, io
       when :EOF
         break
       else
-        print_raw io, token.raw
+        io.print token.raw.to_s.gsub('\n',"\n#{self.invitation}\e[0;#{highlight_type(:string)}m")
       end
     end
   end
@@ -179,6 +210,7 @@ class ICR::Highlighter
         print_raw io, token.value
         first = false
       when :STRING_ARRAY_END
+        @@is_str = false
         print_raw io, token.raw
         end_highlight io
         break
@@ -190,7 +222,7 @@ class ICR::Highlighter
   end
 
   private def self.print_raw(io, raw)
-    io << raw.to_s.gsub("\n", "\n#{self.invitation}")
+    io << raw.to_s
   end
 
   private def self.highlight(token, type, io)
@@ -213,7 +245,9 @@ class ICR::Highlighter
     case type
     when :comment
       Highlight.new(:black, bold: true)
-    when :number, :char
+    when :number
+      Highlight.new(:magenta)
+    when :char
       Highlight.new(:magenta)
     when :symbol
       Highlight.new(:magenta)

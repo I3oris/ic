@@ -1,8 +1,11 @@
 module ICR
-  class CharReader
-    class Interuption < Exception
-    end
+  class Quit < Exception
+  end
 
+  class Cancel < Exception
+  end
+
+  class CharReader
     @@io : IO::FileDescriptor = STDIN
 
     def self.read_chars(@@io, &)
@@ -10,7 +13,7 @@ module ICR
       loop do
         @@io.raw { c = self.next }
         yield c if c
-      rescue Interuption
+      rescue Quit
         puts
         exit(0)
       end
@@ -30,7 +33,7 @@ module ICR
         end
         # ctrl-c, ctrl-d, ctrl-x
       when '\u0003', '\u0004', '\u0018'
-        raise Interuption.new
+        raise Quit.new
       when '\u007f'
         :back
       else
@@ -49,8 +52,8 @@ module ICR
 
     private getter? multiline = false
 
-    private def prompt(nb = nil) : String
-      n = sprintf("%02d", (nb || @line_number))
+    private def prompt : String
+      n = sprintf("%02d", @line_number + Highlighter.line_number)
       # p = "icr(1.0.0):#{n}"
       p = "icr(#{Crystal::VERSION}):".colorize(:white)
       p = "#{p}#{n.colorize.magenta}"
@@ -66,7 +69,8 @@ module ICR
       lines = @edited_line.split('\n')
       lines.reverse_each do |l|
         print '\r'
-        (l.size + 15).times { print ' ' }
+        # 20 = prompt size with 6-sized line number (eg <= 999999)
+        (l.size + 20).times { print ' ' }
         print '\r'
         print "\033[1F"
       end
@@ -76,28 +80,29 @@ module ICR
 
     private def formate_line
       nb_lines = clear_line
-      {% unless flag?(:no_semantic) %}
+      begin
         @edited_line = Crystal.format(@edited_line).chomp("\n")
-      {% end %}
-      print Highlighter.highlight(@edited_line, @line_number - nb_lines)
+      rescue
+      end
+      print Highlighter.highlight(@edited_line)
     end
 
     private def highlight_line
       clear_line
-      print Highlighter.highlight(@edited_line, @line_number) # - nb_lines+1
+      print Highlighter.highlight(@edited_line)
     end
 
     private def replace_line(line)
       clear_line
       @edited_line = line
-      print Highlighter.highlight(@edited_line, @line_number)
+      print Highlighter.highlight(@edited_line)
     end
 
     private def increase_indent
       last_line = @edited_line.split('\n')[-1]
-      # TODO handle ALL keyword indent
-      if (last_line.starts_with? /( )*(class|struct|def|if|unless|while|until|module|lib|begin|case)/) ||
-         last_line =~ /( )*do( )*/
+      if (last_line.starts_with? /( )*(abstract|class|struct|enum|def|if|unless|while|until|module|lib|begin|case|macro|select|union)/) ||
+         last_line =~ /( )*do( )*/ ||
+         last_line.starts_with? /( )*\{\%( )*(for|if|unless)/
         @indent += 1
       end
     end
@@ -123,19 +128,18 @@ module ICR
       when /^( )*end$/
         @indent -= 1
         auto_unindent(lines, @indent, "end")
-      when /^( )*else$/
-        auto_unindent(lines, @indent - 1, "else")
-      when /^( )*elsif$/
-        auto_unindent(lines, @indent - 1, "elsif")
-      when /^( )*when$/
-        auto_unindent(lines, @indent - 1, "when")
+      when /^( )*(else|elsif|when|in|rescue|ensure)$/
+        auto_unindent(lines, @indent - 1, $~[2])
+      when /^( )*\{\%( )*end$/
+        @indent -= 1
+        auto_unindent(lines, @indent, "{% end %}")
       else
         highlight_line
       end
     end
 
-    private def add_to_history(line)
-      @line_number += line.split('\n').size
+    private def add_to_history(line, error)
+      @line_number += line.chomp("\n").split('\n').size unless error
       @history.push line
       @history_index = 0
     end
@@ -154,10 +158,11 @@ module ICR
       end
     end
 
-    private def validate_line
+    private def validate_line(*, formate = false, error = false)
       @indent = 0
       @multiline = false
-      self.add_to_history @edited_line
+      formate_line if formate
+      add_to_history @edited_line, error: error
       @edited_line = ""
     end
 
@@ -172,25 +177,23 @@ module ICR
 
       case status
       when :error
-        validate_line
+        validate_line error: true
       when :multiline
         self.increase_indent
         @multiline = true
         @edited_line += "\n" + "  "*@indent
       when :line
-        formate_line
-        validate_line
+        validate_line formate: true
         display_result.call
       end
       puts
       print prompt
       print "  "*@indent
+      highlight_line if status == :multiline
     end
 
     def run(display_result, &block : String -> Symbol)
-      Highlighter.invitation = ->(nb : Int32) do
-        self.prompt nb
-      end
+      Highlighter.invitation = ->prompt
       print prompt
 
       CharReader.read_chars(STDIN) do |char|
