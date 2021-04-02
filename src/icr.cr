@@ -109,19 +109,23 @@ module ICR
   end
 
   private def self.run_last_expression(last_ast_node, ast_node)
-    {% if flag?(:no_semantic) %}
-      @@result = ICR.nil
-      return
-    {% end %}
 
     l_size = last_ast_node.expressions.size
     size = ast_node.expressions.size
     if l_size != size
       @@busy = true
-      final = ast_node.expressions[l_size..].map(&.run)[-1]
-      @@result = final
+      @@result = ast_node.expressions[l_size..].map(&.run)[-1]
       @@busy = false
     end
+
+    {% if flag?(:debug) %}
+      puts
+      ICR.debug_visited.clear
+      ast_node.expressions[-1].print_debug
+      puts
+      puts
+      pp! @@result
+    {% end %}
   end
 
   private def self.unterminated?(error)
@@ -130,13 +134,17 @@ module ICR
       "expecting token 'CONST', not 'EOF'",
       "expecting any of these tokens: IDENT, CONST, `, <<, <, <=, ==, ===, !=, =~, !~, >>, >, >=, +, -, *, /, //, !, ~, %, &, |, ^, **, [], []?, []=, <=>, &+, &-, &*, &** (not 'EOF')",
       "expecting token ')', not 'EOF'",
+      "expecting token ']', not 'EOF'",
+      "expecting token '}', not 'EOF'",
+      "expected '}' or named tuple name, not EOF",
       "unexpected token: EOF",
       "unexpected token: EOF (expecting when, else or end)",
-      "Unexpected EOF on heredoc identifier",
       "unexpected token: EOF (expecting ',', ';' or '\n')",
+      "Unexpected EOF on heredoc identifier",
       "unterminated parenthesized expression",
       "Unterminated string literal", # <= U is upcase ^^
       "unterminated array literal",
+      "unterminated tuple literal",
       "unterminated macro",
       "Unterminated string interpolation",
       "invalid trailing comma in call",

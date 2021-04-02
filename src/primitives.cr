@@ -13,28 +13,30 @@ module ICR
     def self.call(name : String, a_def, arg0 : ICRObject, args : Array(ICRObject))
       case name
       when ":binary"    then self.binary_call(a_def, arg0, args[0])
-      when ":class"     then ICR.class_type(arg0.get_type)
+      when ":class"     then ICR.class_type(arg0.type)
       when ":object_id" then ICR.uint64(arg0.object_id)
       else
         raise_error "Primitive not implemented: #{name}"
       end
     end
 
-    private def self.binary_call(a_def, arg0, arg1)
+    private def self.binary_call(a_def, arg0 : ICRObject, arg1 : ICRObject)
+      arg0.unsafe_as(ICRNumber).primitive_op(a_def.name,arg1.as(ICRNumber))
       # t1, t2 = a_def.owner , a_def.args[0].type
-      case a_def.name
-      when "+"  then ICR.int32(arg0.get_value.as(Int32) + arg1.get_value.as(Int32))
-      when "*"  then ICR.int32(arg0.get_value.as(Int32) * arg1.get_value.as(Int32))
-      when "-"  then ICR.int32(arg0.get_value.as(Int32) - arg1.get_value.as(Int32))
-      when "==" then ICR.bool(arg0.get_value.as(Int32) == arg1.get_value.as(Int32))
-      when "!=" then ICR.bool(arg0.get_value.as(Int32) != arg1.get_value.as(Int32))
-      when "<=" then ICR.bool(arg0.get_value.as(Int32) <= arg1.get_value.as(Int32))
-      when ">=" then ICR.bool(arg0.get_value.as(Int32) >= arg1.get_value.as(Int32))
-      when "<"  then ICR.bool(arg0.get_value.as(Int32) < arg1.get_value.as(Int32))
-      when ">"  then ICR.bool(arg0.get_value.as(Int32) > arg1.get_value.as(Int32))
-      else
-        raise_error "Binary primitive not implemented: #{name}" # where is definied name??
-      end
+      # case a_def.name
+      # when
+      # when "+"  then T.new(arg0.value + arg1.value)
+      # when "*"  then T.new(arg0.value * arg1.value)
+      # when "-"  then T.new(arg0.value - arg1.value)
+      # when "==" then ICR.bool(arg0.value == arg1.value)
+      # when "!=" then ICR.bool(arg0.value != arg1.value)
+      # when "<=" then ICR.bool(arg0.value <= arg1.value)
+      # when ">=" then ICR.bool(arg0.value >= arg1.value)
+      # when "<"  then ICR.bool(arg0.value < arg1.value)
+      # when ">"  then ICR.bool(arg0.value > arg1.value)
+      # else
+      #   raise_error "Binary primitive not implemented: #{name}" # where is definied name??
+      # end
     end
 
     private def self.allocate(type)

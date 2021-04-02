@@ -51,7 +51,8 @@ class Class
   end
 end
 
-## ??? not in stdlib?
-@[Primitive(:allocate)]
-def allocate
-end
+## /!\ must be a method on Object
+# @[Primitive(:allocate)]
+# def allocate
+# end
+
