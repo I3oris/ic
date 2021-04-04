@@ -88,8 +88,9 @@ module ICR
     end
 
     private def highlight_line
+      colorized = Highlighter.highlight(@edited_line)
       clear_line
-      print Highlighter.highlight(@edited_line)
+      print colorized
     end
 
     private def replace_line(line)

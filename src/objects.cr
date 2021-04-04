@@ -1,137 +1,12 @@
-class Crystal::GenericInstanceType
-  def generics
-    generics = {} of String => ICR::ICRType
-    @type_vars.each do |name,ast|
-      generics[name] = ICR::ICRType.new ast.as(Crystal::Var).type
-    end
-    generics
-  rescue
-    bug "Cannot get generics vars for #{self}"
-  end
-end
-
 module ICR
-  alias Byte = UInt8
-
-
-  class ICRType # TODO make all methods class methods
-    getter size : UInt64
-    getter cr_type : Crystal::Type
-    # nil_type?
-    # instance_vars
-    # all_instance_vars
-
-    getter generics = {} of String => ICRType
-    @instance_vars = {} of String => {UInt64, ICRType}
-    getter class_size = 0u64
-
-    def struct?
-      @cr_type.struct?
-    end
-
-    private def self.llvm_struct_type?(cr_type)
-      (cr_type.is_a?(Crystal::NonGenericClassType) || cr_type.is_a?(Crystal::GenericClassInstanceType)) &&
-        !cr_type.is_a?(Crystal::PointerInstanceType) && !cr_type.is_a?(Crystal::ProcInstanceType)
-    end
-
-    # don't use that for classes
-    def self.instance_size_of(cr_type : Crystal::Type)
-      return 0u64 if cr_type.nil_type?
-      return 1u64 if cr_type.bool_type?
-
-      llvm_typer = ICR.program.llvm_typer
-      if llvm_struct_type?(cr_type)
-        llvm_typer.size_of(llvm_typer.llvm_struct_type(cr_type))
-      else
-        llvm_typer.size_of(llvm_typer.llvm_embedded_type(cr_type))
-      end
-    end
-
-    def self.size_of(cr_type : Crystal::Type)
-      if cr_type.struct? # if !class?
-        memory_size_of(cr_type)
-      else
-        8
-      end
-    end
-
-    def initialize(@cr_type : Crystal::Type)
-      @instance_vars = {} of String => Tuple(UInt64, ICRType)
-      @size = 0u64
-
-
-      @size = ICRType.instance_size_of(@cr_type)
-
-      if !struct?
-        @class_size = @size
-        @size = 8_u64
-        {% if flag?(:_debug) %}
-          puts "SIZE OF #{@cr_type} = #{@size}(#{@class_size})"
-        {% end %}
-      end
-
-      if (cr_type=@cr_type).is_a? Crystal::GenericInstanceType
-        # @generics = cr_type.generic_type.instantiated_types.map { |t| ICRType.new(t).as(ICRType) }
-        @generics = cr_type.generics
-      end
-
-      begin
-        i = 0u64
-        @cr_type.all_instance_vars.each do |name,ivar|
-          {% if flag?(:_debug) %}
-            puts "  size of #{@cr_type}.#{name} = #{ICRType.size_of(ivar.type)}"
-          {% end %}
-          @instance_vars[name] = {i,ICRType.new(ivar.type)} #ivar.type
-          i += ICRType.size_of(ivar.type)
-        rescue e
-          puts "  BUG with #{ivar}: #{e.message}"
-        end
-      rescue
-        # we enter here when @cr_type doesn't implement instance_vars
-        # TODO: found a proper way to know if a Crystal::Type implements instance_vars
-      end
-    end
-
-    def type_of(name)
-      @instance_vars[name][1]
-    end
-
-    # Used if recurive type are defined
-    def set_type_of(name, type : ICRType)
-      @instance_vars[name] = {@instance_vars[name][0], type}
-    end
-
-    def read_ivar(name, src, dst)
-      i, type = @instance_vars[name]
-      (src + i).copy_to(dst, type.size)
-    end
-
-    def write_ivar(name, src, dst)
-      i, type = @instance_vars[name]
-      (dst + i).copy_from(src, type.size)
-    end
-
-    def self.pointer_of(generic : Crystal::Type)
-      ICRType.new(ICR.program.pointer_of(generic))
-    end
-
-    def self.bool
-      ICRType.new(ICR.program.bool)
-    end
-
-    def self.int32
-      ICRType.new(ICR.program.int32)
-    end
-
-    def self.uint64
-      ICRType.new(ICR.program.uint64)
-    end
-
-    def self.nil
-      ICRType.new(ICR.program.nil)
-    end
-  end
-
+  # ICRObject are transmitted through the AST Tree, and represents Object created with icr
+  #
+  # There are constituted of a ICRType and a pointer on the binary representation of the object (`raw`)
+  # i.e for a Int32, raw will be a pointer on 4 bytes.
+  #
+  # For classes, raw will be a pointer on 8 bytes (address), pointing itself on the classes size.
+  #
+  # The ICRType will give information of how to treat the raw binary.
   class ICRObject
     getter type : ICRType
     getter raw : Pointer(Byte)
@@ -139,8 +14,10 @@ module ICR
 
     def initialize(@type)
       if @type.struct?
+        # raw -> data
         @raw = Pointer(Byte).malloc(@type.size)
       else
+        # raw -> ref -> data-class
         @raw = Pointer(Byte).malloc(8)
         ref = Pointer(Byte).malloc(@type.class_size)
         @dont_collect = ref
@@ -148,6 +25,7 @@ module ICR
       end
     end
 
+    # Read an ivar from this object
     def [](name)
       obj = ICRObject.new(@type.type_of(name))
       if @type.struct?
@@ -160,6 +38,7 @@ module ICR
       obj
     end
 
+    # Write an ivar of this object
     def []=(name, value : ICRObject)
       if @type.struct?
         @type.write_ivar(name, value.raw, @raw)
@@ -175,23 +54,33 @@ module ICR
       !falsey?
     end
 
+    # Falsey if is nil, false, Pointer.null.
     def falsey?
       t = @type.cr_type
-      t.nil_type? || (t.bool_type? && self.as_bool == false) #|| is_null_pointer?
+      t.nil_type? || (t.bool_type? && self.as_bool == false) # || is_null_pointer?
     end
 
+    # Gives a string representation used by icr to display the result of an instruction.
     def result
-      case t = @type.cr_type.to_s
-      when "Int32" then self.as_int32.to_s
-      when "UInt64" then self.as_uint64.to_s
-      when "Bool" then self.as_bool.to_s
-      when "Nil" then "nil"
+      case t = @type.cr_type.to_s # TODO avoid the string transformation
+      when "Int8"   then "#{as_int8.to_s.underscored}i8"
+      when "UInt8"  then "#{as_uint8.to_s.underscored}u8"
+      when "Int16"  then "#{as_int16.to_s.underscored}i16"
+      when "UInt16" then "#{as_uint16.to_s.underscored}u16"
+      when "Int32"  then as_int32.to_s.underscored
+      when "UInt32" then "#{as_uint32.to_s.underscored}u32"
+      when "Int64"  then "#{as_int64.to_s.underscored}i64"
+      when "UInt64" then "#{as_uint64.to_s.underscored}u64"
+      when "Bool"   then self.as_bool.to_s
+      when "Nil"    then "nil"
       else
         "#<#{t}:#{self.object_id}>"
       end
     end
 
-    {% for t in %w(Int32 UInt64 Bool) %}
+    # Treat this ICRObject as Int32,UInt64,..
+    # Used by primitives.
+    {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Bool) %}
       def as_{{t.downcase.id}}
         @raw.as({{t.id}}*).value
       end
@@ -201,15 +90,22 @@ module ICR
       end
     {% end %}
 
-    def as_number(type : T.class) forall T
-      @raw.as(T*).value
+    def as_number : Number
+      case @type.cr_type.to_s # TODO avoid the string transformation
+      when "Int8"   then self.as_int8
+      when "UInt8"  then self.as_uint8
+      when "Int16"  then self.as_int16
+      when "UInt16" then self.as_uint16
+      when "Int32"  then self.as_int32
+      when "UInt32" then self.as_uint32
+      when "Int64"  then self.as_int64
+      when "UInt64" then self.as_uint64
+      else               todo "ICRObject to #{@type.cr_type.to_s}"
+      end
     end
-
-    def set_as_number(type : T.class, value) forall T
-      @raw.as(T*).value = value
-    end
-
   end
+
+  # Creates the corresponding ICRObject from values.
 
   def self.bool(value : Bool)
     obj = ICRObject.new(ICRType.bool)
@@ -217,29 +113,13 @@ module ICR
     obj
   end
 
-  def self.int32(value)
-    obj = ICRObject.new(ICRType.int32)
-    obj.as_int32 = value
-    obj
-  end
-
-  def self.uint64(value : UInt64)
-    obj = ICRObject.new(ICRType.uint64)
-    obj.as_uint64 = value
-    obj
-  end
-
-  def self.number(value : Int32)
-    obj = ICRObject.new(ICRType.new(ICR.program.int32))
-    obj.as_int32 = value
-    obj
-  end
-
-  def self.number(value : UInt64)
-    obj = ICRObject.new(ICRType.new(ICR.program.uint64))
-    obj.as_uint64 = value
-    obj
-  end
+  {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64) %}
+    def self.number(value : {{t.id}})
+      obj = ICRObject.new(ICRType.{{t.downcase.id}})
+      obj.as_{{t.downcase.id}} = value
+      obj
+    end
+  {% end %}
 
   def self.number(value)
     todo "#{value.class} to ICRObject"
@@ -247,5 +127,29 @@ module ICR
 
   def self.nil
     ICRObject.new(ICRType.nil)
+  end
+end
+
+class String
+  # Add underscores to this number string
+  #
+  # "10000000"    => "10_000_000"
+  # "-1000"       => "-1_000"
+  # "-1000.12345" => "-1_000.123_45"
+  def underscored
+    String.build do |io|
+      parts = self.split('.')
+      parts.each_with_index do |str, part|
+        str.each_char_with_index do |c, i|
+          i = (part == 0) ? (str.size - 1 - i) : i + 1
+
+          io << c
+          if i % 3 == 0 && i != 0 && c != '-'
+            io << '_'
+          end
+        end
+        io << '.' unless part == parts.size - 1
+      end
+    end
   end
 end

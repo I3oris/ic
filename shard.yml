@@ -1,16 +1,12 @@
-name: my_icr
+name: icr
 version: 0.1.0
 
 authors:
-  - your-name-here <your-email-here>
+  - I3oris
 
 targets:
-  my_icr:
-    main: src/my_icr.cr
-
-dependencies:
-  term-reader:
-    github: crystal-term/reader
+  icr:
+    main: src/icr.cr
 
 crystal: 1.0.0
 

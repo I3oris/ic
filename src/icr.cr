@@ -5,18 +5,24 @@ require "compiler/crystal/semantic/*"
 require "compiler/crystal/syntax"
 
 require "./nodes"
+require "./types"
 require "./objects"
 require "./primitives"
 require "./execution"
 require "./highlighter"
 require "./shell"
+require "./errors"
 require "colorize"
 # require "gc"
 # GC.disable
 
-ICR.run_file "./prelude.cr"
-ICR.run_file ARGV[0] if ARGV[0]?
-ICR.run
+ICR.run_file "./icr_prelude.cr"
+
+if ARGV[0]?
+  ICR.run_file ARGV[0]
+else
+  ICR.run
+end
 
 class Crystal::MainVisitor
   # Don't raise when undersore:
@@ -37,21 +43,6 @@ class Crystal::CleanupTransformer
   end
 end
 
-class ICR::Error < Exception
-end
-
-def bug(msg)
-  raise ICR::Error.new ("\nICR(BUG): " + msg).colorize.red.bold.to_s
-end
-
-def todo(msg)
-  raise ICR::Error.new ("\nICR(TODO): " + msg).colorize.blue.bold.to_s
-end
-
-def icr_error(msg)
-  raise ICR::Error.new ("\nICR: " + msg).colorize.magenta.bold.to_s
-end
-
 module ICR
   VERSION = "0.1.0"
 
@@ -67,6 +58,8 @@ module ICR
 
   def self.run_file(path)
     ICR.parse(File.read(path)).run
+  rescue e
+    e.display
   end
 
   class_getter result : ICRObject = ICR.nil
@@ -82,7 +75,7 @@ module ICR
     last_ast_node = nil
 
     Shell.new.run(->self.display_result) do |line|
-      ICR.clear_context
+      ICR.clear_callstack
       ast_node = ICR.parse(code + "\n" + line)
       run_last_expression(expressionize(last_ast_node), expressionize(ast_node))
       last_ast_node = ast_node
@@ -91,24 +84,18 @@ module ICR
       :line
     rescue Cancel
       @@busy = false
-      next :line
-    rescue e : ICR::Error
-      puts e.message
-      :error
-    rescue e
-      if unterminated?(e)
+      :line
+    rescue e : ICR::CompileTimeError
+      if e.unterminated?
+        # let a change to the user to finish his text on the next line
         :multiline
       else
-        puts
-
-        # this kind of message need to display more informations
-        if e.message.try &.starts_with?("instantiating") || e.message == "expanding macro"
-          puts e.colorize.yellow.bold
-        else
-          puts e.message.colorize.yellow.bold
-        end
+        e.display
         :error
       end
+    rescue e
+      e.display
+      :error
     end
   end
 
@@ -124,6 +111,7 @@ module ICR
     end
   end
 
+  # Compare the last ASTNode with the current ASTNode, and run only
   private def self.run_last_expression(last_ast_node, ast_node)
     {% if flag?(:_debug) %}
       puts
@@ -139,29 +127,5 @@ module ICR
       @@result = ast_node.expressions[l_size..].map(&.run)[-1]
       @@busy = false
     end
-  end
-
-  private def self.unterminated?(error)
-    error.message.in?({
-      "expecting identifier 'end', not 'EOF'",
-      "expecting token 'CONST', not 'EOF'",
-      "expecting any of these tokens: IDENT, CONST, `, <<, <, <=, ==, ===, !=, =~, !~, >>, >, >=, +, -, *, /, //, !, ~, %, &, |, ^, **, [], []?, []=, <=>, &+, &-, &*, &** (not 'EOF')",
-      "expecting token ')', not 'EOF'",
-      "expecting token ']', not 'EOF'",
-      "expecting token '}', not 'EOF'",
-      "expected '}' or named tuple name, not EOF",
-      "unexpected token: EOF",
-      "unexpected token: EOF (expecting when, else or end)",
-      "unexpected token: EOF (expecting ',', ';' or '\n')",
-      "Unexpected EOF on heredoc identifier",
-      "unterminated parenthesized expression",
-      "Unterminated string literal", # <= U is upcase ^^
-      "unterminated array literal",
-      "unterminated tuple literal",
-      "unterminated macro",
-      "Unterminated string interpolation",
-      "invalid trailing comma in call",
-      "unknown token: '\\u{0}'",
-    }) || error.message.try &.matches? /Unterminated heredoc: can't find ".*" anywhere before the end of file/
   end
 end

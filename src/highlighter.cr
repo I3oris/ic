@@ -79,6 +79,17 @@ class ICR::Highlighter
       end
     end
 
+    # Some SyntaxException are raised when a token in being parsed, in this case the begin
+    # of the token is lost.
+    # For example when "def initialize(@" is written, Unknown token '\0' is raised, but only
+    # "def initialize(" have been displayed on the screen,
+    # in this case we want retrieve the "@".
+    #
+    # In the case of "def initialize(@[\^|-**/{" we want also retrieve the "@[\^|-**/{" because the user want
+    # see what he write even it have no sense.
+    #
+    # So we compare what it have been written(colorized) and the original code, and add the difference,
+    # but we must remove colors and invitation before comparing.
     if error
       # uncolorize:
       colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
@@ -193,7 +204,7 @@ class ICR::Highlighter
       when :EOF
         break
       else
-        io.print token.raw.to_s.gsub('\n',"\n#{self.invitation}\e[0;#{highlight_type(:string)}m")
+        io.print token.raw.to_s.gsub('\n', "\n#{self.invitation}\e[0;#{highlight_type(:string)}m")
       end
     end
   end

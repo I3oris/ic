@@ -164,18 +164,14 @@ end
 
 class Crystal::Call
   def run
-    if a_def = @target_defs.try &.[0]? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
-      if (obj = self.obj).nil?         # if type?
-        return ICR.run_top_level_method(a_def, args.map &.run)
-      end
-      receiver = obj.run
+    if a_def = @target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
+      # if (obj = self.obj).nil?         # if type?
+      #   return ICR.run_top_level_method(a_def, args.map &.run)
+      # end
+      # receiver =
 
-      if a = a_def.annotation(ICR.program.primitive_annotation)
-        return ICR::Primitives.call(a.args[0].as(Crystal::SymbolLiteral).to_s, a_def, self.type, receiver, args.map &.run)
-      else
-        # # use self.type !!
-        return ICR.run_method(receiver, a_def, args.map &.run)
-      end
+      # use self.type !!
+      return ICR.run_method(self.obj.try &.run, a_def, args.map &.run)
     else
       bug "Cannot find target def matching with this call: #{name}"
     end
@@ -309,5 +305,13 @@ class Crystal::Return
     else
       ::raise ICR::Return.new ICR.nil
     end
+  end
+end
+
+# Others #
+
+class Crystal::FileNode
+  def run
+    node.run
   end
 end

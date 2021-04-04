@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe MyIcr do
+describe ICR do
   # TODO: Write tests
 
   it "works" do
