@@ -1,348 +1,251 @@
+class Crystal::GenericInstanceType
+  def generics
+    generics = {} of String => ICR::ICRType
+    @type_vars.each do |name,ast|
+      generics[name] = ICR::ICRType.new ast.as(Crystal::Var).type
+    end
+    generics
+  rescue
+    bug "Cannot get generics vars for #{self}"
+  end
+end
+
 module ICR
-  struct Binary
-    property size : Int32
-    property raw : Pointer(UInt8)
+  alias Byte = UInt8
 
-    def initialize(@size : Int32)
-      @raw = Pointer(UInt8).malloc(size)
+
+  class ICRType # TODO make all methods class methods
+    getter size : UInt64
+    getter cr_type : Crystal::Type
+    # nil_type?
+    # instance_vars
+    # all_instance_vars
+
+    getter generics = {} of String => ICRType
+    @instance_vars = {} of String => {UInt64, ICRType}
+    getter class_size = 0u64
+
+    def struct?
+      @cr_type.struct?
     end
 
-    def free
-      @raw.free
+    private def self.llvm_struct_type?(cr_type)
+      (cr_type.is_a?(Crystal::NonGenericClassType) || cr_type.is_a?(Crystal::GenericClassInstanceType)) &&
+        !cr_type.is_a?(Crystal::PointerInstanceType) && !cr_type.is_a?(Crystal::ProcInstanceType)
+    end
+
+    # don't use that for classes
+    def self.instance_size_of(cr_type : Crystal::Type)
+      return 0u64 if cr_type.nil_type?
+      return 1u64 if cr_type.bool_type?
+
+      llvm_typer = ICR.program.llvm_typer
+      if llvm_struct_type?(cr_type)
+        llvm_typer.size_of(llvm_typer.llvm_struct_type(cr_type))
+      else
+        llvm_typer.size_of(llvm_typer.llvm_embedded_type(cr_type))
+      end
+    end
+
+    def self.size_of(cr_type : Crystal::Type)
+      if cr_type.struct? # if !class?
+        memory_size_of(cr_type)
+      else
+        8
+      end
+    end
+
+    def initialize(@cr_type : Crystal::Type)
+      @instance_vars = {} of String => Tuple(UInt64, ICRType)
+      @size = 0u64
+
+
+      @size = ICRType.instance_size_of(@cr_type)
+
+      if !struct?
+        @class_size = @size
+        @size = 8_u64
+        {% if flag?(:_debug) %}
+          puts "SIZE OF #{@cr_type} = #{@size}(#{@class_size})"
+        {% end %}
+      end
+
+      if (cr_type=@cr_type).is_a? Crystal::GenericInstanceType
+        # @generics = cr_type.generic_type.instantiated_types.map { |t| ICRType.new(t).as(ICRType) }
+        @generics = cr_type.generics
+      end
+
+      begin
+        i = 0u64
+        @cr_type.all_instance_vars.each do |name,ivar|
+          {% if flag?(:_debug) %}
+            puts "  size of #{@cr_type}.#{name} = #{ICRType.size_of(ivar.type)}"
+          {% end %}
+          @instance_vars[name] = {i,ICRType.new(ivar.type)} #ivar.type
+          i += ICRType.size_of(ivar.type)
+        rescue e
+          puts "  BUG with #{ivar}: #{e.message}"
+        end
+      rescue
+        # we enter here when @cr_type doesn't implement instance_vars
+        # TODO: found a proper way to know if a Crystal::Type implements instance_vars
+      end
+    end
+
+    def type_of(name)
+      @instance_vars[name][1]
+    end
+
+    # Used if recurive type are defined
+    def set_type_of(name, type : ICRType)
+      @instance_vars[name] = {@instance_vars[name][0], type}
+    end
+
+    def read_ivar(name, src, dst)
+      i, type = @instance_vars[name]
+      (src + i).copy_to(dst, type.size)
+    end
+
+    def write_ivar(name, src, dst)
+      i, type = @instance_vars[name]
+      (dst + i).copy_from(src, type.size)
+    end
+
+    def self.pointer_of(generic : Crystal::Type)
+      ICRType.new(ICR.program.pointer_of(generic))
+    end
+
+    def self.bool
+      ICRType.new(ICR.program.bool)
+    end
+
+    def self.int32
+      ICRType.new(ICR.program.int32)
+    end
+
+    def self.uint64
+      ICRType.new(ICR.program.uint64)
+    end
+
+    def self.nil
+      ICRType.new(ICR.program.nil)
     end
   end
 
-  abstract class ICRObject
-    property type : Crystal::Type
-    @ivar = {} of String => ICRObject
-    @generics = [] of Crystal::Type
+  class ICRObject
+    getter type : ICRType
+    getter raw : Pointer(Byte)
+    getter dont_collect : Pointer(Byte)? = nil
 
-    def initialize(@type : Crystal::Type)
+    def initialize(@type)
+      if @type.struct?
+        @raw = Pointer(Byte).malloc(@type.size)
+      else
+        @raw = Pointer(Byte).malloc(8)
+        ref = Pointer(Byte).malloc(@type.class_size)
+        @dont_collect = ref
+        @raw.as(UInt64*).value = ref.address
+      end
     end
 
-    abstract def to_binary
-
-    def self.from_binary(b : Binary)
-      raise_error "TODO #{self.class}.from_binary"
+    def [](name)
+      obj = ICRObject.new(@type.type_of(name))
+      if @type.struct?
+        @type.read_ivar(name, @raw, obj.raw)
+      else
+        addr = @raw.as(UInt64*).value
+        ref = Pointer(Byte).new(addr)
+        @type.read_ivar(name, ref, obj.raw)
+      end
+      obj
     end
 
-    def get_ivar(name : String) : ICRObject
-      @ivar[name]? || raise_error "BUG: #{result} doesn't have a ivar: #{name}"
+    def []=(name, value : ICRObject)
+      if @type.struct?
+        @type.write_ivar(name, value.raw, @raw)
+      else
+        addr = @raw.as(UInt64*).value
+        ref = Pointer(Byte).new(addr)
+        @type.write_ivar(name, value.raw, ref)
+      end
+      value
     end
 
-    def set_ivar(name : String, value : ICRObject) : ICRObject
-      @ivar[name] = value
-    end
-
-    # TODO Null Pointer falsly
     def truthy?
-      true
+      !falsey?
     end
 
-    # TODO replace by inspect call
-    abstract def result
-  end
-
-  class ICRReference < ICRObject
-    def result
-      "#<#{@type}:#{self.object_id}>"
-    end
-
-    def to_binary
-      raise "TODO: ICRReference.to_binary"
-    end
-    # def self.from_binary
-    # end
-  end
-
-  # TODO Remove this class because it entierly defined in sdt lib
-  class ICRString < ICRReference
-    property value
-
-    def initialize(@value : String)
-      @type = ICR.program.string
+    def falsey?
+      t = @type.cr_type
+      t.nil_type? || (t.bool_type? && self.as_bool == false) #|| is_null_pointer?
     end
 
     def result
-      @value.inspect
+      case t = @type.cr_type.to_s
+      when "Int32" then self.as_int32.to_s
+      when "UInt64" then self.as_uint64.to_s
+      when "Bool" then self.as_bool.to_s
+      when "Nil" then "nil"
+      else
+        "#<#{t}:#{self.object_id}>"
+      end
     end
+
+    {% for t in %w(Int32 UInt64 Bool) %}
+      def as_{{t.downcase.id}}
+        @raw.as({{t.id}}*).value
+      end
+
+      def as_{{t.downcase.id}}=(value : {{t.id}})
+        @raw.as({{t.id}}*).value = value
+      end
+    {% end %}
+
+    def as_number(type : T.class) forall T
+      @raw.as(T*).value
+    end
+
+    def set_as_number(type : T.class, value) forall T
+      @raw.as(T*).value = value
+    end
+
   end
 
-  def self.string(value)
-    ICRString.new(value)
+  def self.bool(value : Bool)
+    obj = ICRObject.new(ICRType.bool)
+    obj.as_bool = value
+    obj
   end
 
-  abstract class ICRValue < ICRObject
+  def self.int32(value)
+    obj = ICRObject.new(ICRType.int32)
+    obj.as_int32 = value
+    obj
   end
 
-  class ICRStruct < ICRValue
-    # def initialize(@type : Crystal::Type)
-    # end
-
-    # TODO instance vars:
-    # Foo(@x=5, @y=5)
-    def result
-      "#{@type}()"
-    end
-
-    def to_binary
-      raise_error "TODO ICRReference.to_binary"
-    end
+  def self.uint64(value : UInt64)
+    obj = ICRObject.new(ICRType.uint64)
+    obj.as_uint64 = value
+    obj
   end
 
-  class ICRClass < ICRValue
-    property target
-
-    def initialize(@target : Crystal::Type)
-      @type = ICR.program.class_type
-    end
-
-    def result
-      @target.inspect
-    end
-
-    def to_binary
-      raise_error "TODO ICRClass.to_binary"
-    end
-    # /!\
-    # def type
-    #   @target.metaclass
-    # end
+  def self.number(value : Int32)
+    obj = ICRObject.new(ICRType.new(ICR.program.int32))
+    obj.as_int32 = value
+    obj
   end
 
-  def self.class_type(value)
-    ICRClass.new(value)
+  def self.number(value : UInt64)
+    obj = ICRObject.new(ICRType.new(ICR.program.uint64))
+    obj.as_uint64 = value
+    obj
   end
 
-  # @[Deprecated]
-  # class IRCObjectBase < ICRValue
-  #   property value
-
-  #   def initialize(@type : Crystal::Type, @value : Pointer(Void))
-  #   end
-
-  #   def initialize(@type : Crystal::Type, value)
-  #     @value = Box.box(value)
-  #   end
-
-  #   def result
-  #     get_value.inspect
-  #   end
-
-  #   def get_value
-  #     case @type.to_s
-  #     when "Nil"     then nil
-  #     when "Bool"    then Box(Bool).unbox(@value)
-  #     when "Int32"   then Box(Int32).unbox(@value)
-  #     when "UInt64"  then Box(UInt64).unbox(@value)
-  #     when "Float64" then Box(Float64).unbox(@value)
-  #     when "String"  then Box(String).unbox(@value)
-  #     else                raise_error "Not Implemented type for 'get_value': #{@type}"
-  #     end
-  #   end
-
-  #   def truthy?
-  #     @type.to_s != "Nil" && !(@type.to_s == "Bool" && Box(Bool).unbox(@value) == false)
-  #   end
-
-  #   def get_type
-  #     @type # .metaclass
-  #     # case @type
-  #     # when "Nil"     then ICR.program.nil
-  #     # when "Bool"    then ICR.program.bool
-  #     # when "Int32"   then ICR.program.int32
-  #     # when "Float64" then ICR.program.float64
-  #     # when "String"  then ICR.program.string
-  #     # else                raise_error "Not Implemented type for 'get_type': #{@type}"
-  #     # end
-  #   end
-  # end
-
-  # class ICRPointer < ICRValue
-  #   def initialize(@type : Crystal::Type, @value : ICRObject)
-  #   end
-  # end
-
-  class IRCTuple < ICRValue
-    property values
-
-    def initialize(@values : Array(ICRObject))
-      @type = ICR.program.tuple_of(values.map &.type)
-    end
-
-    def result
-      "{#{@values.map(&.result).join(", ")}}"
-    end
-
-    def to_binary
-      raise_error "TODO ICRTuple.to_binary"
-    end
-  end
-
-  def self.tuple(values)
-    IRCTuple.new(values)
-  end
-
-  class ICRNil < ICRValue
-    def initialize
-      @type = ICR.program.nil
-    end
-
-    def to_binary
-      Binary.new 0
-    end
-
-    def result
-      "nil"
-    end
+  def self.number(value)
+    todo "#{value.class} to ICRObject"
   end
 
   def self.nil
-    # IRCObjectBase.new(ICR.program.nil, nil)
-    ICRNil.new
+    ICRObject.new(ICRType.nil)
   end
-
-  abstract class ICRNumber < ICRValue
-    # @type = ICR.program.nil # This type should be ever override!
-    # abstract def initialize(value)
-    abstract def value
-  end
-
-  abstract class ICRInt < ICRNumber
-  end
-
-  abstract class ICRFloat < ICRNumber
-  end
-
-  {% for type, info in {
-                         "Int32"   => %w(Int i32),
-                         "UInt64"  => %w(Int u64),
-                         "Float64" => %w(Float f64),
-                       } %}
-    {%
-      parent = info[0]
-      sufix = info[1]
-    %}
-    class ICR{{type.id}} < ICR{{parent.id}}
-      property value : {{type.id}}
-
-      def initialize(value : Number)
-        @value = value.to_{{sufix.id}}
-        @type = ICR.program.{{type.downcase.id}}
-      end
-
-      def to_binary
-        b = Binary.new(sizeof({{type.id}}))
-        b.raw.as({{type.id}}*).value = @value
-        b
-      end
-
-      def self.from_binary(b : Binary)
-        self.new(b.raw.as({{type.id}}*).value)
-      end
-
-      def result
-        value.inspect
-      end
-
-      {% unless type == "Bool" %}
-        def primitive_op(op_name,other : ICRNumber)
-          case op_name
-          {% for op in %w(+ * -) %}
-            when {{op}} then ICR{{type.id}}.new(@value {{op.id}} other.value)
-          {% end %}
-
-          {% for op in %w(== != <= >= < >) %}
-            when {{op}} then ICRBool.new(@value {{op.id}} other.value)
-          {% end %}
-          else
-            raise_error "BUG: unsuported primitive #{op_name} for #{self.class}"
-          end
-        end
-      {% end %}
-    end
-
-    def self.{{type.downcase.id}}(value)
-      ICR{{type.id}}.new(value)
-    end
-  {% end %}
-
-  class ICRBool < ICRValue
-    property value
-
-    def initialize(@value : Bool)
-      @type = ICR.program.bool
-    end
-
-    def to_binary
-      b = Binary.new(sizeof(Bool))
-      b.raw.as(Bool*).value = @value
-      b
-    end
-
-    def self.from_binary(b : Binary)
-      self.new(b.raw.as(Bool*).value)
-    end
-
-    def truthy?
-      @value == true
-    end
-
-    def result
-      value.inspect
-    end
-  end
-
-  def self.bool(value)
-    ICRBool.new(value)
-  end
-
-  class ICRPointer < ICRValue
-    @address = Pointer(UInt8).null
-
-    def initialize(_T : Crystal::Type, value : ICRObject)
-      @type = ICR.program.pointer_of(_T)
-      @generics = [_T]
-      if value.responds_to?(:to_binary)
-        b = value.to_binary
-        @address = b.raw
-      else
-        raise_error "BUG: unsupported pointer of #{value.class}"
-      end
-    end
-
-    def free
-      @address.free
-    end
-
-    def truthy?
-      true # TODO
-    end
-
-    def to_binary
-      raise_error "TODO ICRPointer.to_binary"
-    end
-
-    def result
-      "#<Pointer(#{@generics.join("'")}) @address=#{@address}>"
-    end
-  end
-
-  def self.pointer_of(_T,value)
-    ICRPointer.new(_T,value)
-  end
-
-  # def self.int32(value : Int32)
-  #   IRCObjectBase.new(ICR.program.int32, value)
-  # end
-
-  # def self.uint64(value : UInt64)
-  #   IRCObjectBase.new(ICR.program.uint64, value)
-  # end
-
-  # def self.float64(value : Float64)
-  #   IRCObjectBase.new(ICR.program.float64, value)
-  # end
-
-  # def self.pointer_of()
 end

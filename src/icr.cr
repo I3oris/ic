@@ -11,6 +11,8 @@ require "./execution"
 require "./highlighter"
 require "./shell"
 require "colorize"
+# require "gc"
+# GC.disable
 
 ICR.run_file "./prelude.cr"
 ICR.run_file ARGV[0] if ARGV[0]?
@@ -35,8 +37,19 @@ class Crystal::CleanupTransformer
   end
 end
 
-def raise_error(arg)
-  ::raise arg
+class ICR::Error < Exception
+end
+
+def bug(msg)
+  raise ICR::Error.new ("\nICR(BUG): " + msg).colorize.red.bold.to_s
+end
+
+def todo(msg)
+  raise ICR::Error.new ("\nICR(TODO): " + msg).colorize.blue.bold.to_s
+end
+
+def icr_error(msg)
+  raise ICR::Error.new ("\nICR: " + msg).colorize.magenta.bold.to_s
 end
 
 module ICR
@@ -78,7 +91,10 @@ module ICR
       :line
     rescue Cancel
       @@busy = false
-      next :lineX
+      next :line
+    rescue e : ICR::Error
+      puts e.message
+      :error
     rescue e
       if unterminated?(e)
         :multiline
@@ -109,6 +125,12 @@ module ICR
   end
 
   private def self.run_last_expression(last_ast_node, ast_node)
+    {% if flag?(:_debug) %}
+      puts
+      ast_node.expressions[-1].print_debug
+      puts
+      puts
+    {% end %}
 
     l_size = last_ast_node.expressions.size
     size = ast_node.expressions.size
@@ -117,15 +139,6 @@ module ICR
       @@result = ast_node.expressions[l_size..].map(&.run)[-1]
       @@busy = false
     end
-
-    {% if flag?(:debug) %}
-      puts
-      ICR.debug_visited.clear
-      ast_node.expressions[-1].print_debug
-      puts
-      puts
-      pp! @@result
-    {% end %}
   end
 
   private def self.unterminated?(error)

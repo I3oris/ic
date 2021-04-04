@@ -1,21 +1,14 @@
-# ELSEWHERE!!
-module ICR
-  class_getter types = {} of Crystal::Path => Crystal::Type
-  class_getter debug_visited = [] of Crystal::ASTNode
-end
-
 class Crystal::ASTNode
   def run
-    raise_error "Not Implemented ASTNode: #{self.class}"
+    todo "ASTNode: #{self.class}"
   end
 
-  def print_debug(indent = 0)
-    # print "  "*indent
-    if self.in? ICR.debug_visited
+  def print_debug(visited = [] of Crystal::ASTNode, indent = 0)
+    if self.in? visited
       print "..."
       return
     end
-    ICR.debug_visited << self
+    visited << self
 
     print {{@type}}
     puts ':'
@@ -23,7 +16,7 @@ class Crystal::ASTNode
       print "  "*(indent+1)
       print "@{{ivar}} = "
       if (ivar = @{{ivar}}).is_a? Crystal::ASTNode
-        ivar.print_debug(indent+1)
+        ivar.print_debug(visited,indent+1)
       else
         print @{{ivar}}.inspect
       end
@@ -46,11 +39,11 @@ class Crystal::NilLiteral
   end
 end
 
-class Crystal::StringLiteral
-  def run
-    ICR.string(self.to_s[1...-1])
-  end
-end
+# class Crystal::StringLiteral
+#   def run
+#     ICR.string(self.to_s[1...-1])
+#   end
+# end
 
 class Crystal::BoolLiteral
   def run
@@ -60,22 +53,15 @@ end
 
 class Crystal::NumberLiteral
   def run
-    case kind
-    when :i32
-      ICR.int32 self.to_s.to_i32
-    when :f64
-      ICR.float64 self.to_s.to_f64
-    else
-      raise_error "NumberLiteral kind not implemented #{kind}"
-    end
+    ICR.number self.integer_value
   end
 end
 
-class Crystal::TupleLiteral
-  def run
-    ICR.tuple(self.elements.map &.run)
-  end
-end
+# class Crystal::TupleLiteral
+#   def run
+#     ICR.tuple(self.elements.map &.run)
+#   end
+# end
 
 # Vars #
 
@@ -105,9 +91,9 @@ class Crystal::Assign
     when Crystal::InstanceVar
       ICR.assign_ivar(t.name, self.value.run)
     when Crystal::Underscore
-      raise_error "Can't assign to '_'"
+      icr_error "Can't assign to '_'"
     else
-      raise_error "Unsupported assign target #{t.class}"
+      bug "Unexpected assign target #{t.class}"
     end
   end
 end
@@ -122,14 +108,12 @@ end
 
 class Crystal::ClassDef
   def run
-    ICR.types[self.name] = self.resolved_type
     ICR.nil
   end
 end
 
 class Crystal::ModuleDef
   def run
-    ICR.types[self.name] = self.resolved_type
     ICR.nil
   end
 end
@@ -150,108 +134,51 @@ end
 
 class Crystal::Path
   def run
-    if type = ICR.types[self]
-      ICR.class_type(type)
-    else
-      raise_error "BUG: Path not resolved"
-    end
+    # TODO: ICR.class_type(@type)
+
+    # if type = ICR.types[self]
+    #   ICR.class_type(type)
+    # else
+    #   raise_error "BUG: Path not resolved"
+    # end
+    ICR.nil
   end
 end
 
 class Crystal::Generic
-# name
-# type_vars
-# named_args
+  # name
+  # type_vars
+  # named_args
   def run
-    # if n = name.is_a? Crystal::Path
-    if type = ICR.types[self.name]
-      ICR.class_type(type)
-    else
-      raise_error "BUG: Generic Path not resolved"
-    end
+    # TODO: ICR.class_type(@type)
+
+    # # if n = name.is_a? Crystal::Path
+    # if type = ICR.types[self.name]
+    #   ICR.class_type(type)
+    # else
+    #   raise_error "BUG: Generic Path not resolved"
+    # end
+    ICR.nil
   end
 end
 
 class Crystal::Call
   def run
     if a_def = @target_defs.try &.[0]? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
-      if (obj = self.obj).nil?
+      if (obj = self.obj).nil?         # if type?
         return ICR.run_top_level_method(a_def, args.map &.run)
       end
-
       receiver = obj.run
-      if receiver.is_a? ICR::ICRClass
-        type = receiver.target #.metaclass
-        ICR.type_to_allocate = type
-      end
 
-      if a = a_def.annotations(ICR.program.primitive_annotation)
-        return ICR::Primitives.call(a[0].args[0].as(Crystal::SymbolLiteral).to_s, a_def, receiver, args.map &.run)
+      if a = a_def.annotation(ICR.program.primitive_annotation)
+        return ICR::Primitives.call(a.args[0].as(Crystal::SymbolLiteral).to_s, a_def, self.type, receiver, args.map &.run)
       else
+        # # use self.type !!
         return ICR.run_method(receiver, a_def, args.map &.run)
       end
     else
-      raise "BUG: Cannot find target defs matching with this call"
+      bug "Cannot find target def matching with this call: #{name}"
     end
-    ## END ##
-
-    # ICR.run_method(,self.target_defs,)
-    case obj = self.obj
-    when Path,Generic
-      #@target_defs
-      receiver = obj.run
-      type = receiver.target.metaclass
-      ICR.type_to_allocate = type
-
-      if type.has_def? self.name
-        type.lookup_defs(self.name).each do |a_def|
-          if a = a_def.annotations(ICR.program.primitive_annotation)
-            return ICR::Primitives.call(a[0].args[0].as(Crystal::SymbolLiteral).to_s, a_def, receiver, args.map &.run)
-          else
-            return ICR.run_method(receiver, a_def, args.map &.run)
-          end
-        end
-      else
-        raise_error "Method not found: #{self.name}"
-      end
-
-    when nil
-      # top level call
-      if ICR.program.has_def? name
-        # defs = ICR.program.defs[name]?
-
-        ICR.program.lookup_defs(name).each do |a_def|
-          # TODO find good overload
-          # raise_error "Top level method not implemented!"
-          return ICR.run_top_level_method(a_def, args.map &.run)
-        end
-      else
-        raise_error "Top level method not found: #{name}"
-      end
-    else
-      receiver = obj.run
-      type = receiver.type
-
-  # record CallSignature,
-  #   name : String,
-  #   arg_types : Array(Type),
-  #   block : Block?,
-  #   named_args : Array(NamedArgumentType)?
-#def lookup_matches(signature, owner = self, path_lookup = self, matches_array = nil, analyze_all = false)
-
-      if type.has_def? self.name
-        type.lookup_defs(self.name).each do |a_def|
-          if a = a_def.annotations(ICR.program.primitive_annotation)
-            return ICR::Primitives.call(a[0].args[0].as(Crystal::SymbolLiteral).to_s, a_def, receiver, args.map &.run)
-          else
-            return ICR.run_method(receiver, a_def, args.map &.run)
-          end
-        end
-      else
-        raise_error "Method not found: #{self.name}"
-      end
-    end
-    raise "BUG: not method founds for :#{self.name}"
   rescue e : ICR::Return
     return e.return_value
   end
@@ -261,39 +188,39 @@ end
 
 class Crystal::Primitive
   def run
-    ICR::Primitives.call(name)
+    ICR::Primitives.call(self)
   end
 end
 
-class Crystal::PointerOf
-  def run
-    exp = self.exp.run
-    ICR.pointer_of(exp.type,exp)
-  end
-end
+# class Crystal::PointerOf
+#   def run
+#     exp = self.exp.run
+#     ICR.pointer_of(exp.type,exp)
+#   end
+# end
 
-class Crystal::IsA
-  # self.nil_check?
-  def run
-    o = self.obj.run.type
-    if (c = const.run).is_a?(ICR::ICRClass)
-      ICR.bool !!(o.covariant? c.target)
-    else
-      raise "BUG: IsA const should be a ICRClass"
-    end
-  end
-end
+# class Crystal::IsA
+#   # self.nil_check?
+#   def run
+#     o = self.obj.run.type
+#     if (c = const.run).is_a?(ICR::ICRClass)
+#       ICR.bool !!(o.covariant? c.target)
+#     else
+#       raise "BUG: IsA const should be a ICRClass"
+#     end
+#   end
+# end
 
-class Crystal::Cast
-  def run
-    obj.run
-  end
-end
+# class Crystal::Cast
+#   def run
+#     obj.run
+#   end
+# end
 
 class Crystal::RespondsTo
   def run
-    type = self.obj.run.type
-    ICR.bool !!(type.has_def? self.name)
+    type = self.obj.run.type.@cr_type
+    ICR.bool !!(type.has_def? self.name) # Not sure that works with inheritance ?
   end
 end
 
@@ -384,5 +311,3 @@ class Crystal::Return
     end
   end
 end
-
-###

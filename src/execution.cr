@@ -23,7 +23,7 @@ module ICR
 
   def self.run_method(receiver, a_def, args) : ICRObject
     if a_def.args.size != args.size
-      raise_error "TODO: default values & named arguments"
+      bug "args doesn't match with def"
     end
     hash = {} of String => ICRObject
     a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
@@ -41,12 +41,12 @@ module ICR
     if c = @@contexts.last?
       case name
       when "self"
-        c.receiver || raise_error "BUG: Cannot found receiver for self"
+        c.receiver || bug "Cannot found receiver for 'self'"
       else
-        c.args[name]? || raise_error "BUG: Cannot found argument '#{name}'"
+        c.args[name]? || bug "Cannot found argument '#{name}'"
       end
     else
-      @@top_level_vars[name]? || raise_error "BUG: Cannot found top level var '#{name}'"
+      @@top_level_vars[name]? || bug "Cannot found top level var '#{name}'"
     end
   end
 
@@ -60,17 +60,17 @@ module ICR
 
   def self.get_ivar(name) : ICRObject
     if c = @@contexts.last?
-      c.receiver.try &.get_ivar(name) || raise_error "BUG: Cannot found receiver for var '#{name}'"
+      c.receiver.try &.[name] || bug "Cannot found receiver for var '#{name}'"
     else
-      raise_error "BUG: trying to access a ivar without context"
+      bug "Trying to access an ivar without context"
     end
   end
 
   def self.assign_ivar(name, value : ICRObject) : ICRObject
     if c = @@contexts.last?
-      c.receiver.try &.set_ivar(name, value) || raise_error "BUG: Cannot found receiver for ivar '#{name}'"
+      c.receiver.try(&.[name] = value) || bug "Cannot found receiver for ivar '#{name}'"
     else
-      raise_error "BUG: trying to assign a ivar without context"
+      bug "Trying to assign an ivar without context"
     end
   end
 end
