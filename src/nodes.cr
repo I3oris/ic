@@ -39,29 +39,53 @@ class Crystal::NilLiteral
   end
 end
 
-# class Crystal::StringLiteral
-#   def run
-#     ICR.string(self.to_s[1...-1])
-#   end
-# end
+class Crystal::CharLiteral
+  def run
+    ICR.char(self.value)
+  end
+end
+
+class Crystal::StringLiteral
+  def run
+    ICR.string(self.value)
+  end
+end
 
 class Crystal::BoolLiteral
   def run
-    ICR.bool(self.to_s == "true")
+    ICR.bool(self.value)
   end
 end
 
 class Crystal::NumberLiteral
   def run
-    ICR.number self.integer_value
+    case self.kind
+    when :f32  then ICR.number self.value.to_f32
+    when :f64  then ICR.number self.value.to_f64
+    when :i128 then todo "Big Integer"
+    when :u128 then todo "Big Integer"
+    else            ICR.number self.integer_value
+    end
   end
 end
 
-# class Crystal::TupleLiteral
-#   def run
-#     ICR.tuple(self.elements.map &.run)
-#   end
-# end
+class Crystal::SymbolLiteral
+  def run
+    ICR.symbol(self.value)
+  end
+end
+
+class Crystal::TupleLiteral
+  def run
+    ICR.tuple(self.type, self.elements.map &.run)
+  end
+end
+
+class Crystal::NamedTupleLiteral
+  def run
+    ICR.tuple(self.type, self.entries.map &.value.run)
+  end
+end
 
 # Vars #
 
@@ -86,19 +110,16 @@ end
 class Crystal::Assign
   def run
     case t = self.target
-    when Crystal::Var
-      ICR.assign_var(t.name, self.value.run)
-    when Crystal::InstanceVar
-      ICR.assign_ivar(t.name, self.value.run)
-    when Crystal::Underscore
-      icr_error "Can't assign to '_'"
-    else
-      bug "Unexpected assign target #{t.class}"
+    when Crystal::Var         then ICR.assign_var(t.name, self.value.run)
+    when Crystal::InstanceVar then ICR.assign_ivar(t.name, self.value.run)
+    when Crystal::ClassVar    then todo "ClassVar assign"
+    when Crystal::Underscore  then icr_error "Can't assign to '_'"
+    else                           bug "Unexpected assign target #{t.class}"
     end
   end
 end
 
-# Classes & de
+# Classes & Defs
 
 class Crystal::Def
   def run
@@ -135,43 +156,22 @@ end
 class Crystal::Path
   def run
     # TODO: ICR.class_type(@type)
-
-    # if type = ICR.types[self]
-    #   ICR.class_type(type)
-    # else
-    #   raise_error "BUG: Path not resolved"
-    # end
     ICR.nil
   end
 end
 
 class Crystal::Generic
-  # name
-  # type_vars
-  # named_args
   def run
     # TODO: ICR.class_type(@type)
-
-    # # if n = name.is_a? Crystal::Path
-    # if type = ICR.types[self.name]
-    #   ICR.class_type(type)
-    # else
-    #   raise_error "BUG: Generic Path not resolved"
-    # end
     ICR.nil
   end
 end
 
 class Crystal::Call
   def run
-    if a_def = @target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
-      # if (obj = self.obj).nil?         # if type?
-      #   return ICR.run_top_level_method(a_def, args.map &.run)
-      # end
-      # receiver =
+    if a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
 
-      # use self.type !!
-      return ICR.run_method(self.obj.try &.run, a_def, args.map &.run)
+      return ICR.run_method(self.obj.try &.run, a_def, self.args.map &.run)
     else
       bug "Cannot find target def matching with this call: #{name}"
     end
@@ -180,51 +180,11 @@ class Crystal::Call
   end
 end
 
-# Primitives #
-
-class Crystal::Primitive
-  def run
-    ICR::Primitives.call(self)
-  end
-end
-
-# class Crystal::PointerOf
-#   def run
-#     exp = self.exp.run
-#     ICR.pointer_of(exp.type,exp)
-#   end
-# end
-
-# class Crystal::IsA
-#   # self.nil_check?
-#   def run
-#     o = self.obj.run.type
-#     if (c = const.run).is_a?(ICR::ICRClass)
-#       ICR.bool !!(o.covariant? c.target)
-#     else
-#       raise "BUG: IsA const should be a ICRClass"
-#     end
-#   end
-# end
-
-# class Crystal::Cast
-#   def run
-#     obj.run
-#   end
-# end
-
-class Crystal::RespondsTo
-  def run
-    type = self.obj.run.type.@cr_type
-    ICR.bool !!(type.has_def? self.name) # Not sure that works with inheritance ?
-  end
-end
-
 # Control flow #
 
 class Crystal::Expressions
   def run
-    expressions.map(&.run)[-1]
+    self.expressions.map(&.run)[-1]
   end
 end
 
@@ -236,21 +196,21 @@ end
 
 class Crystal::And
   def run
-    l = left.run
-    l.truthy? ? right.run : l
+    l = self.left.run
+    l.truthy? ? self.right.run : l
   end
 end
 
 class Crystal::Or
   def run
-    l = left.run
-    l.truthy? ? l : right.run
+    l = self.left.run
+    l.truthy? ? l : self.right.run
   end
 end
 
 class Crystal::If
   def run
-    if cond.run.truthy?
+    if self.cond.run.truthy?
       self.then.run
     else
       self.else.run
@@ -260,7 +220,7 @@ end
 
 class Crystal::While
   def run
-    while cond.run.truthy?
+    while self.cond.run.truthy?
       begin
         self.body.run
       rescue ICR::Break
@@ -308,10 +268,73 @@ class Crystal::Return
   end
 end
 
+# Primitives #
+
+class Crystal::Primitive
+  def run
+    ICR::Primitives.call(self)
+  end
+end
+
+class Crystal::PointerOf
+  def run
+    if (exp = self.exp).is_a?(InstanceVar)
+      # when `pointerof(@foo)` is written, pointerof return a
+      # pointer on `self` +  offsetof @foo
+      ICR.get_var("self").pointerof(ivar: exp.name)
+    else
+      self.exp.run.pointerof_self
+    end
+  end
+end
+
+# Casts #
+
+class Crystal::Cast
+  def run
+    # CAST from: obj.type to: @type
+    if new_obj = self.obj.run.cast_to @type
+      new_obj
+    else
+      todo "Raise an error on invalid cast"
+    end
+  end
+end
+
+class NilableCast
+  def run
+    # CAST from: obj.type to: @type
+    if new_obj = self.obj.run.cast_to @type
+      new_obj
+    else
+      ICR.nil
+    end
+  end
+end
+
+# class Crystal::IsA
+#   # self.nil_check?
+#   def run
+#     o = self.obj.run.type
+#     if (c = const.run).is_a?(ICR::ICRClass)
+#       ICR.bool !!(o.covariant? c.target)
+#     else
+#       raise "BUG: IsA const should be a ICRClass"
+#     end
+#   end
+# end
+
+class Crystal::RespondsTo
+  def run
+    type = self.obj.run.type.@cr_type
+    ICR.bool !!(type.has_def? self.name)
+  end
+end
+
 # Others #
 
 class Crystal::FileNode
   def run
-    node.run
+    self.node.run
   end
 end

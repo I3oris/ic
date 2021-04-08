@@ -20,7 +20,7 @@ class Crystal::Error
     puts
 
     # This kind of message need to display more informations:
-    if self.message.try &.starts_with?(/instantiating|while requiring/) || self.message == "expanding macro"
+    if self.message.try &.starts_with?(/instantiating|while requiring|expanding macro/)
       puts self.colorize.yellow.bold
     else
       puts self.message.colorize.yellow.bold

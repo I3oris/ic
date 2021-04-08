@@ -13,15 +13,17 @@ require "./highlighter"
 require "./shell"
 require "./errors"
 require "colorize"
-# require "gc"
-# GC.disable
+require "gc"
+GC.disable
 
 ICR.run_file "./icr_prelude.cr"
 
-if ARGV[0]?
-  ICR.run_file ARGV[0]
-else
-  ICR.run
+unless ICR.running_spec?
+  if ARGV[0]?
+    ICR.run_file ARGV[0]
+  else
+    ICR.run
+  end
 end
 
 class Crystal::MainVisitor
@@ -65,9 +67,7 @@ module ICR
   class_getter result : ICRObject = ICR.nil
 
   def self.display_result
-    if r = @@result
-      print "\n => #{Highlighter.highlight(r.result, no_invitation: true)}"
-    end
+    print "\n => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
   end
 
   def self.run
@@ -111,7 +111,7 @@ module ICR
     end
   end
 
-  # Compare the last ASTNode with the current ASTNode, and run only
+  # Compare the last ASTNode with the current ASTNode, and run only the last instruction
   private def self.run_last_expression(last_ast_node, ast_node)
     {% if flag?(:_debug) %}
       puts
@@ -127,5 +127,9 @@ module ICR
       @@result = ast_node.expressions[l_size..].map(&.run)[-1]
       @@busy = false
     end
+  end
+
+  def self.running_spec?
+    false
   end
 end

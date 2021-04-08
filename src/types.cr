@@ -19,29 +19,32 @@ module ICR
     def initialize(@cr_type : Crystal::Type)
       @instance_vars = {} of String => Tuple(UInt64, ICRType)
 
-      @size = 0u64
-      @size = ICRType.instance_size_of(@cr_type)
+      @size, @class_size = ICRType.size_of(@cr_type)
 
-      if !struct?
-        @class_size = @size
-        @size = 8_u64
-      end
+      # if !struct?
+      #   # Classes size is 8 because there are a pointer
+      #   @class_size = @size
+      #   @size = 8_u64
+      # end
 
       if (cr_type = @cr_type).is_a? Crystal::GenericInstanceType
         @generics = cr_type.generics
       end
 
-      begin
+      # Check instances vars of this type, and store the offset and the type for each ivar
+      # Tuple and NamedTuple are seen like if they have ivar "0","1","2",... so the type and the offset
+      # for each field are stored here.
+      if @cr_type.allows_instance_vars?
         offset = 0u64
-        @cr_type.all_instance_vars.each do |name, ivar|
-          @instance_vars[name] = {offset, ICRType.new(ivar.type)}
-          offset += ICRType.size_of(ivar.type)
+        offset += 4u64 if !struct? # start instance vars at 4, to let the place of the TYPE_ID
+
+        @cr_type.each_ivar_types do |name, type|
+          t = ICRType.new(type)
+          @instance_vars[name] = {offset, t}
+          offset += t.size
         rescue e
-          bug "Cannot get the size of #{@cr_type}.#{ivar}: #{e.message}"
+          bug "Cannot get the size of #{@cr_type}.#{name}: #{e.message}"
         end
-      rescue
-        # we enter here when @cr_type doesn't implement instance_vars
-        # TODO: found a proper way to know if a Crystal::Type implements instance_vars
       end
 
       {% if flag?(:_debug) %}
@@ -64,7 +67,6 @@ module ICR
         print "  "*(indent + 1)
         print "#{name}[#{layout[0]}]: "
         layout[1].print_debug(visited, indent + 1)
-        # puts
       end
     end
 
@@ -72,7 +74,11 @@ module ICR
       @instance_vars[name]?.try &.[1] || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
     end
 
-    # Used if recursive type are defined
+    def offset_and_type_of(name)
+      @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+    end
+
+    # To use if recursive type are defined
     def set_type_of(name, type : ICRType)
       @instance_vars[name] = {@instance_vars[name][0], type}
     end
@@ -113,27 +119,31 @@ module ICR
     #   bug "Cannot get generics vars for #{self}"
     # end
 
-    def self.instance_size_of(cr_type : Crystal::Type)
-      return 0u64 if cr_type.nil_type?
-      return 1u64 if cr_type.bool_type?
+    # Return the size and the instance size of a Crystal::Type
+    # For classes, size is 8 and instance size is the size of the data of the classes
+    def self.size_of(cr_type : Crystal::Type)
+      return 0u64, 0u64 if cr_type.nil_type?
+      return 1u64, 0u64 if cr_type.bool_type?
 
       llvm = ICR.program.llvm_typer
-      if llvm_struct_type?(cr_type)
-        llvm.size_of(llvm.llvm_struct_type(cr_type))
-      else
-        llvm.size_of(llvm.llvm_embedded_type(cr_type))
-      end
+      size = if llvm_struct_type?(cr_type)
+               llvm.size_of(llvm.llvm_struct_type(cr_type))
+             else
+               llvm.size_of(llvm.llvm_embedded_type(cr_type))
+             end
+
+      cr_type.struct? ? {size, 0u64} : {8u64, size}
     end
 
     # Give the size of binary to allocate for an ICRObject, 8 for classes because
     # there are pointer.
-    def self.size_of(cr_type : Crystal::Type)
-      if cr_type.struct? # if !class?
-        instance_size_of(cr_type)
-      else
-        8
-      end
-    end
+    # def self.size_of(cr_type : Crystal::Type)
+    #   if cr_type.struct? # if !class?
+    #     instance_size_of(cr_type)
+    #   else
+    #     8
+    #   end
+    # end
 
     private def self.llvm_struct_type?(cr_type)
       (cr_type.is_a?(Crystal::NonGenericClassType) || cr_type.is_a?(Crystal::GenericClassInstanceType)) &&
@@ -146,7 +156,7 @@ module ICR
       ICRType.new(ICR.program.pointer_of(generic))
     end
 
-    {% for t in %w(Bool Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Nil) %}
+    {% for t in %w(Bool Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Nil Char String) %}
       def self.{{t.downcase.id}}
         ICRType.new(ICR.program.{{t.downcase.id}})
       end
@@ -164,5 +174,37 @@ class Crystal::GenericInstanceType
     generics
   rescue
     bug "Cannot get generics vars for #{self}"
+  end
+end
+
+class Crystal::Type
+  def each_ivar_types(&)
+    self.all_instance_vars.each do |name, ivar|
+      yield name, ivar.type
+    end
+  end
+end
+
+class Crystal::TupleInstanceType
+  def generics
+    {} of String => ICR::ICRType
+  end
+
+  def each_ivar_types(&)
+    self.tuple_types.each_with_index do |type, i|
+      yield i.to_s, type
+    end
+  end
+end
+
+class Crystal::NamedTupleInstanceType
+  def generics
+    {} of String => ICR::ICRType
+  end
+
+  def each_ivar_types(&)
+    self.entries.each_with_index do |named_arg, i|
+      yield i.to_s, named_arg.type
+    end
   end
 end

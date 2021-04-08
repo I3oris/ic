@@ -27,14 +27,25 @@ module ICR
     hash = {} of String => ICRObject
     a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
 
+    receiver ||= @@callstack.last?.try &.receiver # if receiver if nil, take the receiver of the last call
+
     self.with_context FunctionCallContext.new(receiver, hash, a_def.name) do
-      a_def.body.run
+      {% if flag?(:_debug) %}
+        puts
+        context = @@callstack.last
+        puts "====== Call #{context.function_name} (#{context.receiver.try &.type.cr_type}) ======"
+        puts a_def.body.print_debug
+      {% end %}
+
+      ret = a_def.body.run
+
+      {% if flag?(:_debug) %}
+        puts
+        puts "===== End Call #{context.function_name} ======"
+      {% end %}
+      ret
     end
   end
-
-  # def self.run_top_level_method(a_def, args) : ICRObject
-  #   self.run_method(nil, a_def, args)
-  # end
 
   def self.get_var(name) : ICRObject
     if c = @@callstack.last?
@@ -75,5 +86,16 @@ module ICR
 
   def self.current_function_name
     @@callstack.last?.try &.function_name || bug "Trying to get the current function name, without having call a function"
+  end
+
+  def self.get_symbol_value(name : String)
+    ICR.program.symbols.index(name) || bug "Cannot found the symbol :#{name}"
+  end
+
+  def self.get_symbol_from_value(value : Int32)
+    ICR.program.symbols.each_with_index do |s, i|
+      return s if i == value
+    end
+    bug "Cannot found the symbol corresponding to the value #{value}"
   end
 end
