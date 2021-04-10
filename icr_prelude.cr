@@ -1,8 +1,15 @@
-require "../../../../../usr/share/crystal/src/primitives"
-require "../../../../../usr/share/crystal/src/class"
+# For now, you should modify the following paths with the path
+# of the crystal standard lib (CRYSTAL_PATH environment variable)
+# relatively to this file (absolute path are not supported yet :o)
+
+require "../../../../../usr/share/crystal/src/primitives" # => "#{ENV["CRYSTAL_PATH"}/primitive"
+require "../../../../../usr/share/crystal/src/class"      # => "#{ENV["CRYSTAL_PATH"}/class"
+
+# > This is temporary because later the hole crystal lib would be added by default.
+
+# > You could try to include some other file of the stdlib, but the result will be uncertain.
 
 # Some minimal tests to replace crystal API lib:
-
 class Object
   macro getter(*names)
     {% for n in names %}
@@ -49,6 +56,7 @@ struct Pointer(T)
   end
 end
 
+# /!\ this Array is unsafe (array[random_value] = x is possible)
 class Array(T)
   property size
 
@@ -86,7 +94,7 @@ class String
   property length, bytesize
 
   def size
-    length
+    bytesize
   end
 
   def self.new(size : Int32)
@@ -108,12 +116,12 @@ class String
   end
 end
 
-struct Tuple(*T)
-  def [](index : Int32)
-    index += size if index < 0
-    {% for i in 0...T.size %}
-      return self[{{i}}] if {{i}} == index
-    {% end %}
-    yield
-  end
-end
+# struct Tuple(*T)
+#   def [](index : Int32)
+#     index += size if index < 0
+#     {% for i in 0...T.size %}
+#       return self[{{i}}] if {{i}} == index
+#     {% end %}
+#     yield
+#   end
+# end

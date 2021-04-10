@@ -1,13 +1,4 @@
-# #### /!\ /!\ /!\ #####
 require "gc"
-GC.disable
-
-# GC collect and free the pointers allocated by classes ref and primitives malloc
-# and so cause random sigfault.
-# For now, I disable the GC to make ICR works, but the thing to do is
-# to free my-self those pointers, the problem is when? This require maybe a virtual
-# CG to collect virtual ICRObject refs.
-#######################
 
 module ICR
   # ICRObject are transmitted through the AST Tree, and represents Object created with icr
@@ -39,7 +30,8 @@ module ICR
         #               | @ivar 2
         #               | ...
         @raw = Pointer(Byte).malloc(8)
-        ref = Pointer(Byte).malloc(@type.class_size)
+        # ref = Pointer(Byte).malloc(@type.class_size)
+        ref = GC.malloc(@type.class_size).as(Byte*)
         @raw.as(UInt64*).value = ref.address
 
         # Write the type id at the first slot:
@@ -60,7 +52,8 @@ module ICR
       bs = str.bytesize
       len = str.@length
 
-      ref = Pointer(Byte).malloc(String::HEADER_SIZE + bs + 1)
+      # ref = Pointer(Byte).malloc(String::HEADER_SIZE + bs + 1)
+      ref = GC.malloc(String::HEADER_SIZE + bs + 1).as(Byte*)
       (ref + 4).as(Int32*).value = bs
       (ref + 8).as(Int32*).value = len
       (ref + String::HEADER_SIZE).copy_from(pointerof(str.@c), bs)
