@@ -21,26 +21,26 @@ module ICR
 
       @size, @class_size = ICRType.size_of(@cr_type)
 
-      # if !struct?
-      #   # Classes size is 8 because there are a pointer
-      #   @class_size = @size
-      #   @size = 8_u64
-      # end
-
-      if (cr_type = @cr_type).is_a? Crystal::GenericInstanceType
+      if (cr_type = @cr_type).responds_to? :generics
         @generics = cr_type.generics
       end
 
       # Check instances vars of this type, and store the offset and the type for each ivar
       # Tuple and NamedTuple are seen like if they have ivar "0","1","2",... so the type and the offset
       # for each field are stored here.
-      if @cr_type.allows_instance_vars?
+      if @cr_type.allows_instance_vars? # is_a? InstanceVarContainer, responds_to? :each_ivar_types
         offset = 0u64
-        offset += 4u64 if !struct? # start instance vars at 4, to let the place of the TYPE_ID
+        # classes start with a TYPE_ID : Int32
+        if !struct? # self.reference_like? ??
+          t = ICRType.int32
+          @instance_vars["TYPE_ID"] = {offset, t}
+          offset += t.size
+        end
 
         @cr_type.each_ivar_types do |name, type|
           t = ICRType.new(type)
-          @instance_vars[name] = {offset, t}
+
+          @instance_vars[name] = {offset, t} # type doesn't matter actually, only size matter, type become correct only after the ivar is sets
           offset += t.size
         rescue e
           bug "Cannot get the size of #{@cr_type}.#{name}: #{e.message}"
@@ -135,16 +135,6 @@ module ICR
       cr_type.struct? ? {size, 0u64} : {8u64, size}
     end
 
-    # Give the size of binary to allocate for an ICRObject, 8 for classes because
-    # there are pointer.
-    # def self.size_of(cr_type : Crystal::Type)
-    #   if cr_type.struct? # if !class?
-    #     instance_size_of(cr_type)
-    #   else
-    #     8
-    #   end
-    # end
-
     private def self.llvm_struct_type?(cr_type)
       (cr_type.is_a?(Crystal::NonGenericClassType) || cr_type.is_a?(Crystal::GenericClassInstanceType)) &&
         !cr_type.is_a?(Crystal::PointerInstanceType) && !cr_type.is_a?(Crystal::ProcInstanceType)
@@ -164,6 +154,26 @@ module ICR
   end
 end
 
+class Crystal::Type
+  def <(other : Crystal::Type)
+    self_type = self.devirtualize
+    other_type = other.devirtualize
+    !!(self_type != other_type && self_type.implements?(other_type))
+  end
+
+  def <=(other : Crystal::Type)
+    self_type = self.devirtualize
+    other_type = other.devirtualize
+    !!self_type.implements?(other_type)
+  end
+
+  def each_ivar_types(&)
+    self.all_instance_vars.each do |name, ivar|
+      yield name, ivar.type
+    end
+  end
+end
+
 class Crystal::GenericInstanceType
   # Give the generics (type_vars) as String => ICRType instead of String => ASTNode
   def generics
@@ -172,16 +182,32 @@ class Crystal::GenericInstanceType
       generics[name] = ICR::ICRType.new ast.as(Crystal::Var).type
     end
     generics
-  rescue
-    bug "Cannot get generics vars for #{self}"
+  rescue e
+    bug "Cannot get generics vars for #{self}, cause: #{e}"
   end
 end
 
-class Crystal::Type
+class Crystal::MetaclassType
   def each_ivar_types(&)
-    self.all_instance_vars.each do |name, ivar|
-      yield name, ivar.type
-    end
+    yield "type_id", ICR.program.int32
+  end
+end
+
+class Crystal::GenericClassInstanceMetaclassType
+  def each_ivar_types(&)
+    yield "type_id", ICR.program.int32
+  end
+end
+
+class Crystal::GenericModuleInstanceMetaclassType
+  def each_ivar_types(&)
+    yield "type_id", ICR.program.int32
+  end
+end
+
+class Crystal::UnionType
+  def each_ivar_types(&)
+    yield "type_id", ICR.program.int32
   end
 end
 

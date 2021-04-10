@@ -1,3 +1,14 @@
+# #### /!\ /!\ /!\ #####
+require "gc"
+GC.disable
+
+# GC collect and free the pointers allocated by classes ref and primitives malloc
+# and so cause random sigfault.
+# For now, I disable the GC to make ICR works, but the thing to do is
+# to free my-self those pointers, the problem is when? This require maybe a virtual
+# CG to collect virtual ICRObject refs.
+#######################
+
 module ICR
   # ICRObject are transmitted through the AST Tree, and represents Object created with icr
   #
@@ -10,10 +21,13 @@ module ICR
   class ICRObject
     getter type : ICRType
     getter raw : Pointer(Byte)
-    getter dont_collect : Pointer(Byte)? = nil
     protected setter raw
 
     def initialize(@type)
+      if @type.cr_type.is_a? Crystal::UnionType
+        bug "Cannot create a object with a runtime union type (#{@type.cr_type})"
+      end
+
       if @type.struct?
         # raw -> | @ivar1
         #        | @ivar2
@@ -26,8 +40,11 @@ module ICR
         #               | ...
         @raw = Pointer(Byte).malloc(8)
         ref = Pointer(Byte).malloc(@type.class_size)
-        @dont_collect = ref
         @raw.as(UInt64*).value = ref.address
+
+        # Write the type id at the first slot:
+        id = ICR.get_crystal_type_id(@type.cr_type)
+        ref.as(Int32*).value = id
       end
     end
 
@@ -47,7 +64,6 @@ module ICR
       (ref + 4).as(Int32*).value = bs
       (ref + 8).as(Int32*).value = len
       (ref + String::HEADER_SIZE).copy_from(pointerof(str.@c), bs)
-      @dont_collect = ref
       @raw.as(UInt64*).value = ref.address
     end
 
@@ -73,17 +89,32 @@ module ICR
 
     # Write an ivar of this object
     def []=(name, value : ICRObject)
+      @type.set_type_of(name, value.type)
       @type.write_ivar(name, value.raw, self.data)
       value
     end
 
-    def cast_to(type : Crystal::Type?)
-      bug "Cast from #{@type.cr_type} failed" if type.nil?
+    def cast(from : Crystal::Type?, to : Crystal::Type?)
+      bug "Cast from #{@type.cr_type} failed" if from.nil? || to.nil?
+      if @type.cr_type.pointer?
+        # pointer seems to be castable to any type
+        @type = ICRType.new(to)
+        return self
+        # obj = ICRObject.new(ICRType.new(to))
+        # obj.raw = @raw
+        # obj
+      end
 
-      # TODO handle upcast and downcast
-      obj = ICRObject.new(ICRType.new(type))
-      obj.raw = @raw
-      obj
+      if @type.cr_type <= to
+        self
+      else
+        nil
+      end
+    end
+
+    def is_a(type : Crystal::Type?)
+      bug "is_a? #{@type.cr_type} failed" if type.nil?
+      @type.cr_type <= type
     end
 
     # Returns a new ICRObject(Pointer) pointing on the raw data of this object
@@ -113,16 +144,16 @@ module ICR
 
     # Gives a string representation used by icr to display the result of an instruction.
     def result
-      case t = @type.cr_type.to_s # TODO avoid the string transformation
-      when "Int8"    then "#{as_int8.to_s.underscored}i8"
-      when "UInt8"   then "#{as_uint8.to_s.underscored}u8"
-      when "Int16"   then "#{as_int16.to_s.underscored}i16"
-      when "UInt16"  then "#{as_uint16.to_s.underscored}u16"
+      case t = @type.cr_type.to_s # TODO avoid the string transformation (call inspect method)
+      when "Int8"    then "#{as_int8.to_s.underscored}_i8"
+      when "UInt8"   then "#{as_uint8.to_s.underscored}_u8"
+      when "Int16"   then "#{as_int16.to_s.underscored}_i16"
+      when "UInt16"  then "#{as_uint16.to_s.underscored}_u16"
       when "Int32"   then as_int32.to_s.underscored
-      when "UInt32"  then "#{as_uint32.to_s.underscored}u32"
-      when "Int64"   then "#{as_int64.to_s.underscored}i64"
-      when "UInt64"  then "#{as_uint64.to_s.underscored}u64"
-      when "Float32" then "#{as_float32.to_s.underscored}f32"
+      when "UInt32"  then "#{as_uint32.to_s.underscored}_u32"
+      when "Int64"   then "#{as_int64.to_s.underscored}_i64"
+      when "UInt64"  then "0x#{as_uint64.to_s(16)}"
+      when "Float32" then "#{as_float32.to_s.underscored}_f32"
       when "Float64" then as_float64.to_s.underscored
       when "Bool"    then as_bool.inspect
       when "Char"    then as_char.inspect
@@ -130,7 +161,11 @@ module ICR
       when "Symbol"  then ":#{ICR.get_symbol_from_value(as_int32)} (#{as_int32})"
       when "Nil"     then "nil"
       else
-        "#<#{t}:0x#{self.object_id.to_s(16)}>"
+        if @type.cr_type.metaclass?
+          @type.cr_type.to_s.chomp(".class").chomp(":Module")
+        else
+          "#<#{t}:0x#{self.object_id.to_s(16)}>"
+        end
       end
     end
 
@@ -147,7 +182,7 @@ module ICR
     {% end %}
 
     def as_number : Number
-      case @type.cr_type.to_s # TODO avoid the string transformation
+      case @type.cr_type.to_s # TODO avoid the string transformation (use IntegerType/number kind)
       when "Int8"    then self.as_int8
       when "UInt8"   then self.as_uint8
       when "Int16"   then self.as_int16
@@ -178,7 +213,7 @@ module ICR
     ICRObject.new(ICRType.nil)
   end
 
-  def self.bool(value : Bool)
+  def self.bool(value : Bool) # specify the type to handle union type??
     obj = ICRObject.new(ICRType.bool)
     obj.as_bool = value
     obj
@@ -219,6 +254,17 @@ module ICR
     end
     obj
   end
+
+  def self.class(type : Crystal::Type)
+    bug "Trying to create a class or a module from a non metaclass type (#{type.class})" unless type.metaclass?
+    obj = ICRObject.new(ICRType.new(type))
+    obj["type_id"] = ICR.number(ICR.get_crystal_type_id(type))
+    obj
+  end
+
+  def self.uninitialized(type : Crystal::Type)
+    ICRObject.new(ICRType.new(type))
+  end
 end
 
 class String
@@ -235,7 +281,7 @@ class String
           i = (part == 0) ? (str.size - 1 - i) : i + 1
 
           io << c
-          if i % 3 == 0 && i != 0 && c != '-'
+          if i % 3 == 0 && (0 != i != str.size) && c != '-'
             io << '_'
           end
         end

@@ -1,4 +1,5 @@
 require "../../../../../usr/share/crystal/src/primitives"
+require "../../../../../usr/share/crystal/src/class"
 
 # Some minimal tests to replace crystal API lib:
 

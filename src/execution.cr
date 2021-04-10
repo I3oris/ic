@@ -98,4 +98,22 @@ module ICR
     end
     bug "Cannot found the symbol corresponding to the value #{value}"
   end
+
+  @@crystal_types = Set(Crystal::Type).new
+
+  def self.get_crystal_type_id(type : Crystal::Type)
+    if id = @@crystal_types.index(type)
+      id
+    else
+      @@crystal_types << type
+      @@crystal_types.index(type).not_nil!
+    end
+  end
+
+  def self.get_crystal_type_from_id(id : Int32)
+    @@crystal_types.each_with_index do |t, i|
+      return t if i == id
+    end
+    bug "Cannot found the type corresponding to the id #{id}"
+  end
 end

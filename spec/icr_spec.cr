@@ -9,16 +9,9 @@ describe ICR do
     ICR.parse(%("Hello "+"World"+"!")).run.result.should eq %("Hello World!")
   end
 
-  it "gives the good object_id" do
-    ICR.parse(<<-'CODE').run.result.should eq %(true)
-      str = "Hello"
-      pointerof(str).as(UInt64*).value == str.object_id
-      CODE
-  end
-
   it "declare a class" do
     ICR.parse(<<-'CODE').run.result.should eq %(nil)
-      class Point
+      class Foo
         property x
         property y
         property name
@@ -30,11 +23,25 @@ describe ICR do
   end
 
   it "run instance vars" do
-    ICR.parse(<<-'CODE').run.result.should eq %("P")
-      point = Point.new 42, 31
-      point.name = "P"
-      point.name
-      # { point.x, point.y, point.name }
+    ICR.parse(<<-'CODE').run.result.should eq %("hello")
+      foo = Foo.new 42, 31
+      foo.name = "hello"
+      foo.name
+      # { foo.x, foo.y, foo.name }
+      CODE
+  end
+
+  it "gives the good object_id" do
+    ICR.parse(<<-'CODE').run.result.should eq %(true)
+      foo = Foo.new 0,0
+      pointerof(foo).as(UInt64*).value == foo.object_id
+      CODE
+  end
+
+  it "gives the good crystal_type_id" do
+    ICR.parse(<<-'CODE').run.result.should eq %(true)
+      foo = Foo.new 0,0
+      Pointer(Int32).new(foo.object_id).value == foo.crystal_type_id
       CODE
   end
 end

@@ -100,10 +100,12 @@ module ICR
     end
 
     private def increase_indent
+      return if Highlighter.is_str?
+
       last_line = @edited_line.split('\n')[-1]
       if (last_line.starts_with? /( )*(abstract|class|struct|enum|def|if|unless|while|until|module|lib|begin|case|macro|select|union)/) ||
          last_line =~ /( )*do( )*/ ||
-         last_line.starts_with? /( )*\{\%( )*(for|if|unless)/
+         last_line.starts_with? /( )*\{\%( )*(for|if|unless|begin)/
         @indent += 1
       end
     end
@@ -153,7 +155,7 @@ module ICR
     end
 
     private def history_down
-      unless @history_index == 0
+      unless @history_index <= 0
         @history_index -= 1
         replace_line @history[-@history_index]
       end

@@ -114,7 +114,21 @@ class Crystal::Assign
     when Crystal::InstanceVar then ICR.assign_ivar(t.name, self.value.run)
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then icr_error "Can't assign to '_'"
+    when Crystal::Path        then todo "CONST assign"
     else                           bug "Unexpected assign target #{t.class}"
+    end
+  end
+end
+
+class Crystal::UninitializedVar
+  def run
+    case v = self.var
+    when Crystal::Var         then ICR.assign_var(v.name, ICR.uninitialized(self.type))
+    when Crystal::InstanceVar then ICR.assign_ivar(v.name, ICR.uninitialized(self.type))
+    when Crystal::ClassVar    then todo "Uninitialized cvar"
+    when Crystal::Underscore  then todo "Uninitialized underscore"
+    when Crystal::Path        then todo "Uninitialized CONST"
+    else                           bug "Unexpected uninitialized-assign target #{v.class}"
     end
   end
 end
@@ -155,15 +169,13 @@ end
 
 class Crystal::Path
   def run
-    # TODO: ICR.class_type(@type)
-    ICR.nil
+    ICR.class(self.type)
   end
 end
 
 class Crystal::Generic
   def run
-    # TODO: ICR.class_type(@type)
-    ICR.nil
+    ICR.class(self.type)
   end
 end
 
@@ -292,8 +304,7 @@ end
 
 class Crystal::Cast
   def run
-    # CAST from: obj.type to: @type
-    if new_obj = self.obj.run.cast_to @type
+    if new_obj = self.obj.run.cast from: self.obj.type, to: @type
       new_obj
     else
       todo "Raise an error on invalid cast"
@@ -301,10 +312,9 @@ class Crystal::Cast
   end
 end
 
-class NilableCast
+class Crystal::NilableCast
   def run
-    # CAST from: obj.type to: @type
-    if new_obj = self.obj.run.cast_to @type
+    if new_obj = self.obj.run.cast from: self.obj.type, to: @type
       new_obj
     else
       ICR.nil
@@ -312,22 +322,22 @@ class NilableCast
   end
 end
 
-# class Crystal::IsA
-#   # self.nil_check?
-#   def run
-#     o = self.obj.run.type
-#     if (c = const.run).is_a?(ICR::ICRClass)
-#       ICR.bool !!(o.covariant? c.target)
-#     else
-#       raise "BUG: IsA const should be a ICRClass"
-#     end
-#   end
-# end
+class Crystal::IsA
+  def run
+    ICR.bool self.obj.run.is_a self.const.type
+  end
+end
 
 class Crystal::RespondsTo
   def run
-    type = self.obj.run.type.@cr_type
+    type = self.obj.run.type.cr_type
     ICR.bool !!(type.has_def? self.name)
+  end
+end
+
+class Crystal::TypeOf
+  def run
+    ICR.class(self.type)
   end
 end
 

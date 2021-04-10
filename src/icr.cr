@@ -13,8 +13,6 @@ require "./highlighter"
 require "./shell"
 require "./errors"
 require "colorize"
-require "gc"
-GC.disable
 
 ICR.run_file "./icr_prelude.cr"
 
