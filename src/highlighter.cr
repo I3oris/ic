@@ -98,7 +98,7 @@ class ICR::Highlighter
       colorless = colorless.gsub(/icr\([0-9\.]+\):[0-9]{2,}[>\*"] /, "")
 
       # re-add missing characters
-      colorized += code[colorless.size...].gsub('\n', "\n#{self.invitation}")
+      colorized += (code[colorless.size...].gsub "\n" { "\n#{self.invitation}" })
     end
 
     @@line_number = 0
@@ -176,7 +176,7 @@ class ICR::Highlighter
       end
 
       unless token.type == :SPACE
-        last_is_def = token.keyword? :def
+        last_is_def = %i(def class module lib macro).any? { |t| token.keyword?(t) }
       end
     end
   end
@@ -204,7 +204,10 @@ class ICR::Highlighter
       when :EOF
         break
       else
-        io.print token.raw.to_s.gsub('\n', "\n#{self.invitation}\e[0;#{highlight_type(:string)}m")
+        io.print(token.raw.to_s.gsub("\n") do
+          invit = self.invitation
+          "\n#{invit}\e[0;#{highlight_type(:string)}m"
+        end)
       end
     end
   end
