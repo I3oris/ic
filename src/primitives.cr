@@ -1,10 +1,6 @@
 module ICR
-  class Primitives
+  module Primitives
     def self.call(p : Crystal::Primitive)
-      {% if flag?(:_debug) %}
-        puts "Primitve called: #{p.name}:#{p.type}:#{p.extra}"
-      {% end %}
-
       case p.name
       when "allocate"                  then allocate(p.type)
       when "binary"                    then binary(ICR.current_function_name, p.type, ICR.get_var("self"), ICR.get_var("other"))
@@ -24,7 +20,7 @@ module ICR
     end
 
     private def self.allocate(type)
-      ICRObject.new ICRType.new type || bug "No type to allocate"
+      ICRObject.new ICRType.new type || bug! "No type to allocate"
     end
 
     private def self.binary(name, type, arg0 : ICRObject, arg1 : ICRObject)
@@ -32,6 +28,7 @@ module ICR
       when "+"  then ICR.number(arg0.as_number + arg1.as_number)
       when "-"  then ICR.number(arg0.as_number - arg1.as_number)
       when "*"  then ICR.number(arg0.as_number * arg1.as_number)
+      when "/"  then ICR.number(arg0.as_number / arg1.as_number)
       when "<"  then ICR.bool(arg0.as_number < arg1.as_number)
       when ">"  then ICR.bool(arg0.as_number > arg1.as_number)
       when "!=" then ICR.bool(arg0.as_number != arg1.as_number)
@@ -39,50 +36,45 @@ module ICR
       when "<=" then ICR.bool(arg0.as_number <= arg1.as_number)
       when ">=" then ICR.bool(arg0.as_number >= arg1.as_number)
       else
-        todo "Primitive binary:#{name}"
+        todo "Primitive binary: #{name}"
       end
       # TODO rescue OverflowError
     end
 
     private def self.pointer_malloc(pointer_type : Crystal::Type, size : ICRObject)
-      generic = ICRType.new(pointer_type).generics["T"]
+      type_var = ICRType.new(pointer_type).type_vars["T"]
 
-      size = size.as_number.to_u64 * generic.size
-      p = ICRObject.new(ICRType.pointer_of(generic.cr_type))
-      # p.as_uint64 = Pointer(Byte).malloc(size).address
-      p.as_uint64 = GC.malloc(size).address.as(Byte*)
+      size = size.as_number.to_u64 * type_var.size
+      p = ICRObject.new(ICRType.pointer_of(type_var.cr_type))
+      p.as_uint64 = GC.malloc(size).address
       p
     end
 
     private def self.pointer_new(pointer_type : Crystal::Type, address : ICRObject)
-      generic = ICRType.new(pointer_type).generics["T"]
+      type_var = ICRType.new(pointer_type).type_vars["T"]
 
-      p = ICRObject.new(ICRType.pointer_of(generic.cr_type))
+      p = ICRObject.new(ICRType.pointer_of(type_var.cr_type))
       p.as_uint64 = address.as_number.to_u64
       p
     end
 
     private def self.pointer_set(p : ICRObject, value : ICRObject)
-      src = value.raw
       dst = Pointer(Byte).new(p.as_uint64)
-      src.copy_to(dst, p.type.generics["T"].size)
-      value
-      # TODO if generics(T).union?
-      # box src into a union( i.e place the TYPE_ID before the value)
+      type = p.type.type_vars["T"]
+
+      type.write value, to: dst
     end
 
     private def self.pointer_get(p : ICRObject)
-      type = p.type.generics["T"]
-      obj = ICRObject.new(type) # TODO if union? get type from TYPE_ID, and unbox it
-      scr = Pointer(Byte).new(p.as_uint64)
-      dst = obj.raw
-      scr.copy_to(dst, type.size)
-      obj
+      type = p.type.type_vars["T"]
+      src = Pointer(Byte).new(p.as_uint64)
+
+      type.read from: src
     end
 
     private def self.pointer_add(p : ICRObject, x : ICRObject)
       new_p = ICRObject.new(p.type)
-      new_p.as_uint64 = p.as_uint64 + x.as_int32*p.type.generics["T"].size
+      new_p.as_uint64 = p.as_uint64 + x.as_int32*p.type.type_vars["T"].size
       new_p
     end
 
@@ -103,11 +95,11 @@ module ICR
     end
 
     private def self.object_crystal_type_id(obj : ICRObject)
-      ICR.number(ICR.get_crystal_type_id(obj.type.cr_type)) # use TYPE_ID?
+      ICR.number(ICR.get_crystal_type_id(obj.type.cr_type))
     end
 
     private def self._class(obj : ICRObject)
-      ICR.class(obj.type.cr_type.metaclass) # use TYPE_ID?
+      ICR.class(obj.type.cr_type.metaclass)
     end
   end
 end

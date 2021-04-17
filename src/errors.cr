@@ -15,7 +15,7 @@ class Exception
   end
 end
 
-class Crystal::Error
+class Crystal::Error < Exception
   def display
     puts
 
@@ -27,6 +27,8 @@ class Crystal::Error
     end
   end
 
+  # Dirtily catches exceptions for unterminated syntax, such as "class Foo", or "{", so the
+  # user have a change to terminate his expressions.
   def unterminated?
     self.message.in?({
       "expecting identifier 'end', not 'EOF'",
@@ -41,18 +43,20 @@ class Crystal::Error
       "unexpected token: EOF (expecting ',', ';' or '\n')",
       "Unexpected EOF on heredoc identifier",
       "unterminated parenthesized expression",
-      "Unterminated string literal", # <= U is upcase ^^
+      "Unterminated string literal",
+      "Unterminated command literal",
       "unterminated array literal",
       "unterminated tuple literal",
       "unterminated macro",
       "Unterminated string interpolation",
+      # ^ U is sometime upcase, sometime downcase :o
       "invalid trailing comma in call",
       "unknown token: '\\u{0}'",
     }) || self.message.try &.matches? /Unterminated heredoc: can't find ".*" anywhere before the end of file/
   end
 end
 
-def bug(msg)
+def bug!(msg)
   raise ICR::Error.new ("\nICR(BUG): #{msg}").colorize.red.bold.to_s
 end
 

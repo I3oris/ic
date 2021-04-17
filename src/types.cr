@@ -5,15 +5,15 @@ module ICR
   # binary layout, and the type size.
   class ICRType
     getter cr_type : Crystal::Type
-    getter generics = {} of String => ICRType
+    getter type_vars = {} of String => ICRType
     getter size = 0u64
     getter class_size = 0u64
 
     # Map associating ivar name with its offset and its ICRType.
     @instance_vars = {} of String => {UInt64, ICRType}
 
-    def struct?
-      @cr_type.struct?
+    def reference_like?
+      @cr_type.reference_like?
     end
 
     def initialize(@cr_type : Crystal::Type)
@@ -21,57 +21,24 @@ module ICR
 
       @size, @class_size = ICRType.size_of(@cr_type)
 
-      if (cr_type = @cr_type).responds_to? :generics
-        @generics = cr_type.generics
+      if (cr_type = @cr_type).responds_to? :icr_type_vars
+        @type_vars = cr_type.icr_type_vars
       end
 
       # Check instances vars of this type, and store the offset and the type for each ivar
       # Tuple and NamedTuple are seen like if they have ivar "0","1","2",... so the type and the offset
       # for each field are stored here.
-      if @cr_type.allows_instance_vars? # is_a? InstanceVarContainer, responds_to? :each_ivar_types
+      if @cr_type.allows_instance_vars?
         offset = 0u64
-        # classes start with a TYPE_ID : Int32
-        if !struct? # self.reference_like? ??
-          t = ICRType.int32
-          @instance_vars["TYPE_ID"] = {offset, t}
-          offset += t.size
-        end
-
         @cr_type.each_ivar_types do |name, type|
           t = ICRType.new(type)
 
-          @instance_vars[name] = {offset, t} # type doesn't matter actually, only size matter, type become correct only after the ivar is sets
+          @instance_vars[name] = {offset, t}
           offset += t.size
         rescue e
-          bug "Cannot get the size of #{@cr_type}.#{name}: #{e.message}"
+          bug! "Cannot get the size of #{@cr_type}.#{name}: #{e.message}"
         end
       end
-
-      {% if flag?(:_debug) %}
-        self.print_debug
-      {% end %}
-    end
-
-    def print_debug(visited = [] of ICRType, indent = 0)
-      if self.in? visited
-        print "..."
-        return
-      end
-      visited << self
-
-      print "ICRType #{@cr_type}[#{@size}]"
-      print "(#{@class_size})" unless struct?
-      print ':' unless @instance_vars.empty?
-      puts
-      @instance_vars.each do |name, layout|
-        print "  "*(indent + 1)
-        print "#{name}[#{layout[0]}]: "
-        layout[1].print_debug(visited, indent + 1)
-      end
-    end
-
-    def type_of(name)
-      @instance_vars[name]?.try &.[1] || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
     end
 
     def offset_and_type_of(name)
@@ -83,41 +50,99 @@ module ICR
       @instance_vars[name] = {@instance_vars[name][0], type}
     end
 
-    # Considers *src* as the raw binary of this ICRType
-    # then coping binary data of a *src* ivar to *dst*, considering
-    # that *dst* is a raw binary of the ICRType of ivar.
-    #
-    # Example:
-    # ```
-    # struct Foo
-    #   @x : Int32
-    #   @y : Int32
-    # end
-    #
-    # foo = Foo.new
-    #
-    # var = foo.@y
-    # ```
-    # Supposing this type represent Foo
-    #
-    # `read_ivar("y",foo_src, var_dst)` will copy
-    # the bytes 4 to 8 from foo_src, to var_dst
-    def read_ivar(name, src, dst)
-      i, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
-      (src + i).copy_to(dst, type.size)
+    # Considers *src* as this *type*, and returns the ICRObject read.
+    # If this type is an Union or Virtual, returns the unboxed instance value.
+    def read(from src : Byte*)
+      case @cr_type
+      when .reference_like?
+        # Read a reference-like type, (Classes, Union of Classes,...)
+        # src -> ref -> | TYPE_ID
+        #               | data...
+
+        # src -> null (for nil)
+
+        # if is virtual or a union type, we must read TYPE_ID and create
+        # the ICRObject from it, in order to get the real instantiated type.
+        case @cr_type
+        when Crystal::VirtualType, Crystal::UnionType
+          addr = src.as(UInt64*).value
+          if addr == 0u64
+            return ICR.nil
+          else
+            ref = Pointer(Byte).new(addr)
+            id = ref.as(Int32*).value
+            real_type = ICRType.new(ICR.get_crystal_type_from_id(id))
+          end
+        else
+          real_type = self
+        end
+
+        obj = ICRObject.new(real_type)
+        dst = obj.raw
+        src.copy_to(dst, real_type.size)
+      when Crystal::UnionType
+        # Read an union type: (must unbox)
+        # src -> | TYPE_ID
+        #        | data|ref...
+        obj = ICRObject.unbox_from_union(src)
+      else
+        # Read a value type:
+        # src -> data
+        obj = ICRObject.new(self) # devirtualize?
+        src.copy_to(obj.raw, @size)
+      end
+      obj
     end
 
-    # Same idea of read_ivar, but *dst* is considered as this ICRType.
-    def write_ivar(name, src, dst)
-      i, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
-      (dst + i).copy_from(src, type.size)
+    # Considers *dst* as this *type*, and write *value* to *dst*.
+    # If this type is an Union or Virtual, box the *value* (adds the TYPE_ID before the value)
+    def write(value : ICRObject, to dst : Byte*)
+      case @cr_type
+      when .reference_like? # including VirtualType
+        # write:
+        # dst -> ref -> | TYPE_ID
+        #               | data...
+        #
+        # dst -> null (for nil)
+        if value.type.size == 0
+          dst.as(UInt64*).value = 0u64
+        else
+          value.raw.copy_to(dst, value.type.size)
+        end
+      when Crystal::UnionType
+        # write:
+        # dst -> | TYPE_ID
+        #        | data|ref
+        value.box_into_union(dst)
+      else
+        # write:
+        # dst -> data
+        value.raw.copy_to(dst, @size)
+      end
+      value
     end
 
-    # def generic!(name)
-    #   @cr_type.as(Crystal::GenericInstanceType).type_vars[name].as(Crystal::Var).type
-    # rescue
-    #   bug "Cannot get generics vars for #{self}"
-    # end
+    # Considers *src* as this *type*, and return the value of the ivar *name*
+    def read_ivar(name, from src : Byte*)
+      index, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+
+      type.read from: (src + index)
+    end
+
+    # Considers *dst* as this *type*, and set *value* to the ivar *name*
+    def write_ivar(name, value : ICRObject, to dst : Byte*)
+      index, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+
+      type.write value, to: (dst + index)
+    end
+
+    def map_ivars(& : String -> T) forall T
+      a = [] of T
+      @instance_vars.each_key do |name|
+        a << yield name
+      end
+      a
+    end
 
     # Return the size and the instance size of a Crystal::Type
     # For classes, size is 8 and instance size is the size of the data of the classes
@@ -132,7 +157,7 @@ module ICR
                llvm.size_of(llvm.llvm_embedded_type(cr_type))
              end
 
-      cr_type.struct? ? {size, 0u64} : {8u64, size}
+      cr_type.reference_like? ? {8u64, size} : {size, 0u64}
     end
 
     private def self.llvm_struct_type?(cr_type)
@@ -142,8 +167,8 @@ module ICR
 
     # Creates the corresponding ICRTypes:
 
-    def self.pointer_of(generic : Crystal::Type)
-      ICRType.new(ICR.program.pointer_of(generic))
+    def self.pointer_of(type_var : Crystal::Type)
+      ICRType.new(ICR.program.pointer_of(type_var))
     end
 
     {% for t in %w(Bool Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Nil Char String) %}
@@ -167,7 +192,23 @@ class Crystal::Type
     !!self_type.implements?(other_type)
   end
 
+  def string?
+    self.to_s == "String"
+  end
+
+  def array?
+    self.to_s.starts_with? "Array"
+  end
+
+  # Yields each ivar with its type: {name, ICRType}
   def each_ivar_types(&)
+    todo "ivars on #{self} (#{self.class})" unless self.is_a? Crystal::InstanceVarContainer
+
+    # classes start with a TYPE_ID : Int32
+    if self.reference_like?
+      yield "TYPE_ID", ICR.program.int32
+    end
+
     self.all_instance_vars.each do |name, ivar|
       yield name, ivar.type
     end
@@ -175,47 +216,31 @@ class Crystal::Type
 end
 
 class Crystal::GenericInstanceType
-  # Give the generics (type_vars) as String => ICRType instead of String => ASTNode
-  def generics
-    generics = {} of String => ICR::ICRType
+  # Give the type_vars as String => ICRType instead of String => ASTNode
+  def icr_type_vars
+    type_vars = {} of String => ICR::ICRType
     @type_vars.each do |name, ast|
-      generics[name] = ICR::ICRType.new ast.as(Crystal::Var).type
+      type_vars[name] = ICR::ICRType.new ast.as(Crystal::Var).type
     end
-    generics
+    type_vars
   rescue e
-    bug "Cannot get generics vars for #{self}, cause: #{e}"
-  end
-end
-
-class Crystal::MetaclassType
-  def each_ivar_types(&)
-    yield "type_id", ICR.program.int32
-  end
-end
-
-class Crystal::GenericClassInstanceMetaclassType
-  def each_ivar_types(&)
-    yield "type_id", ICR.program.int32
-  end
-end
-
-class Crystal::GenericModuleInstanceMetaclassType
-  def each_ivar_types(&)
-    yield "type_id", ICR.program.int32
+    bug! "Cannot get type_vars for #{self}, cause: #{e}"
   end
 end
 
 class Crystal::UnionType
+  # Add a virtual ivar "TYPE_ID", on the first slot of an union
   def each_ivar_types(&)
-    yield "type_id", ICR.program.int32
+    yield "TYPE_ID", ICR.program.int32
   end
 end
 
 class Crystal::TupleInstanceType
-  def generics
+  def icr_type_vars
     {} of String => ICR::ICRType
   end
 
+  # Add virtual ivars ("0","1","2",..) for each field
   def each_ivar_types(&)
     self.tuple_types.each_with_index do |type, i|
       yield i.to_s, type
@@ -224,13 +249,21 @@ class Crystal::TupleInstanceType
 end
 
 class Crystal::NamedTupleInstanceType
-  def generics
+  def icr_type_vars
     {} of String => ICR::ICRType
   end
 
+  # Add virtual ivars ("0","1","2",..) for each field
   def each_ivar_types(&)
     self.entries.each_with_index do |named_arg, i|
       yield i.to_s, named_arg.type
     end
   end
 end
+
+{% for metaclass in %w(MetaclassType GenericClassInstanceMetaclassType GenericModuleInstanceMetaclassType VirtualMetaclassType) %}
+  class Crystal::{{metaclass.id}}
+    def each_ivar_types(&)
+    end
+  end
+{% end %}

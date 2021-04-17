@@ -73,11 +73,16 @@ module ICR
     last_ast_node = nil
 
     Shell.new.run(->self.display_result) do |line|
+      if line.empty?
+        code += '\n'
+        next :line
+      end
+
       ICR.clear_callstack
-      ast_node = ICR.parse(code + "\n" + line)
+      ast_node = ICR.parse(code + line + '\n')
       run_last_expression(expressionize(last_ast_node), expressionize(ast_node))
       last_ast_node = ast_node
-      code += "\n" + line
+      code += line + '\n'
 
       :line
     rescue Cancel
@@ -111,13 +116,6 @@ module ICR
 
   # Compare the last ASTNode with the current ASTNode, and run only the last instruction
   private def self.run_last_expression(last_ast_node, ast_node)
-    {% if flag?(:_debug) %}
-      puts
-      ast_node.expressions[-1].print_debug
-      puts
-      puts
-    {% end %}
-
     l_size = last_ast_node.expressions.size
     size = ast_node.expressions.size
     if l_size != size
@@ -131,3 +129,7 @@ module ICR
     false
   end
 end
+
+{% if flag? :_debug %}
+  require "./debug.cr"
+{% end %}

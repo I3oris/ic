@@ -45,7 +45,7 @@ module ICR
   class Shell
     @edited_line = ""
     @prompt_type = :normal
-    @line_number = 0
+    @line_number = 1
     @indent = 0
     @history = [""]
     @history_index = -1
@@ -174,6 +174,7 @@ module ICR
         @line_number += 1
         puts
         print prompt
+        yield ""
         return
       end
       status = yield @edited_line

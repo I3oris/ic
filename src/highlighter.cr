@@ -1,5 +1,5 @@
-# File retake from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
-# thanks!
+# File retake and modified from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
+# Thanks!
 class ICR::Highlighter
   record Highlight,
     color : Symbol,
@@ -49,8 +49,10 @@ class ICR::Highlighter
     :__FILE__, :__DIR__, :__LINE__, :__END_LINE__,
   }
 
+  SPECIAL_WORDS = /^(new|(class_)?(getter|property|setter)(\?|!)?|loop|raise|record)$/
+
   OPERATORS = Set{
-    :"+", :"-", :"*", :"/",
+    :"+", :"-", :"*", :"/", :"//",
     :"=", :"==", :"<", :"<=", :">", :">=", :"!", :"!=", :"=~", :"!~",
     :"&", :"|", :"^", :"~", :"**", :">>", :"<<", :"%",
     :"[]", :"[]?", :"[]=", :"<=>", :"===",
@@ -91,14 +93,18 @@ class ICR::Highlighter
     # So we compare what it have been written(colorized) and the original code, and add the difference,
     # but we must remove colors and invitation before comparing.
     if error
-      # uncolorize:
+      size_to_remove = 0
+      # uncolorized:
       colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
 
       # remove icr invitation:
-      colorless = colorless.gsub(/icr\([0-9\.]+\):[0-9]{2,}[>\*"] /, "")
+      colorless = colorless.gsub(/icr\([0-9\.]+\):[0-9]{2,}[>\*"] /, "").gsub(/#{'\b'}+/) do |backs|
+        size_to_remove += backs.size # remove the \b\b\b and remove the erased char from colorless.size
+        ""
+      end
 
       # re-add missing characters
-      colorized += (code[colorless.size...].gsub "\n" { "\n#{self.invitation}" })
+      colorized += (code[colorless.size - size_to_remove...].gsub "\n" { "\n#{self.invitation}" })
     end
 
     @@line_number = 0
@@ -107,9 +113,11 @@ class ICR::Highlighter
 
   private def self.highlight_normal_state(lexer, io, break_on_rcurly = false)
     last_is_def = false
+    last_token = {type: nil, value: ""}
 
     while true
       token = lexer.next_token
+
       case token.type
       when :NEWLINE
         io.puts
@@ -147,6 +155,8 @@ class ICR::Highlighter
             highlight token, :keyword, io
           when SPECIAL_VALUES.includes? token.value
             highlight token, :literal, io
+          when SPECIAL_WORDS.matches? token.to_s
+            highlight token, :keyword, io
           else
             io << token
           end
@@ -162,6 +172,13 @@ class ICR::Highlighter
         io << token.value
       when :GLOBAL, :GLOBAL_MATCH_DATA_INDEX
         io << token.value
+      when :":"
+        if last_token[:type] == :IDENT
+          last_token[:value].size.times { io << '\b' }
+          highlight last_token[:value] + ':', :symbol, io
+        else
+          io << ':'
+        end
       else
         if OPERATORS.includes? token.type
           highlight token, :operator, io
@@ -174,6 +191,8 @@ class ICR::Highlighter
           end
         end
       end
+
+      last_token = {type: token.type, value: token.value.as?(String) || ""}
 
       unless token.type == :SPACE
         last_is_def = %i(def class module lib macro).any? { |t| token.keyword?(t) }

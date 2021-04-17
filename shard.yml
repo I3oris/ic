@@ -1,6 +1,6 @@
 name: icr
 version: 0.1.0
-
+description: Fast Crystal Interpreter, running without having to compile!
 authors:
   - I3oris
 

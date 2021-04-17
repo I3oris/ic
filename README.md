@@ -1,19 +1,14 @@
 # ICR
 
-TODO: Write a description here
-
+This repository is a **Test** for implementation of an Interpreter CRystal. ICR will execute crystal code without never compile it. In addition of giving results fasted that compiling, ICR offer a pretty shell like `irb`.
 
 ## Installation
 
 ```sh
-crystal build -p src/icr.cr
+git clone https://github.com/I3oris/icr.git
+
+cd icr && make
 ```
-> You could also build it in release mode, but since icr is a test-version and it take a while to compile, it doesn't really worth it.
-
-You should edit the file `icr-prelude.cr` and modify the require paths with the path
-of the crystal standard lib (do `crystal env` and look CRYSTAL_PATH environment variable)
-relatively to this file (absolute path are not supported yet :o)
-
 
 ## Usage
 
@@ -24,8 +19,8 @@ relatively to this file (absolute path are not supported yet :o)
 
 #### WARNING /!\\ :
 
-* For now, std crystal lib is not included, so almost everything are missing, including the `puts` method, but primitive types and operations are available: (Int, Float, Tuple, NamedTuple, Symbol, Char), objects like String, Array or Pointers have been lazily implemented into the icr-prelude to serve mostly as 'prove of concept'.
-* This first-version have *voluntary* memory leek, the memory allocated by `Array`, `String`, ... will be **NOT** free, see below for more details.
+* For now, standard crystal lib is not included, so almost everything are missing, including the `puts` method, but primitive types and operations are available: (Int, Float, Tuple, NamedTuple, Symbol, Char), objects like String, Array or Pointers have been lazily implemented into the icr-prelude to serve mostly as 'prove of concept'.
+* This first-version have *voluntary* memory leek, the memory allocated by `Array`, `String`, ... will **NOT** be freed, see below for more details.
 * Not all primitives and ASTNode have been implemented, so you should see lot of `BUG` or `TODO` messages, the most of them are normal at this stage of the project.
 
 ## How ICR works ?
@@ -76,15 +71,13 @@ ICR.number(arg0.as_number + arg1.as_number) # create a ICRObject from a number
 
 On the prompt, each time a code is written, the semantic is executed on the hole code written from the beginning (unless the errors), so the semantic will re-compute methods and vars declaration and write the name of a method will not give a "undefined method" error.
 
-Then, only the written expression will be `run` by icr, and the resulting ICRObject will be displayed.
-
-<!-- Well, it practice is is a bit more complicated of that, but i think you've got it. -->
+Then, only the last written expression will be `run` by icr, and the resulting ICRObject will be displayed.
 
 #### Great, but what about Pointers and memory ?
 
 Ok, the pointers was the difficult part. There are the basis of Array, String, Classes and actually the hole stdlib depend on them!
 
-ICRObject actually contain a pointer to an certain among of data, (1 byte for UInt8, 4 bytes for Int32,...) and the value of the object is stored inside.
+ICRObject actually contain a pointer to a certain amount of data, (1 byte for UInt8, 4 bytes for Int32,...) and the value of the object is stored inside.
 
 If this ICRObject represent a `Pointer(Int32)`, 4 bytes are allocated to store the address of this pointer. This address itself will point to the data of the pointer (allocated by the primitive malloc for example)
 
@@ -95,16 +88,9 @@ For example, on `pointer.value = 42`, 4 bytes of the `42` will be copied on the 
 
 > Not really for now, because this first implementation doesn't rearrange the offset of ivars (alignment optimization) so it's like all classes an structs declared in ICR was `Packed`.
 
-> Moreover, Union-types are not supported yet, and it's because the binary representation of a union  need more specific code to handle complex case (such as upcast and downcast,...). But this is "Work in progress!"
+> Moreover, Union-types are not fully supported yet, and it's because the binary representation of a union  need more specific code to handle complex case (such as upcast and downcast,...). But this is "Work in progress!"
 
 > However, the pointer allocated by ICRObjects (`Pointer` or Classes) become difficult to trace, and freeing theme require probably a Garbage Collector, may be there are a way to register theme by the *true* GC of the ICR-program, but this need more reflexion. That why this first version will **NOT** free the memory allocated by ICRObjects. (But don't worry, in practice this memory leek is not disturbing for small tests)
-
-
-#### And for C-binding ??
-
-
-
-
 
 
 ## Contributing

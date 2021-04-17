@@ -1,11 +1,7 @@
-# For now, you should modify the following paths with the path
-# of the crystal standard lib (CRYSTAL_PATH environment variable)
-# relatively to this file (absolute path are not supported yet :o)
+# This file is read each time icr is launched #
 
-require "../../../../../usr/share/crystal/src/primitives" # => "#{ENV["CRYSTAL_PATH"}/primitive"
-require "../../../../../usr/share/crystal/src/class"      # => "#{ENV["CRYSTAL_PATH"}/class"
-
-# > This is temporary because later the hole crystal lib would be added by default.
+require "primitives"
+require "class"
 
 # > You could try to include some other file of the stdlib, but the result will be uncertain.
 
@@ -115,13 +111,3 @@ class String
     pointerof(@c)
   end
 end
-
-# struct Tuple(*T)
-#   def [](index : Int32)
-#     index += size if index < 0
-#     {% for i in 0...T.size %}
-#       return self[{{i}}] if {{i}} == index
-#     {% end %}
-#     yield
-#   end
-# end

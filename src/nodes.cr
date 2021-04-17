@@ -2,27 +2,6 @@ class Crystal::ASTNode
   def run
     todo "ASTNode: #{self.class}"
   end
-
-  def print_debug(visited = [] of Crystal::ASTNode, indent = 0)
-    if self.in? visited
-      print "..."
-      return
-    end
-    visited << self
-
-    print {{@type}}
-    puts ':'
-    {% for ivar in @type.instance_vars.reject { |iv| %w(location end_location name_location doc observers parent_visitor).includes? iv.stringify } %}
-      print "  "*(indent+1)
-      print "@{{ivar}} = "
-      if (ivar = @{{ivar}}).is_a? Crystal::ASTNode
-        ivar.print_debug(visited,indent+1)
-      else
-        print @{{ivar}}.inspect
-      end
-      puts
-    {% end %}
-  end
 end
 
 class Crystal::Nop
@@ -115,7 +94,7 @@ class Crystal::Assign
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then icr_error "Can't assign to '_'"
     when Crystal::Path        then todo "CONST assign"
-    else                           bug "Unexpected assign target #{t.class}"
+    else                           bug! "Unexpected assign target #{t.class}"
     end
   end
 end
@@ -128,7 +107,7 @@ class Crystal::UninitializedVar
     when Crystal::ClassVar    then todo "Uninitialized cvar"
     when Crystal::Underscore  then todo "Uninitialized underscore"
     when Crystal::Path        then todo "Uninitialized CONST"
-    else                           bug "Unexpected uninitialized-assign target #{v.class}"
+    else                           bug! "Unexpected uninitialized-assign target #{v.class}"
     end
   end
 end
@@ -185,7 +164,7 @@ class Crystal::Call
 
       return ICR.run_method(self.obj.try &.run, a_def, self.args.map &.run)
     else
-      bug "Cannot find target def matching with this call: #{name}"
+      bug! "Cannot find target def matching with this call: #{name}"
     end
   rescue e : ICR::Return
     return e.return_value
@@ -291,8 +270,7 @@ end
 class Crystal::PointerOf
   def run
     if (exp = self.exp).is_a?(InstanceVar)
-      # when `pointerof(@foo)` is written, pointerof return a
-      # pointer on `self` +  offsetof @foo
+      # when it is a pointerof an ivar, take the address of `self` + offsetof @ivar
       ICR.get_var("self").pointerof(ivar: exp.name)
     else
       self.exp.run.pointerof_self
