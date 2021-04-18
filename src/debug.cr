@@ -58,7 +58,7 @@ module ICR
       end
       size.times do |i|
         print '_' if i % 2 == 0
-        print sprintf("%02x", data[i])
+        print sprintf("%02x", data.as(UInt8*).[i])
         if (i + 1) % 4 == 0
           print "("
           print (data + (i + 1 - 4)).as(Int32*).value

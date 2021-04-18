@@ -1,5 +1,4 @@
 require "gc"
-
 # GC.disable
 
 module ICR
@@ -11,6 +10,8 @@ module ICR
   # For classes, raw will be a pointer on 8 bytes (address), pointing itself on the classes size.
   #
   # The ICRType will give information of how to treat the raw binary.
+  #
+  # `@type` is always the **runtime* type of the object, and cannot be virtual or an union.
   class ICRObject
     getter type : ICRType
     getter raw : Pointer(Byte)
@@ -20,47 +21,28 @@ module ICR
         bug! "Cannot create a object with a runtime union or virtual type (#{@type.cr_type})"
       end
 
-      case @type
+      case @type.cr_type
       when Crystal::NilType
         @raw = Pointer(Byte).null
+
       when .reference_like?
         # raw -> ref -> | TYPE_ID (4)
         #               | @ivar 1
         #               | @ivar 2
         #               | ...
-        @raw = GC.malloc(8).as(Byte*)
-        ref = GC.malloc(@type.class_size).as(Byte*)
+        @raw = Pointer(Byte).malloc(8)
+        ref = Pointer(Byte).malloc(@type.class_size)
         @raw.as(UInt64*).value = ref.address
 
         # Write the type id at the first slot:
         id = ICR.get_crystal_type_id(@type.cr_type)
         ref.as(Int32*).value = id
       else
-        # raw -> | @ivar1
-        #        | @ivar2
+        # raw -> | @ivar 1
+        #        | @ivar 2
         #        | ...
-        @raw = GC.malloc(@type.size).as(Byte*)
+        @raw = Pointer(Byte).malloc(@type.size)
       end
-    end
-
-    # raw -> ref -> | TYPE_ID (4)
-    #               | @bytesize (4)
-    #               | @length (4)
-    #               | @c    (@bytesize times)
-    #               | ...
-    def initialize(*, from_string str : String)
-      @type = ICRType.string
-      @raw = GC.malloc(8).as(Byte*)
-
-      bs = str.bytesize
-      len = str.@length
-
-      ref = GC.malloc(String::HEADER_SIZE + bs + 1).as(Byte*)
-      (ref + 0).as(Int32*).value = ICR.get_crystal_type_id(ICR.program.string)
-      (ref + 4).as(Int32*).value = bs
-      (ref + 8).as(Int32*).value = len
-      (ref + String::HEADER_SIZE).copy_from(pointerof(str.@c), bs)
-      @raw.as(UInt64*).value = ref.address
     end
 
     def initialize(@type, from @raw)
@@ -70,8 +52,8 @@ module ICR
     end
 
     # Returns the pointer on the data of this object:
-    # @raw -> data (for struct)
-    # @raw -> ref -> data (for classes)
+    # raw -> data (for struct)
+    # raw -> ref -> data (for classes)
     def data
       if !@type.reference_like?
         @raw
@@ -95,7 +77,7 @@ module ICR
     def cast(from : Crystal::Type?, to : Crystal::Type?)
       bug! "Cast from #{@type.cr_type} failed" if from.nil? || to.nil?
       if @type.cr_type.pointer?
-        # pointer seems to be castable to any type
+        # Pointer cast seems never fail
         return ICRObject.new(ICRType.new(to), from: @raw)
       end
 
@@ -132,7 +114,7 @@ module ICR
     def box_into_union(dst_union : Byte*)
       id = ICR.get_crystal_type_id(@type.cr_type)
       dst_union.as(Int32*).value = id
-      (dst_union + 4).copy_from(@raw, @type.size)
+      (dst_union + 8).copy_from(@raw, @type.size)
     end
 
     # We admit that union is: | TYPE_ID
@@ -141,7 +123,7 @@ module ICR
       id = src_union.as(Int32*).value
       type = ICRType.new(ICR.get_crystal_type_from_id(id))
       obj = ICRObject.new(type)
-      obj.raw.copy_from(src_union + 4, type.size)
+      obj.raw.copy_from(src_union + 8, type.size)
       obj
     end
 
@@ -198,7 +180,7 @@ module ICR
 
     # Treat this ICRObject as Int32,UInt64,..
     # Used by primitives.
-    {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Bool Char) %}
+    {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Bool Char String) %}
       def as_{{t.downcase.id}}
         @raw.as({{t.id}}*).value
       end
@@ -233,14 +215,13 @@ module ICR
       ret || bug! "Trying to read #{t} as a number"
     end
 
-    def as_string
-      # @raw.as(String*).value
-      addr = @raw.as(UInt64*).value
-      ref = Pointer(Byte).new(addr)
-      bytesize = (ref + 4).as(Int32*).value
-      size = (ref + 8).as(Int32*).value
-      String.new((ref + String::HEADER_SIZE), bytesize, size)
-    end
+    # def as_string
+    #   addr = @raw.as(UInt64*).value
+    #   ref = Pointer(Byte).new(addr)
+    #   bytesize = (ref + 4).as(Int32*).value
+    #   size = (ref + 8).as(Int32*).value
+    #   String.new((ref + String::HEADER_SIZE).as(UInt8*), bytesize, size)
+    # end
   end
 
   # Creates the corresponding ICRObject from values:
@@ -273,8 +254,18 @@ module ICR
     obj
   end
 
+  # obj.raw -> ref -> | TYPE_ID (4)
+  #                   | @bytesize (4)
+  #                   | @length (4)
+  #                   | @c    (@bytesize times)
+  #                   | ...
   def self.string(value : String)
-    ICRObject.new(from_string: value)
+    obj = ICRObject.new(ICRType.string)
+    obj.as_string = value
+    # We must set the type id because the crystal_type_id of *true* String
+    # isn't the same as crystal_type_id of ICR String
+    obj.data.as(Int32*).value = ICR.get_crystal_type_id(ICR.program.string)
+    obj
   end
 
   def self.symbol(value : String)

@@ -85,6 +85,20 @@ describe ICR do
         Pointer(Int32).new(foo.object_id).value == foo.crystal_type_id
         CODE
     end
+
+    # spec fail! : gets SpecClass+ instead of SpecSubclass1
+    # it "preserve class on cast (unless Pointers)" do
+    #   ICR.parse(<<-'CODE').run.result.should eq %({SpecSubclass1, Int32, Pointer(UInt64)})
+    #     b = SpecSubclass1.new
+    #     x = 42
+    #     p = Pointer(Int32).new 42
+    #     {
+    #       b.as(SpecClass).class,
+    #       x.as(Int32|String).class,
+    #       p.as(UInt64*).class,
+    #     }
+    #     CODE
+    # end
   end
 
   describe :union do

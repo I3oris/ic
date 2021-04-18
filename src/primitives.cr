@@ -46,7 +46,7 @@ module ICR
 
       size = size.as_number.to_u64 * type_var.size
       p = ICRObject.new(ICRType.pointer_of(type_var.cr_type))
-      p.as_uint64 = GC.malloc(size).address
+      p.as_uint64 = Pointer(Byte).malloc(size).address
       p
     end
 

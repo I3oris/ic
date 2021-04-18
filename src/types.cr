@@ -1,5 +1,5 @@
 module ICR
-  alias Byte = UInt8
+  alias Byte = Void
 
   # ICRType is a wrapper for Crystal::Type adding some informations about the
   # binary layout, and the type size.
