@@ -144,6 +144,12 @@ class Crystal::Annotation
   end
 end
 
+class Crystal::Alias
+  def run
+    ICR.nil
+  end
+end
+
 # Calls #
 
 class Crystal::Path
