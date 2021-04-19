@@ -49,7 +49,7 @@ class ICR::Highlighter
     :__FILE__, :__DIR__, :__LINE__, :__END_LINE__,
   }
 
-  SPECIAL_WORDS = /^(new|(class_)?(getter|property|setter)(\?|!)?|loop|raise|record)$/
+  SPECIAL_WORDS = /^(new|(class_)?(getter|property|setter)(\?|!)?|loop|raise|record|spawn)$/
 
   OPERATORS = Set{
     :"+", :"-", :"*", :"/", :"//",
