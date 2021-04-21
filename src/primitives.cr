@@ -2,18 +2,19 @@ module ICR
   module Primitives
     def self.call(p : Crystal::Primitive)
       case p.name
-      when "allocate"                  then allocate(p.type)
-      when "binary"                    then binary(ICR.current_function_name, p.type, ICR.get_var("self"), ICR.get_var("other"))
-      when "pointer_malloc"            then pointer_malloc(p.type, ICR.get_var("size"))
-      when "pointer_new"               then pointer_new(p.type, ICR.get_var("address"))
-      when "pointer_get"               then pointer_get(ICR.get_var("self"))
-      when "pointer_set"               then pointer_set(ICR.get_var("self"), ICR.get_var("value"))
-      when "pointer_add"               then pointer_add(ICR.get_var("self"), ICR.get_var("offset"))
-      when "pointer_address"           then pointer_address(ICR.get_var("self"))
-      when "tuple_indexer_known_index" then tuple_indexer(ICR.get_var("self"), p.as(Crystal::TupleIndexer).index)
-      when "object_id"                 then object_id(ICR.get_var("self"))
-      when "object_crystal_type_id"    then object_crystal_type_id(ICR.get_var("self"))
-      when "class"                     then _class(ICR.get_var("self"))
+      when "allocate"                       then allocate(p.type)
+      when "binary"                         then binary(ICR.current_function_name, p.type, ICR.get_var("self"), ICR.get_var("other"))
+      when "pointer_malloc"                 then pointer_malloc(p.type, ICR.get_var("size"))
+      when "pointer_new"                    then pointer_new(p.type, ICR.get_var("address"))
+      when "pointer_get"                    then pointer_get(ICR.get_var("self"))
+      when "pointer_set"                    then pointer_set(ICR.get_var("self"), ICR.get_var("value"))
+      when "pointer_add"                    then pointer_add(ICR.get_var("self"), ICR.get_var("offset"))
+      when "pointer_address"                then pointer_address(ICR.get_var("self"))
+      when "tuple_indexer_known_index"      then tuple_indexer(ICR.get_var("self"), p.as(Crystal::TupleIndexer).index)
+      when "object_id"                      then object_id(ICR.get_var("self"))
+      when "object_crystal_type_id"         then object_crystal_type_id(ICR.get_var("self"))
+      when "class_crystal_instance_type_id" then class_crystal_instance_type_id(ICR.get_var("self"))
+      when "class"                          then _class(ICR.get_var("self"))
       else
         todo "Primitive #{p.name}"
       end
@@ -31,10 +32,10 @@ module ICR
       when "/"  then ICR.number(arg0.as_number / arg1.as_number)
       when "<"  then ICR.bool(arg0.as_number < arg1.as_number)
       when ">"  then ICR.bool(arg0.as_number > arg1.as_number)
-      when "!=" then ICR.bool(arg0.as_number != arg1.as_number)
-      when "==" then ICR.bool(arg0.as_number == arg1.as_number)
       when "<=" then ICR.bool(arg0.as_number <= arg1.as_number)
       when ">=" then ICR.bool(arg0.as_number >= arg1.as_number)
+      when "!=" then ICR.bool(arg0.as_number != arg1.as_number)
+      when "==" then ICR.bool(arg0.as_number == arg1.as_number)
       else
         todo "Primitive binary: #{name}"
       end
@@ -95,7 +96,11 @@ module ICR
     end
 
     private def self.object_crystal_type_id(obj : ICRObject)
-      ICR.number(ICR.get_crystal_type_id(obj.type.cr_type))
+      ICR.number(ICR.type_id(obj.type.cr_type))
+    end
+
+    private def self.class_crystal_instance_type_id(obj : ICRObject)
+      ICR.number(ICR.type_id(ICR.type_from_id(obj.as_int32)))
     end
 
     private def self._class(obj : ICRObject)

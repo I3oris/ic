@@ -12,10 +12,6 @@ module ICR
     # Map associating ivar name with its offset and its ICRType.
     @instance_vars = {} of String => {UInt64, ICRType}
 
-    def reference_like?
-      @cr_type.reference_like?
-    end
-
     def initialize(@cr_type : Crystal::Type)
       @instance_vars = {} of String => Tuple(UInt64, ICRType)
 
@@ -41,6 +37,14 @@ module ICR
       end
     end
 
+    def reference_like?
+      @cr_type.reference_like?
+    end
+
+    def instantiable?
+      !@cr_type.is_a? Crystal::UnionType && !@cr_type.is_a? Crystal::VirtualType
+    end
+
     def offset_and_type_of(name)
       @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
     end
@@ -50,75 +54,83 @@ module ICR
       @instance_vars[name] = {@instance_vars[name][0], type}
     end
 
+    def copy_size
+      @cr_type.nil_type? ? 8u64 : @size
+    end
+
     # Considers *src* as this *type*, and returns the ICRObject read.
-    # If this type is an Union or Virtual, returns the unboxed instance value.
+    # Always return the instance type, never a Union or VirtualType.
+    # If *type* is Nil, return ICR.nil without read the data.
+    #
+    # Expect that the data is:
+    #
+    # src -> ref -> | TYPE_ID (4)
+    #               | data...
+    #
+    # for reading a reference-like type (Classes, Union of Classes,...).
+    #
+    # src -> null (for nil reference-like).
+    #
+    # src -> |0| TYPE_ID (4)
+    #        |8| data|ref...
+    #
+    # for reading an union type (unbox).
     def read(from src : Byte*)
       case @cr_type
+      when .nil_type?
+        return ICR.nil
       when .reference_like?
-        # Read a reference-like type, (Classes, Union of Classes,...)
-        # src -> ref -> | TYPE_ID
-        #               | data...
+        p = src.as(Int32**)
+        return ICR.nil if p.value.null?
 
-        # src -> null (for nil)
-
-        # if is virtual or a union type, we must read TYPE_ID and create
-        # the ICRObject from it, in order to get the real instantiated type.
-        case @cr_type
-        when Crystal::VirtualType, Crystal::UnionType
-          addr = src.as(UInt64*).value
-          if addr == 0u64
-            return ICR.nil
-          else
-            ref = Pointer(Byte).new(addr)
-            id = ref.as(Int32*).value
-            real_type = ICRType.new(ICR.get_crystal_type_from_id(id))
-          end
-        else
-          real_type = self
-        end
-
-        obj = ICRObject.new(real_type)
-        dst = obj.raw
-        src.copy_to(dst, real_type.size)
+        id = p.value.value
       when Crystal::UnionType
-        # Read an union type: (must unbox)
-        # src -> | TYPE_ID
-        #        | data|ref...
-        obj = ICRObject.unbox_from_union(src)
-      else
-        # Read a value type:
-        # src -> data
-        obj = ICRObject.new(self) # devirtualize?
-        src.copy_to(obj.raw, @size)
+        id = src.as(Int32*).value
+        src += 8
       end
+
+      # Gets the instance type if a TYPE_ID have been read (UnionType and reference_like):
+      instance_type = id ? ICRType.new(ICR.type_from_id(id)) : self # devirtualize?
+
+      obj = ICRObject.new(instance_type)
+      obj.raw.copy_from(src, instance_type.copy_size)
       obj
     end
 
     # Considers *dst* as this *type*, and write *value* to *dst*.
-    # If this type is an Union or Virtual, box the *value* (adds the TYPE_ID before the value)
+    # If *type* is Nil, return ICR.nil without writing the data.
+    #
+    #
+    # writes with the format:
+    #
+    # dst -> ref -> | TYPE_ID (4)
+    #               | data...
+    #
+    # for reference-like type.
+    #
+    # dst -> null (for nil reference-like).
+    #
+    #
+    #
+    # src -> |0| TYPE_ID (4)
+    #        |8| data|ref...
+    #
+    # for union type (box).
     def write(value : ICRObject, to dst : Byte*)
       case @cr_type
-      when .reference_like? # including VirtualType
-        # write:
-        # dst -> ref -> | TYPE_ID
-        #               | data...
-        #
-        # dst -> null (for nil)
-        if value.type.size == 0
-          dst.as(UInt64*).value = 0u64
-        else
-          value.raw.copy_to(dst, value.type.size)
-        end
+      when .nil_type?
+        return value
+      when .reference_like?
+        # including VirtualType,
+        # reference_like UnionType,
+        # and instance type Nil
       when Crystal::UnionType
-        # write:
-        # dst -> | TYPE_ID
-        #        | data|ref
-        value.box_into_union(dst)
-      else
-        # write:
-        # dst -> data
-        value.raw.copy_to(dst, @size)
+        # box: write the TYPE_ID first:
+        dst.as(Int32*).value = ICR.type_id(value.type.cr_type)
+        dst += 8
       end
+
+      value.raw.copy_to(dst, value.type.copy_size)
       value
     end
 

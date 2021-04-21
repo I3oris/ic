@@ -78,11 +78,11 @@ module ICR
     @@callstack.last?.try &.function_name || bug! "Trying to get the current function name, without having call a function"
   end
 
-  def self.get_symbol_value(name : String)
+  def self.symbol_value(name : String)
     ICR.program.symbols.index(name) || bug! "Cannot found the symbol :#{name}"
   end
 
-  def self.get_symbol_from_value(value : Int32)
+  def self.symbol_from_value(value : Int32)
     ICR.program.symbols.each_with_index do |s, i|
       return s if i == value
     end
@@ -92,7 +92,7 @@ module ICR
   # This Set permit to associate an unique id for each type, works like the `Program::symbol` set.
   @@crystal_types = Set(Crystal::Type).new
 
-  def self.get_crystal_type_id(type : Crystal::Type, instance = true)
+  def self.type_id(type : Crystal::Type, instance = true)
     if instance && type.is_a? Crystal::UnionType || type.is_a? Crystal::VirtualType
       bug! "Cannot get crystal_id_type on a union or virtual type"
     end
@@ -105,7 +105,7 @@ module ICR
     end
   end
 
-  def self.get_crystal_type_from_id(id : Int32)
+  def self.type_from_id(id : Int32)
     @@crystal_types.each_with_index do |t, i|
       return t if i == id
     end

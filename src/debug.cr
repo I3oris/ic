@@ -41,6 +41,11 @@ module ICR
       print "\n=== ICRObject: 0x#{@raw.address.to_s(16)}"
       if @type.reference_like?
         addr = @raw.as(UInt64*).value
+        if addr == 0
+          puts
+          @type.print_debug
+          return
+        end
         ref = Pointer(Byte).new(addr)
         print " -> 0x#{ref.address.to_s(16)}"
       end
