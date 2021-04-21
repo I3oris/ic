@@ -14,7 +14,7 @@ endif
 
 .PHONY: spec
 spec:
-	@$(ENV) crystal spec -p
+	@$(ENV) crystal spec -p --order random
 
 .PHONY: clean
 clean:

@@ -1,13 +1,37 @@
 require "./spec_helper"
 
 describe ICR do
-  describe :primitives do
-    it "run 1+1" do
+  describe :scenarios do
+    it "runs scenario 1" do
       ICR.parse("1+1").run.result.should eq "2"
+    end
+
+    it "runs scenario 2" do
+      ICR.parse(<<-'CODE').run.result.should eq %({42, 31})
+        class Point
+          property x, y
+          def initialize(@x = 42, @y = 31)
+          end
+        end
+
+        p = Point.new
+
+        class Point
+          def xy
+            {@x, @y}
+          end
+        end
+
+        p.xy
+        CODE
     end
   end
 
   describe :string do
+    it "creates empty string" do
+      ICR.parse(%("")).run.result.should eq %("")
+    end
+
     it "adds string" do
       ICR.parse(%("Hello "+"World"+"!")).run.result.should eq %("Hello World!")
     end
@@ -18,57 +42,71 @@ describe ICR do
       ICR.parse(%([0,42,5][1])).run.result.should eq %(42)
     end
 
-    it "support many types'" do
+    it "supports many types'" do
       ICR.parse(%([0,:foo,"bar"][1])).run.result.should eq %(:foo)
     end
   end
 
-  describe :classes do
-    it "declare a class" do
-      ICR.parse(<<-'CODE').run.result.should eq %(nil)
-        class SpecClass
-          property x
-          property y
-          property name
+  describe :primitives do
+    it "allocates" do
+      ICR.parse(%(SpecClass.new)).run.result.should match /#<SpecClass:0x.*>/
+      ICR.parse(%(SpecStruct.new)).run.result.should match /#<SpecStruct>/
+    end
 
-          def initialize(@x = 0, @y = 0, @name = "unnamed")
-          end
-        end
+    it "does binary op" do
+      ICR.parse(%(1+1)).run.result.should eq %(2)
+      ICR.parse(%(0.14+3)).run.result.should eq %(3.14)
+      ICR.parse(%(1-1)).run.result.should eq %(0)
+      ICR.parse(%(0.14-3)).run.result.should eq %(-2.86)
+      ICR.parse(%(3*4)).run.result.should eq %(12)
+      ICR.parse(%(3.14*4)).run.result.should eq %(12.56)
+      # ICR.parse(%(3/4)).run.result.should eq %(0.75)
+      ICR.parse(%(3.14/4)).run.result.should eq %(0.785)
+      ICR.parse(%(1 < 2)).run.result.should eq %(true)
+      ICR.parse(%(1 > 2)).run.result.should eq %(false)
+      ICR.parse(%(1 != 2)).run.result.should eq %(true)
+      ICR.parse(%(1 == 2)).run.result.should eq %(false)
+      ICR.parse(%(1 <= 2)).run.result.should eq %(true)
+      ICR.parse(%(1 >= 2)).run.result.should eq %(false)
+      ICR.parse(%('a' < 'b')).run.result.should eq %(true)
+      ICR.parse(%('a' > 'b')).run.result.should eq %(false)
+      ICR.parse(%('a' != 'b')).run.result.should eq %(true)
+      ICR.parse(%('a' == 'b')).run.result.should eq %(false)
+      ICR.parse(%('a' <= 'b')).run.result.should eq %(true)
+      ICR.parse(%('a' >= 'b')).run.result.should eq %(false)
+    end
+
+    it "does pointer malloc" do
+      ICR.parse(<<-'CODE').run.result.should eq %({0, 0})
+        p = Pointer(Int32).malloc 2
+        { p.value, (p+1).value }
         CODE
     end
 
-    it "declare a struct" do
-      ICR.parse(<<-'CODE').run.result.should eq %(nil)
-        struct SpecStruct
-          property x
-          property y
-          property name
+    it "does pointer new && pointer address" do
+      ICR.parse(%(Pointer(Int32).new(0x42).address)).run.result.should eq %(0x42)
+    end
 
-          def initialize(@x = 0, @y = 0, @name = "unnamed")
-          end
-        end
+    it "sets && gets pointers" do
+      ICR.parse(<<-'CODE').run.result.should eq %({42, 31})
+        p = Pointer(Int32).malloc 2
+        (p+1).value = 31
+        p.value = 42
+        { p.value, (p+1).value }
         CODE
     end
 
-    it "inherit a class" do
-      ICR.parse(<<-'CODE').run.result.should eq %(nil)
-        class SpecSubclass1 < SpecClass
-          @bar = "foo"
-          property bar
-        end
-
-        class SpecSubclass2 < SpecClass
-          @baz = :baz
-          property baz
-        end
+    it "adds pointers" do
+      ICR.parse(<<-'CODE').run.result.should eq %(0x9)
+        p = Pointer(Int32).new(0x1)
+        (p+2).address
         CODE
     end
 
-    it "run instance vars" do
-      ICR.parse(<<-'CODE').run.result.should eq %({42, 31, "hello"})
-        foo = SpecClass.new 42, 31
-        foo.name = "hello"
-        { foo.x, foo.y, foo.name }
+    it "index tuple" do
+      ICR.parse(<<-'CODE').run.result.should eq  %({0, 'x', :foo, "bar"})
+        t = {0,'x',:foo,"bar"}
+        {t[0],t[1],t[2],t[3]}
         CODE
     end
 
@@ -86,10 +124,45 @@ describe ICR do
         CODE
     end
 
-    # spec fail! : gets SpecClass+ instead of SpecSubclass1
+    it "gives the good class_crystal_instance_type_id" do
+      ICR.parse(<<-'CODE').run.result.should eq %(true)
+        x = 42 || "foo"
+        (x.class.crystal_instance_type_id == Int32.crystal_instance_type_id == x.crystal_type_id)
+        CODE
+    end
+
+    it "gives class" do
+      ICR.parse(<<-'CODE').run.result.should eq %({Int32, Char, Symbol, String, SpecClass, SpecSubClass1, SpecStruct, Int32})
+        x = 42 || "foo"
+        {
+          0.class,
+          'x'.class,
+          :foo.class,
+          "bar".class,
+          SpecClass.new.class,
+          SpecSubClass1.new.class,
+          SpecStruct.new.class,
+          x.class
+        }
+        CODE
+    end
+  end
+
+  describe :classes do
+
+    it "supports instance vars" do
+      ICR.parse(<<-'CODE').run.result.should eq %({42, 31, "hello"})
+        foo = SpecClass.new 42, 31
+        foo.name = "hello"
+        { foo.x, foo.y, foo.name }
+        CODE
+    end
+
+
+    # spec fail! : gets SpecClass+ instead of SpecSubClass1
     # it "preserve class on cast (unless Pointers)" do
-    #   ICR.parse(<<-'CODE').run.result.should eq %({SpecSubclass1, Int32, Pointer(UInt64)})
-    #     b = SpecSubclass1.new
+    #   ICR.parse(<<-'CODE').run.result.should eq %({SpecSubClass1, Int32, Pointer(UInt64)})
+    #     b = SpecSubClass1.new
     #     x = 42
     #     p = Pointer(Int32).new 42
     #     {
@@ -105,26 +178,10 @@ describe ICR do
     # spec fail! : gets SpecClass+ instead of SpecClass
     # it "gives a good union virtual type" do
     #   ICR.parse(<<-'CODE').run.result.should eq %({SpecClass, true, false})
-    #     foobar = SpecSubclass1|SpecSubclass2
+    #     foobar = SpecSubClass1|SpecSubClass2
     #     {foobar, foobar.is_a?(SpecClass.class), foobar == SpecClass}
     #     CODE
     # end
-
-    it "declare a class with union ivars" do
-      ICR.parse(<<-'CODE').run.result.should eq %(nil)
-        class SpecUnionIvars
-          @union_values : Int32|SpecStruct|Nil = nil
-          @union_reference_like : SpecClass|String|Nil = nil
-          @union_mixed : SpecStruct|SpecClass|Nil = nil
-
-          property union_values, union_reference_like, union_mixed
-
-          def all
-            {@union_values, @union_reference_like, @union_mixed}
-          end
-        end
-        CODE
-    end
 
     it "support union ivars (1)" do
       ICR.parse(<<-'CODE').run.result.should match /\{42, #<SpecClass:0x.*>, #<SpecStruct>\}/
