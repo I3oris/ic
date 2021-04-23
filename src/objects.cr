@@ -12,6 +12,7 @@ module ICR
   class ICRObject
     getter type : ICRType
     getter raw : Pointer(Byte)
+    getter? nop = false
 
     def initialize(@type)
       if !@type.instantiable?
@@ -44,6 +45,15 @@ module ICR
       if !@type.instantiable?
         bug! "Cannot create a object with a runtime union or virtual type (#{@type.cr_type})"
       end
+    end
+
+    def initialize(@type, uninitialized? : Bool)
+      @raw = Pointer(Byte).malloc(@type.size)
+    end
+
+    def initialize(@nop : Bool)
+      @type = ICRType.nil
+      @raw = Pointer(Byte).null
     end
 
     # Returns the pointer on the data of this object:
@@ -185,6 +195,8 @@ module ICR
           when :f32 then self.as_float32
           when :f64 then self.as_float64
           end
+        when Crystal::BoolType
+          self.as_bool ? 1 : 0
         when Crystal::SymbolType, Crystal::CharType
           self.as_int32
         end
@@ -193,6 +205,10 @@ module ICR
   end
 
   # Creates the corresponding ICRObject from values:
+
+  def self.nop
+    ICRObject.new(nop: true)
+  end
 
   def self.nil
     ICRObject.new(ICRType.nil)
@@ -260,7 +276,7 @@ module ICR
   end
 
   def self.uninitialized(type : Crystal::Type)
-    ICRObject.new(ICRType.new(type))
+    ICRObject.new(ICRType.new(type), uninitialized?: true)
   end
 end
 

@@ -38,6 +38,7 @@ module ICR
 
   class ICRObject
     def print_debug
+      return if nop?
       print "\n=== ICRObject: 0x#{@raw.address.to_s(16)}"
       if @type.reference_like?
         addr = @raw.as(UInt64*).value

@@ -68,11 +68,11 @@ end
 
 # Vars #
 
-class Crystal::Underscore
-  def run
-    ICR.result
-  end
-end
+# class Crystal::Underscore
+#   def run
+#     ICR.result
+#   end
+# end
 
 class Crystal::Var
   def run
@@ -93,7 +93,7 @@ class Crystal::Assign
     when Crystal::InstanceVar then ICR.assign_ivar(t.name, self.value.run)
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then icr_error "Can't assign to '_'"
-    when Crystal::Path        then todo "CONST assign"
+    when Crystal::Path        then ICR.assign_var(t.target_const.not_nil!.name, self.value.run)
     else                           bug! "Unexpected assign target #{t.class}"
     end
   end
@@ -102,7 +102,7 @@ end
 class Crystal::UninitializedVar
   def run
     case v = self.var
-    when Crystal::Var         then ICR.assign_var(v.name, ICR.uninitialized(self.type))
+    when Crystal::Var         then ICR.assign_var(v.name, ICR.uninitialized(self.type), uninitialized?: true)
     when Crystal::InstanceVar then ICR.assign_ivar(v.name, ICR.uninitialized(self.type))
     when Crystal::ClassVar    then todo "Uninitialized cvar"
     when Crystal::Underscore  then todo "Uninitialized underscore"
@@ -116,37 +116,37 @@ end
 
 class Crystal::Def
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
 class Crystal::ClassDef
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
 class Crystal::ModuleDef
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
 class Crystal::Macro
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
 class Crystal::Annotation
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
 class Crystal::Alias
   def run
-    ICR.nil
+    ICR.nop
   end
 end
 
@@ -154,7 +154,11 @@ end
 
 class Crystal::Path
   def run
-    ICR.class(self.type)
+    if const = self.target_const
+      ICR.get_var(const.name)
+    else
+      ICR.class(self.type)
+    end
   end
 end
 
@@ -330,5 +334,6 @@ end
 class Crystal::FileNode
   def run
     self.node.run
+    ICR.nop
   end
 end

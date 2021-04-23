@@ -169,7 +169,7 @@ module ICR
       @edited_line = ""
     end
 
-    private def on_newline(display_result)
+    private def on_newline(&)
       if @edited_line.empty?
         @line_number += 1
         puts
@@ -188,7 +188,7 @@ module ICR
         @edited_line += "\n" + "  "*@indent
       when :line
         validate_line formate: true
-        display_result.call
+        ICR.display_result
       end
       puts
       print prompt
@@ -196,13 +196,13 @@ module ICR
       highlight_line if status == :multiline
     end
 
-    def run(display_result, &block : String -> Symbol)
+    def run(&block : String -> Symbol)
       Highlighter.invitation = ->prompt
       print prompt
 
       CharReader.read_chars(STDIN) do |char|
         case char
-        when '\r'  then on_newline(display_result, &block)
+        when '\r'  then on_newline(&block)
         when :up   then history_up
         when :down then history_down
         when :left

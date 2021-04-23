@@ -41,7 +41,7 @@ class ICR::Highlighter
     :next, :nil?, :of, :out, :pointerof, :private, :protected, :require,
     :rescue, :responds_to?, :return, :select, :sizeof, :struct, :super,
     :then, :type, :typeof, :undef, :union, :uninitialized, :unless, :until,
-    :verbatim, :when, :while, :with, :yield,
+    :verbatim, :when, :while, :with, :yield, :annotation,
   }
 
   SPECIAL_VALUES = Set{

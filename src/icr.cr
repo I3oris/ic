@@ -24,25 +24,6 @@ unless ICR.running_spec?
   end
 end
 
-class Crystal::MainVisitor
-  # Don't raise when undersore:
-  def visit(node : Underscore)
-    if @in_type_args == 0
-      # node.raise "can't read from _"
-      node
-    else
-      node.raise "can't use underscore as generic type argument"
-    end
-  end
-end
-
-class Crystal::CleanupTransformer
-  # Don't cleanup underscore:
-  def untyped_expression(node, msg = nil)
-    node
-  end
-end
-
 module ICR
   VERSION = "0.1.0"
 
@@ -50,7 +31,7 @@ module ICR
   class_getter? busy = false
 
   def self.parse(text)
-    ast_node = Crystal::Parser.parse text
+    ast_node = Crystal::Parser.parse text, def_vars: ICR.def_vars
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     ast_node
@@ -62,27 +43,41 @@ module ICR
     e.display
   end
 
-  class_getter result : ICRObject = ICR.nil
+  class_getter result : ICRObject = ICR.nop
+  class_getter valid_result : ICRObject = ICR.nil
 
   def self.display_result
-    print "\n => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
+    if @@result.nop?
+      print "\n => #{"✔".colorize.green}"
+    else
+      print "\n => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
+    end
   end
 
   def self.run
-    code = ""
+    header = "__ = nil\n"
     last_ast_node = nil
 
-    Shell.new.run(->self.display_result) do |line|
-      if line.empty?
-        code += '\n'
-        next :line
-      end
+    Shell.new.run do |expr|
+      next :line if expr.empty?
 
       ICR.clear_callstack
-      ast_node = ICR.parse(code + line + '\n')
-      run_last_expression(expressionize(last_ast_node), expressionize(ast_node))
-      last_ast_node = ast_node
-      code += line + '\n'
+
+      @@busy = true
+      @@result = ICR.parse(header + expr).run
+      @@busy = false
+
+      @@valid_result = @@result unless @@result.nop?
+      ICR.assign_var("__", @@valid_result)
+      ICR.program.@vars["__"] = Crystal::MetaVar.new "__", @@valid_result.type.cr_type
+
+      # For each vars, add `var = uninitialized Type`,
+      # this permit to keep vars on semantic for subsequent executions
+      # (I haven't found a better way wet!)
+      # The vars isn't really set, so declared vars keeps its values.
+      header = ICR.program.@vars.map do |name, value|
+        "#{name} = uninitialized #{value.type}\n"
+      end.join
 
       :line
     rescue Cancel
@@ -94,34 +89,20 @@ module ICR
         :multiline
       else
         e.display
+
+        # We must reset vars on program to avoid error in repetition
+        # i.e:
+        # > x=42 # Ok
+        # > x="42" # "Error must be Int32, not Int32|String", ok
+        #
+        # > 0 # Still "Error must be Int32, not Int32|String", because vars are not reseted
+        ICR.program.@vars.clear
         :error
       end
     rescue e
       e.display
+      ICR.program.@vars.clear
       :error
-    end
-  end
-
-  private def self.expressionize(node)
-    if node.is_a? Crystal::Expressions
-      node
-    elsif node.nil?
-      Crystal::Expressions.new
-    else
-      e = Crystal::Expressions.new
-      e.expressions << node
-      e
-    end
-  end
-
-  # Compare the last ASTNode with the current ASTNode, and run only the last instruction
-  private def self.run_last_expression(last_ast_node, ast_node)
-    l_size = last_ast_node.expressions.size
-    size = ast_node.expressions.size
-    if l_size != size
-      @@busy = true
-      @@result = ast_node.expressions[l_size..].map(&.run)[-1]
-      @@busy = false
     end
   end
 
@@ -133,3 +114,21 @@ end
 {% if flag? :_debug %}
   require "./debug.cr"
 {% end %}
+
+class Crystal::MainVisitor
+  def visit(node : Underscore)
+    if @in_type_args == 0
+      icr_error "'_' is reserved by crystal, use '__' instead"
+      node
+    else
+      node.raise "can't use underscore as generic type argument"
+    end
+  end
+end
+
+# class Crystal::CleanupTransformer
+#   # Don't cleanup underscore:
+#   def untyped_expression(node, msg = nil)
+#     node
+#   end
+# end

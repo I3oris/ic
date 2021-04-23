@@ -50,10 +50,11 @@ module ICR
     end
   end
 
-  def self.assign_var(name, value : ICRObject) : ICRObject
+  def self.assign_var(name, value : ICRObject, uninitialized? = false) : ICRObject
     if c = @@callstack.last?
       c.args[name] = value
     else
+      return value if uninitialized? && @@top_level_vars[name]?
       @@top_level_vars[name] = value
     end
   end
@@ -110,5 +111,13 @@ module ICR
       return t if i == id
     end
     bug! "Cannot found the type corresponding to the id #{id}"
+  end
+
+  def self.def_vars
+    vars = [Set{"_"}]
+    @@top_level_vars.each do |name, _|
+      vars.last.add(name)
+    end
+    vars
   end
 end

@@ -104,7 +104,7 @@ describe ICR do
     end
 
     it "index tuple" do
-      ICR.parse(<<-'CODE').run.result.should eq  %({0, 'x', :foo, "bar"})
+      ICR.parse(<<-'CODE').run.result.should eq %({0, 'x', :foo, "bar"})
         t = {0,'x',:foo,"bar"}
         {t[0],t[1],t[2],t[3]}
         CODE
@@ -149,7 +149,6 @@ describe ICR do
   end
 
   describe :classes do
-
     it "supports instance vars" do
       ICR.parse(<<-'CODE').run.result.should eq %({42, 31, "hello"})
         foo = SpecClass.new 42, 31
@@ -157,7 +156,6 @@ describe ICR do
         { foo.x, foo.y, foo.name }
         CODE
     end
-
 
     # spec fail! : gets SpecClass+ instead of SpecSubClass1
     # it "preserve class on cast (unless Pointers)" do
@@ -172,6 +170,13 @@ describe ICR do
     #     }
     #     CODE
     # end
+  end
+
+  describe :const do
+    it "declare a CONST" do
+      ICR.parse(%(FOO = "foo")).run.result.should eq %("foo")
+      ICR.parse(%(FOO)).run.result.should eq %("foo")
+    end
   end
 
   describe :union do
