@@ -1,16 +1,16 @@
-module ICR
+module IC
   # Context when a function is call, contain the slots for instance of function vars (args)
   class FunctionCallContext
     getter receiver, args, function_name
 
-    def initialize(@receiver : ICRObject?, @args : Hash(String, ICRObject), @function_name : String)
+    def initialize(@receiver : ICObject?, @args : Hash(String, ICObject), @function_name : String)
     end
   end
 
   @@callstack = [] of FunctionCallContext
-  @@top_level_vars = {} of String => ICRObject
+  @@top_level_vars = {} of String => ICObject
 
-  def self.with_context(*args, &) : ICRObject
+  def self.with_context(*args, &) : ICObject
     @@callstack << FunctionCallContext.new(*args)
     ret = yield
     @@callstack.pop
@@ -21,11 +21,11 @@ module ICR
     @@callstack.clear
   end
 
-  def self.run_method(receiver, a_def, args) : ICRObject
+  def self.run_method(receiver, a_def, args) : ICObject
     if a_def.args.size != args.size
       bug! "args doesn't matches with this def"
     end
-    hash = {} of String => ICRObject
+    hash = {} of String => ICObject
     a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
 
     receiver ||= @@callstack.last?.try &.receiver # if receiver if nil, take the receiver of the last call
@@ -37,7 +37,7 @@ module ICR
     a_def.body.run
   end
 
-  def self.get_var(name) : ICRObject
+  def self.get_var(name) : ICObject
     if c = @@callstack.last?
       case name
       when "self"
@@ -50,7 +50,7 @@ module ICR
     end
   end
 
-  def self.assign_var(name, value : ICRObject, uninitialized? = false) : ICRObject
+  def self.assign_var(name, value : ICObject, uninitialized? = false) : ICObject
     if c = @@callstack.last?
       c.args[name] = value
     else
@@ -59,7 +59,7 @@ module ICR
     end
   end
 
-  def self.get_ivar(name) : ICRObject
+  def self.get_ivar(name) : ICObject
     if c = @@callstack.last?
       c.receiver.try &.[name] || bug! "Cannot found receiver for var '#{name}'"
     else
@@ -67,7 +67,7 @@ module ICR
     end
   end
 
-  def self.assign_ivar(name, value : ICRObject) : ICRObject
+  def self.assign_ivar(name, value : ICObject) : ICObject
     if c = @@callstack.last?
       c.receiver.try(&.[name] = value) || bug! "Cannot found receiver for ivar '#{name}'"
     else
@@ -80,11 +80,11 @@ module ICR
   end
 
   def self.symbol_value(name : String)
-    ICR.program.symbols.index(name) || bug! "Cannot found the symbol :#{name}"
+    IC.program.symbols.index(name) || bug! "Cannot found the symbol :#{name}"
   end
 
   def self.symbol_from_value(value : Int32)
-    ICR.program.symbols.each_with_index do |s, i|
+    IC.program.symbols.each_with_index do |s, i|
       return s if i == value
     end
     bug! "Cannot found the symbol corresponding to the value #{value}"

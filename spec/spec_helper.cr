@@ -1,13 +1,13 @@
 require "spec"
-require "../src/icr"
+require "../src/ic"
 
-module ICR
+module IC
   def self.running_spec?
     true
   end
 end
 
-ICR.parse(<<-'CODE').run
+IC.parse(<<-'CODE').run
   class SpecClass
     property x
     property y

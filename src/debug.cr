@@ -1,4 +1,4 @@
-module ICR
+module IC
   # ## Override some methods to display useful debug infos : ###
 
   def self.display_result
@@ -36,10 +36,10 @@ module ICR
     end
   end
 
-  class ICRObject
+  class ICObject
     def print_debug
       return if nop?
-      print "\n=== ICRObject: 0x#{@raw.address.to_s(16)}"
+      print "\n=== ICObject: 0x#{@raw.address.to_s(16)}"
       if @type.reference_like?
         addr = @raw.as(UInt64*).value
         if addr == 0
@@ -76,8 +76,8 @@ module ICR
     end
   end
 
-  class ICRType
-    def print_debug(visited = [] of ICRType, indent = 0)
+  class ICType
+    def print_debug(visited = [] of ICType, indent = 0)
       if self.in? visited
         print "..."
         return

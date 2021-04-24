@@ -1,24 +1,24 @@
-module ICR
+module IC
   alias Byte = Void
 
-  # ICRType is a wrapper for Crystal::Type adding some informations about the
+  # ICType is a wrapper for Crystal::Type adding some informations about the
   # binary layout, and the type size.
-  class ICRType
+  class ICType
     getter cr_type : Crystal::Type
-    getter type_vars = {} of String => ICRType
+    getter type_vars = {} of String => ICType
     getter size = 0u64
     getter class_size = 0u64
 
-    # Map associating ivar name with its offset and its ICRType.
-    @instance_vars = {} of String => {UInt64, ICRType}
+    # Map associating ivar name with its offset and its ICType.
+    @instance_vars = {} of String => {UInt64, ICType}
 
     def initialize(@cr_type : Crystal::Type)
-      @instance_vars = {} of String => Tuple(UInt64, ICRType)
+      @instance_vars = {} of String => Tuple(UInt64, ICType)
 
-      @size, @class_size = ICRType.size_of(@cr_type)
+      @size, @class_size = ICType.size_of(@cr_type)
 
-      if (cr_type = @cr_type).responds_to? :icr_type_vars
-        @type_vars = cr_type.icr_type_vars
+      if (cr_type = @cr_type).responds_to? :ic_type_vars
+        @type_vars = cr_type.ic_type_vars
       end
 
       # Check instances vars of this type, and store the offset and the type for each ivar
@@ -27,7 +27,7 @@ module ICR
       if @cr_type.allows_instance_vars?
         offset = 0u64
         @cr_type.each_ivar_types do |name, type|
-          t = ICRType.new(type)
+          t = ICType.new(type)
 
           @instance_vars[name] = {offset, t}
           offset += t.size
@@ -46,11 +46,11 @@ module ICR
     end
 
     def offset_and_type_of(name)
-      @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+      @instance_vars[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
     end
 
     # To use if recursive type are defined
-    def set_type_of(name, type : ICRType)
+    def set_type_of(name, type : ICType)
       @instance_vars[name] = {@instance_vars[name][0], type}
     end
 
@@ -58,9 +58,9 @@ module ICR
       @cr_type.nil_type? ? 8u64 : @size
     end
 
-    # Considers *src* as this *type*, and returns the ICRObject read.
+    # Considers *src* as this *type*, and returns the ICObject read.
     # Always return the instance type, never a Union or VirtualType.
-    # If *type* is Nil, return ICR.nil without read the data.
+    # If *type* is Nil, return IC.nil without read the data.
     #
     # Expect that the data is:
     #
@@ -78,10 +78,10 @@ module ICR
     def read(from src : Byte*)
       case @cr_type
       when .nil_type?
-        return ICR.nil
+        return IC.nil
       when .reference_like?
         p = src.as(Int32**)
-        return ICR.nil if p.value.null?
+        return IC.nil if p.value.null?
 
         id = p.value.value
       when Crystal::UnionType
@@ -90,15 +90,15 @@ module ICR
       end
 
       # Gets the instance type if a TYPE_ID have been read (UnionType and reference_like):
-      instance_type = id ? ICRType.new(ICR.type_from_id(id)) : self # devirtualize?
+      instance_type = id ? ICType.new(IC.type_from_id(id)) : self # devirtualize?
 
-      obj = ICRObject.new(instance_type)
+      obj = ICObject.new(instance_type)
       obj.raw.copy_from(src, instance_type.copy_size)
       obj
     end
 
     # Considers *dst* as this *type*, and write *value* to *dst*.
-    # If *type* is Nil, return ICR.nil without writing the data.
+    # If *type* is Nil, return IC.nil without writing the data.
     #
     #
     # writes with the format:
@@ -116,7 +116,7 @@ module ICR
     #        |8| data|ref...
     #
     # for union type (box).
-    def write(value : ICRObject, to dst : Byte*)
+    def write(value : ICObject, to dst : Byte*)
       case @cr_type
       when .nil_type?
         return value
@@ -126,7 +126,7 @@ module ICR
         # and instance type Nil
       when Crystal::UnionType
         # box: write the TYPE_ID first:
-        dst.as(Int32*).value = ICR.type_id(value.type.cr_type)
+        dst.as(Int32*).value = IC.type_id(value.type.cr_type)
         dst += 8
       end
 
@@ -136,14 +136,14 @@ module ICR
 
     # Considers *src* as this *type*, and return the value of the ivar *name*
     def read_ivar(name, from src : Byte*)
-      index, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+      index, type = @instance_vars[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
 
       type.read from: (src + index)
     end
 
     # Considers *dst* as this *type*, and set *value* to the ivar *name*
-    def write_ivar(name, value : ICRObject, to dst : Byte*)
-      index, type = @instance_vars[name]? || icr_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
+    def write_ivar(name, value : ICObject, to dst : Byte*)
+      index, type = @instance_vars[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
 
       type.write value, to: (dst + index)
     end
@@ -162,7 +162,7 @@ module ICR
       return 0u64, 0u64 if cr_type.nil_type?
       return 1u64, 0u64 if cr_type.bool_type?
 
-      llvm = ICR.program.llvm_typer
+      llvm = IC.program.llvm_typer
       size = if llvm_struct_type?(cr_type)
                llvm.size_of(llvm.llvm_struct_type(cr_type))
              else
@@ -177,15 +177,15 @@ module ICR
         !cr_type.is_a?(Crystal::PointerInstanceType) && !cr_type.is_a?(Crystal::ProcInstanceType)
     end
 
-    # Creates the corresponding ICRTypes:
+    # Creates the corresponding ICTypes:
 
     def self.pointer_of(type_var : Crystal::Type)
-      ICRType.new(ICR.program.pointer_of(type_var))
+      ICType.new(IC.program.pointer_of(type_var))
     end
 
     {% for t in %w(Bool Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Nil Char String) %}
       def self.{{t.downcase.id}}
-        ICRType.new(ICR.program.{{t.downcase.id}})
+        ICType.new(IC.program.{{t.downcase.id}})
       end
     {% end %}
   end
@@ -212,13 +212,13 @@ class Crystal::Type
     self.to_s.starts_with? "Array"
   end
 
-  # Yields each ivar with its type: {name, ICRType}
+  # Yields each ivar with its type: {name, ICType}
   def each_ivar_types(&)
     todo "ivars on #{self} (#{self.class})" unless self.is_a? Crystal::InstanceVarContainer
 
     # classes start with a TYPE_ID : Int32
     if self.reference_like?
-      yield "TYPE_ID", ICR.program.int32
+      yield "TYPE_ID", IC.program.int32
     end
 
     self.all_instance_vars.each do |name, ivar|
@@ -228,11 +228,11 @@ class Crystal::Type
 end
 
 class Crystal::GenericInstanceType
-  # Give the type_vars as String => ICRType instead of String => ASTNode
-  def icr_type_vars
-    type_vars = {} of String => ICR::ICRType
+  # Give the type_vars as String => ICType instead of String => ASTNode
+  def ic_type_vars
+    type_vars = {} of String => IC::ICType
     @type_vars.each do |name, ast|
-      type_vars[name] = ICR::ICRType.new ast.as(Crystal::Var).type
+      type_vars[name] = IC::ICType.new ast.as(Crystal::Var).type
     end
     type_vars
   rescue e
@@ -243,13 +243,13 @@ end
 class Crystal::UnionType
   # Add a virtual ivar "TYPE_ID", on the first slot of an union
   def each_ivar_types(&)
-    yield "TYPE_ID", ICR.program.int32
+    yield "TYPE_ID", IC.program.int32
   end
 end
 
 class Crystal::TupleInstanceType
-  def icr_type_vars
-    {} of String => ICR::ICRType
+  def ic_type_vars
+    {} of String => IC::ICType
   end
 
   # Add virtual ivars ("0","1","2",..) for each field
@@ -261,8 +261,8 @@ class Crystal::TupleInstanceType
 end
 
 class Crystal::NamedTupleInstanceType
-  def icr_type_vars
-    {} of String => ICR::ICRType
+  def ic_type_vars
+    {} of String => IC::ICType
   end
 
   # Add virtual ivars ("0","1","2",..) for each field

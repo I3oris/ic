@@ -1,4 +1,4 @@
-module ICR
+module IC
   class Quit < Exception
   end
 
@@ -54,8 +54,8 @@ module ICR
 
     private def prompt : String
       n = sprintf("%02d", @line_number + Highlighter.line_number)
-      # p = "icr(1.0.0):#{n}"
-      p = "icr(#{Crystal::VERSION}):".colorize(:white)
+      # p = "ic(1.0.0):#{n}"
+      p = "ic(#{Crystal::VERSION}):".colorize(:white)
       p = "#{p}#{n.colorize.magenta}"
       if multiline?
         p += "* "
@@ -188,7 +188,7 @@ module ICR
         @edited_line += "\n" + "  "*@indent
       when :line
         validate_line formate: true
-        ICR.display_result
+        IC.display_result
       end
       puts
       print prompt

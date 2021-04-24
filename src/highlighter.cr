@@ -1,6 +1,6 @@
 # File retake and modified from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
 # Thanks!
-module ICR::Highlighter
+module IC::Highlighter
   record Highlight,
     color : Symbol,
     bold : Bool = false,
@@ -97,8 +97,8 @@ module ICR::Highlighter
       # uncolorize:
       colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
 
-      # remove icr invitation:
-      colorless = colorless.gsub(/icr\([0-9\.]+(-dev)?\):[0-9]{2,}[>\*"] /, "")
+      # remove ic invitation:
+      colorless = colorless.gsub(/ic\([0-9\.]+(-dev)?\):[0-9]{2,}[>\*"] /, "")
 
       # remove the \b\b\b and remove the erased char from colorless.size:
       backchar_size = 0

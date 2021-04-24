@@ -14,37 +14,37 @@ require "./shell"
 require "./errors"
 require "colorize"
 
-ICR.run_file "./icr_prelude.cr"
+IC.run_file "./ic_prelude.cr"
 
-unless ICR.running_spec?
+unless IC.running_spec?
   if ARGV[0]?
-    ICR.run_file ARGV[0]
+    IC.run_file ARGV[0]
   else
-    ICR.run
+    IC.run
   end
 end
 
-module ICR
+module IC
   VERSION = "0.1.0"
 
   class_property program = Crystal::Program.new
   class_getter? busy = false
 
   def self.parse(text)
-    ast_node = Crystal::Parser.parse text, def_vars: ICR.def_vars
+    ast_node = Crystal::Parser.parse text, def_vars: IC.def_vars
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     ast_node
   end
 
   def self.run_file(path)
-    ICR.parse(File.read(path)).run
+    IC.parse(File.read(path)).run
   rescue e
     e.display
   end
 
-  class_getter result : ICRObject = ICR.nop
-  class_getter valid_result : ICRObject = ICR.nil
+  class_getter result : ICObject = IC.nop
+  class_getter valid_result : ICObject = IC.nil
 
   def self.display_result
     if @@result.nop?
@@ -61,21 +61,21 @@ module ICR
     Shell.new.run do |expr|
       next :line if expr.empty?
 
-      ICR.clear_callstack
+      IC.clear_callstack
 
       @@busy = true
-      @@result = ICR.parse(header + expr).run
+      @@result = IC.parse(header + expr).run
       @@busy = false
 
       @@valid_result = @@result unless @@result.nop?
-      ICR.assign_var("__", @@valid_result)
-      ICR.program.@vars["__"] = Crystal::MetaVar.new "__", @@valid_result.type.cr_type
+      IC.assign_var("__", @@valid_result)
+      IC.program.@vars["__"] = Crystal::MetaVar.new "__", @@valid_result.type.cr_type
 
       # For each vars, add `var = uninitialized Type`,
       # this permit to keep vars on semantic for subsequent executions
       # (I haven't found a better way wet!)
       # The vars isn't really set, so declared vars keeps its values.
-      header = ICR.program.@vars.map do |name, value|
+      header = IC.program.@vars.map do |name, value|
         "#{name} = uninitialized #{value.type}\n"
       end.join
 
@@ -83,7 +83,7 @@ module ICR
     rescue Cancel
       @@busy = false
       :line
-    rescue e : ICR::CompileTimeError
+    rescue e : IC::CompileTimeError
       if e.unterminated?
         # let a change to the user to finish his text on the next line
         :multiline
@@ -96,12 +96,12 @@ module ICR
         # > x="42" # "Error must be Int32, not Int32|String", ok
         #
         # > 0 # Still "Error must be Int32, not Int32|String", because vars are not reseted
-        ICR.program.@vars.clear
+        IC.program.@vars.clear
         :error
       end
     rescue e
       e.display
-      ICR.program.@vars.clear
+      IC.program.@vars.clear
       :error
     end
   end
@@ -118,7 +118,7 @@ end
 class Crystal::MainVisitor
   def visit(node : Underscore)
     if @in_type_args == 0
-      icr_error "'_' is reserved by crystal, use '__' instead"
+      ic_error "'_' is reserved by crystal, use '__' instead"
       node
     else
       node.raise "can't use underscore as generic type argument"

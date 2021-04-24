@@ -1,4 +1,4 @@
-module ICR
+module IC
   class Error < Exception
     def display
       puts self.message
@@ -11,7 +11,7 @@ end
 
 class Exception
   def display
-    puts ("\nICR(UNKNOWN BUG): #{self.message}").colorize.red.bold.to_s
+    puts ("\nIC(UNKNOWN BUG): #{self.message}").colorize.red.bold.to_s
   end
 end
 
@@ -61,13 +61,13 @@ class Crystal::Error < Exception
 end
 
 def bug!(msg)
-  raise ICR::Error.new ("\nICR(BUG): #{msg}").colorize.red.bold.to_s
+  raise IC::Error.new ("\nIC(BUG): #{msg}").colorize.red.bold.to_s
 end
 
 def todo(msg)
-  raise ICR::Error.new ("\nICR(TODO): #{msg}").colorize.blue.bold.to_s
+  raise IC::Error.new ("\nIC(TODO): #{msg}").colorize.blue.bold.to_s
 end
 
-def icr_error(msg)
-  raise ICR::Error.new ("\nICR: #{msg}").colorize.magenta.bold.to_s
+def ic_error(msg)
+  raise IC::Error.new ("\nIC: #{msg}").colorize.magenta.bold.to_s
 end

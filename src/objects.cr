@@ -1,16 +1,16 @@
-module ICR
-  # ICRObject are transmitted through the AST Tree, and represents Object created with icr
+module IC
+  # ICObject are transmitted through the AST Tree, and represents Object created with IC
   #
-  # There are constituted of a ICRType and a pointer on the binary representation of the object (`raw`)
+  # There are constituted of a ICType and a pointer on the binary representation of the object (`raw`)
   # i.e for a Int32, raw will be a pointer on 4 bytes.
   #
   # For classes, raw will be a pointer on 8 bytes (address), pointing itself on the classes size.
   #
-  # The ICRType will give information of how to treat the raw binary.
+  # The ICType will give information of how to treat the raw binary.
   #
   # `@type` is always the **runtime* type of the object, and cannot be virtual or an union.
-  class ICRObject
-    getter type : ICRType
+  class ICObject
+    getter type : ICType
     getter raw : Pointer(Byte)
     getter? nop = false
 
@@ -30,7 +30,7 @@ module ICR
           #               | @ivar 2
           #               | ...
           raw.value = Pointer(Byte).malloc(@type.class_size)
-          raw.value.as(Int32*).value = ICR.type_id(@type.cr_type)
+          raw.value.as(Int32*).value = IC.type_id(@type.cr_type)
         end
         @raw = raw.as(Byte*)
       else
@@ -52,7 +52,7 @@ module ICR
     end
 
     def initialize(@nop : Bool)
-      @type = ICRType.nil
+      @type = ICType.nil
       @raw = Pointer(Byte).null
     end
 
@@ -73,7 +73,7 @@ module ICR
     end
 
     # Write an ivar of this object
-    def []=(name, value : ICRObject)
+    def []=(name, value : ICObject)
       @type.write_ivar(name, value, to: self.data)
     end
 
@@ -91,7 +91,7 @@ module ICR
       bug! "Cast from #{@type.cr_type} failed" if from.nil? || to.nil?
       if @type.cr_type.pointer?
         # Pointer cast seems never fail
-        return ICRObject.new(ICRType.new(to), from: @raw)
+        return ICObject.new(ICType.new(to), from: @raw)
       end
 
       if @type.cr_type <= to
@@ -106,22 +106,22 @@ module ICR
       @type.cr_type <= type
     end
 
-    # Returns a new ICRObject(Pointer) pointing on the raw data of this object
+    # Returns a new ICObject(Pointer) pointing on the raw data of this object
     def pointerof_self
-      p = ICRObject.new(ICRType.pointer_of(@type.cr_type))
+      p = ICObject.new(ICType.pointer_of(@type.cr_type))
       p.as_uint64 = @raw.address
       p
     end
 
-    # Returns a new ICRObject(Pointer) pointing on the offset of *ivar*
+    # Returns a new ICObject(Pointer) pointing on the offset of *ivar*
     def pointerof(*, ivar : String)
       offset, type = @type.offset_and_type_of(ivar)
-      p = ICRObject.new(ICRType.pointer_of(type.cr_type))
+      p = ICObject.new(ICType.pointer_of(type.cr_type))
       p.as_uint64 = (self.data + offset).address
       p
     end
 
-    # Gives a string representation used by icr to display the result of an instruction.
+    # Gives a string representation used by IC to display the result of an instruction.
     def result : String
       result =
         case t = @type.cr_type
@@ -145,7 +145,7 @@ module ICR
           end
         when Crystal::BoolType   then as_bool.inspect
         when Crystal::CharType   then as_char.inspect
-        when Crystal::SymbolType then ":#{ICR.symbol_from_value(as_int32)}"
+        when Crystal::SymbolType then ":#{IC.symbol_from_value(as_int32)}"
         when Crystal::NilType    then "nil"
         when Crystal::TupleInstanceType
           entries = @type.map_ivars { |name| self[name].result }
@@ -162,7 +162,7 @@ module ICR
       result || "??? #{t}"
     end
 
-    # Treat this ICRObject as Int32,UInt64,..
+    # Treat this ICObject as Int32,UInt64,..
     # Used by primitives.
     {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Bool Char String) %}
       def as_{{t.downcase.id}}
@@ -204,36 +204,36 @@ module ICR
     end
   end
 
-  # Creates the corresponding ICRObject from values:
+  # Creates the corresponding ICObject from values:
 
   def self.nop
-    ICRObject.new(nop: true)
+    ICObject.new(nop: true)
   end
 
   def self.nil
-    ICRObject.new(ICRType.nil)
+    ICObject.new(ICType.nil)
   end
 
   def self.bool(value : Bool)
-    obj = ICRObject.new(ICRType.bool)
+    obj = ICObject.new(ICType.bool)
     obj.as_bool = value
     obj
   end
 
   {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64) %}
     def self.number(value : {{t.id}})
-      obj = ICRObject.new(ICRType.{{t.downcase.id}})
+      obj = ICObject.new(ICType.{{t.downcase.id}})
       obj.as_{{t.downcase.id}} = value
       obj
     end
   {% end %}
 
   def self.number(value)
-    todo "#{value.class} to ICRObject"
+    todo "#{value.class} to ICObject"
   end
 
   def self.char(value : Char)
-    obj = ICRObject.new(ICRType.char)
+    obj = ICObject.new(ICType.char)
     obj.as_char = value
     obj
   end
@@ -244,7 +244,7 @@ module ICR
   #                   | @c    (@bytesize times)
   #                   | ...
   def self.string(value : String)
-    obj = ICRObject.new(ICRType.string)
+    obj = ICObject.new(ICType.string)
     (obj.data + 4).as(Int32*).value = value.@bytesize
     (obj.data + 8).as(Int32*).value = value.@length
     (obj.data + 12).as(UInt8*).copy_from(pointerof(value.@c), value.@bytesize)
@@ -252,13 +252,13 @@ module ICR
   end
 
   def self.symbol(value : String)
-    obj = ICRObject.new(ICRType.new(ICR.program.symbol))
-    obj.as_int32 = ICR.symbol_value(value)
+    obj = ICObject.new(ICType.new(IC.program.symbol))
+    obj.as_int32 = IC.symbol_value(value)
     obj
   end
 
-  def self.tuple(type : Crystal::Type, elements : Array(ICRObject))
-    obj = ICRObject.new(ICRType.new(type))
+  def self.tuple(type : Crystal::Type, elements : Array(ICObject))
+    obj = ICObject.new(ICType.new(type))
     elements.each_with_index do |e, i|
       obj[i.to_s] = e
     end
@@ -270,13 +270,13 @@ module ICR
 
     bug! "Trying to create a class or a module from a non metaclass type (#{type.class})" unless type.responds_to? :instance_type
 
-    obj = ICRObject.new(ICRType.new(type))
-    obj.as_int32 = ICR.type_id(type.instance_type, instance: false)
+    obj = ICObject.new(ICType.new(type))
+    obj.as_int32 = IC.type_id(type.instance_type, instance: false)
     obj
   end
 
   def self.uninitialized(type : Crystal::Type)
-    ICRObject.new(ICRType.new(type), uninitialized?: true)
+    ICObject.new(ICType.new(type), uninitialized?: true)
   end
 end
 

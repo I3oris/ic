@@ -1,12 +1,12 @@
-name: icr
+name: ic
 version: 0.1.0
-description: Fast Crystal Interpreter, running without having to compile!
+description: Interpreter Crystal, working without compilation!
 authors:
   - I3oris
 
 targets:
   icr:
-    main: src/icr.cr
+    main: src/ic.cr
 
 crystal: 1.0.0
 
