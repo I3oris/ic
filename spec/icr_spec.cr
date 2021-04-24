@@ -25,6 +25,24 @@ describe ICR do
         p.xy
         CODE
     end
+
+    it "runs scenario 3" do
+      ICR.parse(<<-'CODE').run.result.should eq %({nil, 42, nil, nil, nil, 31, 77, "hello"})
+        class Foo
+          property x, y, z, t
+          @x : Nil
+          def initialize(@y = 42,
+                         @z : Int32 | Nil = nil,
+                         @t : String | Nil = nil)
+          end
+        end
+        foo = Foo.new
+        x, y, z, t = foo.x, foo.y, foo.z, foo.t
+        foo.x, foo.y, foo.z, foo.t = nil, 31, 77, "hello"
+
+        {x ,y, z, t, foo.x, foo.y, foo.z, foo.t}
+        CODE
+    end
   end
 
   describe :string do
@@ -157,19 +175,19 @@ describe ICR do
         CODE
     end
 
-    # spec fail! : gets SpecClass+ instead of SpecSubClass1
-    # it "preserve class on cast (unless Pointers)" do
-    #   ICR.parse(<<-'CODE').run.result.should eq %({SpecSubClass1, Int32, Pointer(UInt64)})
-    #     b = SpecSubClass1.new
-    #     x = 42
-    #     p = Pointer(Int32).new 42
-    #     {
-    #       b.as(SpecClass).class,
-    #       x.as(Int32|String).class,
-    #       p.as(UInt64*).class,
-    #     }
-    #     CODE
-    # end
+    # got SpecClass+ instead of SpecSubClass1
+    pending "preserve class on cast (unless Pointers)" do
+      ICR.parse(<<-'CODE').run.result.should eq %({SpecSubClass1, Int32, Pointer(UInt64)})
+        b = SpecSubClass1.new
+        x = 42
+        p = Pointer(Int32).new 42
+        {
+          b.as(SpecClass).class,
+          x.as(Int32|String).class,
+          p.as(UInt64*).class,
+        }
+        CODE
+    end
   end
 
   describe :const do
@@ -180,13 +198,13 @@ describe ICR do
   end
 
   describe :union do
-    # spec fail! : gets SpecClass+ instead of SpecClass
-    # it "gives a good union virtual type" do
-    #   ICR.parse(<<-'CODE').run.result.should eq %({SpecClass, true, false})
-    #     foobar = SpecSubClass1|SpecSubClass2
-    #     {foobar, foobar.is_a?(SpecClass.class), foobar == SpecClass}
-    #     CODE
-    # end
+    # got SpecClass+ instead of SpecClass
+    pending "gives a good union virtual type" do
+      ICR.parse(<<-'CODE').run.result.should eq %({SpecClass, true, false})
+        foobar = SpecSubClass1|SpecSubClass2
+        {foobar, foobar.is_a?(SpecClass.class), foobar == SpecClass}
+        CODE
+    end
 
     it "support union ivars (1)" do
       ICR.parse(<<-'CODE').run.result.should match /\{42, #<SpecClass:0x.*>, #<SpecStruct>\}/
