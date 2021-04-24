@@ -1,6 +1,6 @@
 # File retake and modified from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
 # Thanks!
-class ICR::Highlighter
+module ICR::Highlighter
   record Highlight,
     color : Symbol,
     bold : Bool = false,
@@ -71,6 +71,7 @@ class ICR::Highlighter
     lexer.count_whitespace = true
     lexer.wants_raw = true
 
+    # Colorize the *code* following the `Lexer`:
     colorized = String.build do |io|
       io.print invit
       begin
@@ -81,7 +82,7 @@ class ICR::Highlighter
       end
     end
 
-    # Some SyntaxException are raised when a token in being parsed, in this case the begin
+    # Some `SyntaxException` are raised when a token in being parsed, in this case the begin
     # of the token is lost.
     # For example when "def initialize(@" is written, Unknown token '\0' is raised, but only
     # "def initialize(" have been displayed on the screen,
@@ -93,18 +94,24 @@ class ICR::Highlighter
     # So we compare what it have been written(colorized) and the original code, and add the difference,
     # but we must remove colors and invitation before comparing.
     if error
-      size_to_remove = 0
-      # uncolorized:
+      # uncolorize:
       colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
 
       # remove icr invitation:
-      colorless = colorless.gsub(/icr\([0-9\.]+\):[0-9]{2,}[>\*"] /, "").gsub(/#{'\b'}+/) do |backs|
-        size_to_remove += backs.size # remove the \b\b\b and remove the erased char from colorless.size
+      colorless = colorless.gsub(/icr\([0-9\.]+(-dev)?\):[0-9]{2,}[>\*"] /, "")
+
+      # remove the \b\b\b and remove the erased char from colorless.size:
+      backchar_size = 0
+      colorless = colorless.gsub(/#{'\b'}+/) do |backs|
+        backchar_size += backs.size
         ""
       end
 
-      # re-add missing characters
-      colorized += (code[colorless.size - size_to_remove...].gsub "\n" { "\n#{self.invitation}" })
+      # The point where the exception have been raised, we want retrieve the lost characters after this:
+      error_point = colorless.size - backchar_size
+
+      # re-add missing characters and invitation:
+      colorized += (code[error_point...].gsub "\n" { "\n#{self.invitation}" })
     end
 
     @@line_number = 0
