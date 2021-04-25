@@ -92,12 +92,73 @@ describe IC do
       IC.parse(%('a' == 'b')).run.result.should eq %(false)
       IC.parse(%('a' <= 'b')).run.result.should eq %(true)
       IC.parse(%('a' >= 'b')).run.result.should eq %(false)
+      IC.parse(%(0b0010_1010 | 0b1100_0010 == 0b1110_1010)).run.result.should eq %(true)
+      IC.parse(%(0b0010_1010 & 0b1100_0010 == 0b0000_0010)).run.result.should eq %(true)
+      IC.parse(%(0b0010_1010 ^ 0b1100_0010 == 0b1110_1000)).run.result.should eq %(true)
+    end
+
+    # Need to include "int" to access MAX and MIN, but in practice spec works
+    pending "does unsafe binary op" do
+      {% for int in %w(UInt8 Int8 UInt16 Int16 UInt32 Int32 UInt64 Int64) %}
+        IC.parse(%({{int.id}}::MAX &+ 1 == {{int.id}}::MIN)).run.result.should eq %(true)
+        IC.parse(%({{int.id}}::MIN &- 1 == {{int.id}}::MAX)).run.result.should eq %(true)
+      {% end %}
+      IC.parse(%(0b1100_0010u8.unsafe_shr(3) == 0b0001_1000u8)).run.result.should eq %(true)
+      IC.parse(%(0b1100_0010u8.unsafe_shl(3) == 0b0001_0000u8)).run.result.should eq %(true)
+      IC.parse(%(1.unsafe_div(2))).run.result.should eq %(0)
+      IC.parse(%(1.unsafe_mod(2))).run.result.should eq %(1)
+      IC.parse(%(42.unsafe_div(5))).run.result.should eq %(8)
+      IC.parse(%(42.unsafe_mod(5))).run.result.should eq %(2)
+      IC.parse(%(42.unsafe_mod(-5))).run.result.should eq %(2)
+      IC.parse(%(-42.unsafe_mod(5))).run.result.should eq %(-2)
+      IC.parse(%(-42.unsafe_mod(-5))).run.result.should eq %(-2)
+    end
+
+    it "convert" do
+      IC.parse(%(42.unsafe_chr)).run.result.should eq %('*')
+      IC.parse(%(42u8.unsafe_chr)).run.result.should eq %('*')
+      IC.parse(%(42i64.unsafe_chr)).run.result.should eq %('*')
+      IC.parse(%('*'.ord)).run.result.should eq %(42)
+
+      IC.parse(%(3.14_f32.to_f)).run.result.should eq %(3.140_000_104_904_175) # Normal imprecision with float
+      IC.parse(%(3.14    .to_i)).run.result.should eq %(3)
+      IC.parse(%(3.14    .to_u)).run.result.should eq %(3_u32)
+      IC.parse(%(1       .to_u8)).run.result.should eq %(1_u8)
+      IC.parse(%(42      .to_u16)).run.result.should eq %(42_u16)
+      IC.parse(%(3.14    .to_u32)).run.result.should eq %(3_u32)
+      IC.parse(%(7_i64   .to_u64)).run.result.should eq %(0x7)
+      IC.parse(%(-1      .to_i8)).run.result.should eq %(-1_i8)
+      IC.parse(%(42_i8   .to_i16)).run.result.should eq %(42_i16)
+      IC.parse(%(-3.14   .to_i32)).run.result.should eq %(-3)
+      IC.parse(%(7_u16   .to_i64)).run.result.should eq %(7_i64)
+      IC.parse(%(42_u64  .to_f32)).run.result.should eq %(42.0_f32)
+      IC.parse(%(-3.14   .to_f64)).run.result.should eq %(-3.14)
+    end
+
+    # Need to include "int" to access MAX and MIN,
+    pending "convert (unchecked)" do
+      IC.parse(%(-1i8.to_u8! == UInt8::MAX)).run.result.should eq %(true)
+      IC.parse(%(-1i16.to_u16! == UInt16::MAX)).run.result.should eq %(true)
+      IC.parse(%(-1i32.to_u32! == UInt32::MAX)).run.result.should eq %(true)
+      IC.parse(%(-1i64.to_u64! == UInt64::MAX)).run.result.should eq %(true)
+      IC.parse(%(3.14_f32.to_f64!)).run.result.should eq %(3.140_000_104_904_175)
+      IC.parse(%(Float64::MAX.to_f32!)).run.result.should eq %(Infinity)
     end
 
     it "does pointer malloc" do
       IC.parse(<<-'CODE').run.result.should eq %({0, 0})
         p = Pointer(Int32).malloc 2
-        { p.value, (p+1).value }
+        { p[0], p[1] }
+        CODE
+    end
+
+    it "realloc pointer" do
+      IC.parse(<<-'CODE').run.result.should eq %({42, 31, -1, 7})
+        p = Pointer(Int32).malloc 2
+        p[0], p[1] = 42, 31
+        p = p.realloc 4
+        p[2], p[3] = -1, 7
+        { p[0], p[1], p[2], p[3] }
         CODE
     end
 
@@ -118,6 +179,21 @@ describe IC do
       IC.parse(<<-'CODE').run.result.should eq %(0x9)
         p = Pointer(Int32).new(0x1)
         (p+2).address
+        CODE
+    end
+
+    it "subtracts pointers" do
+      IC.parse(<<-'CODE').run.result.should eq %({-4_i64, 4_i64, -42_i64, 42_i64})
+        p1 = Pointer(Int32).new(16)
+        p2 = Pointer(Int32).new(32)
+        p3 = Pointer(SpecStruct).malloc(1)
+        p4 = Pointer(SpecStruct).new (p3+42).address
+        {
+          p1-p2,
+          p2-p1,
+          p3-p4,
+          p4-p3,
+        }
         CODE
     end
 
@@ -163,6 +239,12 @@ describe IC do
           x.class
         }
         CODE
+    end
+
+    it "convert symbol to string" do
+      IC.parse(%(:foo.to_s)).run.result.should eq %("foo")
+      IC.parse(%(:"$/*♥".to_s)).run.result.should eq %("$/*♥")
+      IC.parse(%(:+.to_s)).run.result.should eq %("+")
     end
   end
 

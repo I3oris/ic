@@ -174,33 +174,49 @@ module IC
       end
     {% end %}
 
+    def as_integer
+      unless (t = @type.cr_type).is_a? Crystal::IntegerType
+        bug! "Trying to read #{t} as Int"
+      end
+
+      case t.kind
+      when :i8   then self.as_int8
+      when :u8   then self.as_uint8
+      when :i16  then self.as_int16
+      when :u16  then self.as_uint16
+      when :i32  then self.as_int32
+      when :u32  then self.as_uint32
+      when :i64  then self.as_int64
+      when :u64  then self.as_uint64
+      when :i128 then todo "#{t.kind} as number"
+      when :u128 then todo "#{t.kind} as number"
+      else
+        bug! "Unexpected Number kind #{t.kind}"
+      end
+    end
+
+    def as_float
+      unless (t = @type.cr_type).is_a? Crystal::FloatType
+        bug! "Trying to read #{t} as Float"
+      end
+
+      case t.kind
+      when :f32 then self.as_float32
+      when :f64 then self.as_float64
+      else
+        bug! "Unexpected Float Number kind #{t.kind}"
+      end
+    end
+
     def as_number : Number
-      ret =
-        case t = @type.cr_type
-        when Crystal::IntegerType
-          case t.kind
-          when :i8   then self.as_int8
-          when :u8   then self.as_uint8
-          when :i16  then self.as_int16
-          when :u16  then self.as_uint16
-          when :i32  then self.as_int32
-          when :u32  then self.as_uint32
-          when :i64  then self.as_int64
-          when :u64  then self.as_uint64
-          when :i128 then todo "#{t.kind} as number"
-          when :u128 then todo "#{t.kind} as number"
-          end
-        when Crystal::FloatType
-          case t.kind
-          when :f32 then self.as_float32
-          when :f64 then self.as_float64
-          end
-        when Crystal::BoolType
-          self.as_bool ? 1 : 0
-        when Crystal::SymbolType, Crystal::CharType
-          self.as_int32
-        end
-      ret || bug! "Trying to read #{t} as a number"
+      case t = @type.cr_type
+      when Crystal::IntegerType                   then self.as_integer
+      when Crystal::FloatType                     then self.as_float
+      when Crystal::BoolType                      then self.as_bool ? 1 : 0
+      when Crystal::SymbolType, Crystal::CharType then self.as_int32
+      else
+        bug! "Trying to read #{t} as a number"
+      end
     end
   end
 
@@ -287,6 +303,8 @@ class String
   # "-1000"       => "-1_000"
   # "-1000.12345" => "-1_000.123_45"
   def underscored
+    return self if self.in? "Infinity", "-Infinity"
+
     String.build do |io|
       parts = self.split('.')
       parts.each_with_index do |str, part|

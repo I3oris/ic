@@ -28,6 +28,24 @@ class Object
   end
 end
 
+struct Int
+  def chr
+    unsafe_chr
+  end
+
+  def %(other)
+    unsafe_mod(other)
+  end
+
+  def /(other)
+    self.to_f / other.to_f
+  end
+
+  def //(other)
+    unsafe_div(other)
+  end
+end
+
 struct Pointer(T)
   def [](i : Int32)
     i64 = 0i64 + i
