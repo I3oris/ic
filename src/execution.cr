@@ -9,6 +9,7 @@ module IC
 
   @@callstack = [] of FunctionCallContext
   @@top_level_vars = {} of String => ICObject
+  @@consts = {} of String => ICObject
 
   def self.with_context(*args, &) : ICObject
     @@callstack << FunctionCallContext.new(*args)
@@ -75,12 +76,67 @@ module IC
     end
   end
 
+  def self.get_const(name)
+    @@consts[name]? || bug! "Cannot found the CONST '#{name}'"
+  end
+
+  def self.assign_const(name, value : ICObject) : ICObject
+    @@consts[name] = value
+  end
+
+  def self.underscore=(value : ICObject)
+    @@top_level_vars["__"] = value
+    @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type.cr_type
+  end
+
+  def self.clear_vars
+    @@program.@vars.clear
+    @@top_level_vars.clear
+  end
+
+  def self.clear_const
+    @@consts.clear
+  end
+
+  def self.declared_vars_syntax
+    vars = [Set{"__"}]
+    # use @@program.vars ?
+    @@top_level_vars.each do |name, _|
+      vars.last.add(name)
+    end
+    vars
+  end
+
+  def self.declared_vars
+    vars_names = @@top_level_vars.keys
+    @@program.vars.select &.in? vars_names
+  end
+
+  def self.reset
+    IC.clear_vars
+    IC.clear_callstack
+    IC.clear_const
+    @@program = Crystal::Program.new
+    # @@main_visitor = Crystal::MainVisitor.new(@@program)
+    IC.run_file "./ic_prelude.cr"
+    @@result = IC.nop
+    @@busy = false
+    IC.underscore = IC.nil
+  end
+
   def self.current_function_name
     @@callstack.last?.try &.function_name || bug! "Trying to get the current function name, without having call a function"
   end
 
   def self.symbol_value(name : String)
-    IC.program.symbols.index(name) || bug! "Cannot found the symbol :#{name}"
+    IC.program.symbols.index(name) || begin
+      # If name not found in the Program, add it.
+      #
+      # This append on a CONST initialization (i.e. FOO = :foo)
+      # In this case crystal don't execute the semantics of :foo
+      # because it 'see' that FOO is not used.
+      IC.program.symbols.add(name).index(name).not_nil!
+    end
   end
 
   def self.symbol_from_value(value : Int32)
@@ -111,13 +167,5 @@ module IC
       return t if i == id
     end
     bug! "Cannot found the type corresponding to the id #{id}"
-  end
-
-  def self.def_vars
-    vars = [Set{"_"}]
-    @@top_level_vars.each do |name, _|
-      vars.last.add(name)
-    end
-    vars
   end
 end

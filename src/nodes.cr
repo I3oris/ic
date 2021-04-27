@@ -93,7 +93,7 @@ class Crystal::Assign
     when Crystal::InstanceVar then IC.assign_ivar(t.name, self.value.run)
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then ic_error "Can't assign to '_'"
-    when Crystal::Path        then IC.assign_var(t.target_const.not_nil!.name, self.value.run)
+    when Crystal::Path        then IC.assign_const(t.target_const.not_nil!.name, self.value.run)
     else                           bug! "Unexpected assign target #{t.class}"
     end
   end
@@ -105,7 +105,6 @@ class Crystal::UninitializedVar
     when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type), uninitialized?: true)
     when Crystal::InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
     when Crystal::ClassVar    then todo "Uninitialized cvar"
-    when Crystal::Underscore  then todo "Uninitialized underscore"
     when Crystal::Path        then todo "Uninitialized CONST"
     else                           bug! "Unexpected uninitialized-assign target #{v.class}"
     end
@@ -122,12 +121,14 @@ end
 
 class Crystal::ClassDef
   def run
+    self.body.run
     IC.nop
   end
 end
 
 class Crystal::ModuleDef
   def run
+    self.body.run
     IC.nop
   end
 end
@@ -150,12 +151,24 @@ class Crystal::Alias
   end
 end
 
+class Crystal::VisibilityModifier
+  def run
+    self.exp.run
+  end
+end
+
+class Crystal::TypeDeclaration
+  def run
+    IC.nil
+  end
+end
+
 # Calls #
 
 class Crystal::Path
   def run
     if const = self.target_const
-      IC.get_var(const.name)
+      IC.get_const(const.name)
     else
       IC.class(self.type)
     end
@@ -326,6 +339,20 @@ end
 class Crystal::TypeOf
   def run
     IC.class(self.type)
+  end
+end
+
+# C-binding #
+
+class Crystal::FunDef
+  def run
+    IC.nop
+  end
+end
+
+class Crystal::LibDef
+  def run
+    IC.nop
   end
 end
 

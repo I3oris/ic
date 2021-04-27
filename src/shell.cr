@@ -161,20 +161,30 @@ module IC
       end
     end
 
-    private def validate_line(*, formate = false, error = false)
+    private def validate_line(*, error = false, no_history = false)
       @indent = 0
       @multiline = false
-      formate_line if formate
-      add_to_history @edited_line, error: error
+      formate_line unless error
+      unless no_history
+        add_to_history @edited_line, error: error
+      end
       @edited_line = ""
     end
 
     private def on_newline(&)
-      if @edited_line.empty?
+      case @edited_line
+      when /^( )*#( )*clear_history/
+        @history = [""]
+        @history_index = -1
+        validate_line no_history: true
+        puts "\n => #{"✔".colorize.green}"
+        print prompt
+        return
+      when .blank?, /^( )*#.*/
         @line_number += 1
+        validate_line no_history: true
         puts
         print prompt
-        yield ""
         return
       end
       status = yield @edited_line
@@ -187,7 +197,7 @@ module IC
         @multiline = true
         @edited_line += "\n" + "  "*@indent
       when :line
-        validate_line formate: true
+        validate_line
         IC.display_result
       end
       puts

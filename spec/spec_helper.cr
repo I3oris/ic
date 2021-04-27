@@ -5,6 +5,11 @@ module IC
   def self.running_spec?
     true
   end
+
+  def self.run_spec(code)
+    IC.clear_vars
+    IC.parse(code).run.result
+  end
 end
 
 IC.parse(<<-'CODE').run

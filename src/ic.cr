@@ -31,7 +31,7 @@ module IC
   class_getter? busy = false
 
   def self.parse(text)
-    ast_node = Crystal::Parser.parse text, def_vars: IC.def_vars
+    ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     ast_node
@@ -43,8 +43,7 @@ module IC
     e.display
   end
 
-  class_getter result : ICObject = IC.nop
-  class_getter valid_result : ICObject = IC.nil
+  @@result : ICObject = IC.nop
 
   def self.display_result
     if @@result.nop?
@@ -55,53 +54,32 @@ module IC
   end
 
   def self.run
-    header = "__ = nil\n"
-    last_ast_node = nil
+    IC.underscore = IC.nil
+    # TODO redirect @@program.stdout
 
     Shell.new.run do |expr|
-      next :line if expr.empty?
-
       IC.clear_callstack
 
       @@busy = true
-      @@result = IC.parse(header + expr).run
+      @@result = IC.parse(expr).run
       @@busy = false
 
-      @@valid_result = @@result unless @@result.nop?
-      IC.assign_var("__", @@valid_result)
-      IC.program.@vars["__"] = Crystal::MetaVar.new "__", @@valid_result.type.cr_type
-
-      # For each vars, add `var = uninitialized Type`,
-      # this permit to keep vars on semantic for subsequent executions
-      # (I haven't found a better way wet!)
-      # The vars isn't really set, so declared vars keeps its values.
-      header = IC.program.@vars.map do |name, value|
-        "#{name} = uninitialized #{value.type}\n"
-      end.join
+      IC.underscore = @@result unless @@result.nop?
 
       :line
     rescue Cancel
       @@busy = false
       :line
-    rescue e : IC::CompileTimeError
+    rescue e : CompileTimeError
       if e.unterminated?
         # let a change to the user to finish his text on the next line
         :multiline
       else
         e.display
-
-        # We must reset vars on program to avoid error in repetition
-        # i.e:
-        # > x=42 # Ok
-        # > x="42" # "Error must be Int32, not Int32|String", ok
-        #
-        # > 0 # Still "Error must be Int32, not Int32|String", because vars are not reseted
-        IC.program.@vars.clear
         :error
       end
     rescue e
       e.display
-      IC.program.@vars.clear
       :error
     end
   end
@@ -115,6 +93,48 @@ end
   require "./debug.cr"
 {% end %}
 
+# Force TopLevelVisitor and MainVisitor to keep the declared vars of the
+# previous semantic:
+class Crystal::SemanticVisitor
+  def initialize(@program, @vars = MetaVars.new)
+    # previous_def:
+    @current_type = @program
+    @exp_nest = 0
+    @in_lib = false
+    @in_c_struct_or_union = false
+    @in_is_a = false
+
+    # Added code:
+    if @vars.empty?
+      case self
+      when TopLevelVisitor, MainVisitor
+        @vars = IC.declared_vars
+      end
+    end
+  end
+end
+
+# Alternative to the code above (safer & cleaner), but doesn't work with the following:
+# ```
+# x = 42
+# {% begin %}
+#   x # considered undeclared
+# {% end %}
+# ```
+
+# class Crystal::Program
+#   def visit_main(node, visitor = IC.main_visitor, process_finished_hooks = false, cleanup = true)
+#     previous_def
+#   end
+# end
+
+# module IC
+#   def self.main_visitor
+#     Crystal::MainVisitor.new(@@program, vars: IC.declared_vars)
+#   end
+# end
+
+# Invite the user to use '__' instead of '_':
 class Crystal::MainVisitor
   def visit(node : Underscore)
     if @in_type_args == 0

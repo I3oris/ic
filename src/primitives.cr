@@ -20,25 +20,25 @@ module IC
       when "class_crystal_instance_type_id" then class_crystal_instance_type_id(IC.get_var("self"))
       when "class"                          then _class(IC.get_var("self"))
       when "symbol_to_s"                    then symbol_to_s(IC.get_var("self"))
-      # TODO:
-      # build in:
-      # * enum_value
-      # * enum_new
-      # * struct_or_union_set (c-struct)
-      # * external_var_set (extern-c)
-      # * external_var_get (extern-c)
-      #
-      # primitives.cr
-      # * proc_call
-      #
-      # other:
-      # * throw_info
-      # * va_arg
-      # * cmpxchg
-      # * atomicrmw
-      # * fence
-      # * load_atomic
-      # * store_atomic
+        # TODO:
+        # build in:
+        # * enum_value
+        # * enum_new
+        # * struct_or_union_set (c-struct)
+        # * external_var_set (extern-c)
+        # * external_var_get (extern-c)
+        #
+        # primitives.cr
+        # * proc_call
+        #
+        # other:
+        # * throw_info
+        # * va_arg
+        # * cmpxchg
+        # * atomicrmw
+        # * fence
+        # * load_atomic
+        # * store_atomic
       else
         todo "Primitive #{p.name}"
       end
@@ -150,9 +150,9 @@ module IC
       addr1 = p.as_uint64
       addr2 = other.as_uint64
       if addr1 > addr2
-        IC.number( ((addr1 - addr2)//type.size).to_i64 )
+        IC.number(((addr1 - addr2)//type.size).to_i64)
       else
-        IC.number( -((addr2 - addr1)//type.size).to_i64 )
+        IC.number(-((addr2 - addr1)//type.size).to_i64)
       end
     end
 
@@ -185,7 +185,7 @@ module IC
     end
 
     private def self.symbol_to_s(obj : ICObject)
-      IC.string(IC.symbol_from_value(obj.as_int32) )
+      IC.string(IC.symbol_from_value(obj.as_int32))
     end
   end
 end

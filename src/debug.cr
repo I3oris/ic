@@ -6,13 +6,12 @@ module IC
     previous_def
   end
 
-  private def self.run_last_expression(last_ast_node, ast_node)
+  def self.parse(text)
+    ast = previous_def
     puts
-    e = ast_node.expressions[-1]
-    e.print_debug unless e.is_a? Crystal::FileNode
+    ast.print_debug
     puts
-
-    previous_def
+    ast
   end
 
   private def self.run_method_body(a_def)
@@ -99,7 +98,7 @@ end
 
 class Crystal::ASTNode
   def print_debug(visited = [] of Crystal::ASTNode, indent = 0)
-    if self.in? visited
+    if (self.in? visited) || self.is_a? Crystal::FileNode
       print "..."
       return
     end
