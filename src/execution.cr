@@ -117,7 +117,6 @@ module IC
     IC.clear_callstack
     IC.clear_const
     @@program = Crystal::Program.new
-    # @@main_visitor = Crystal::MainVisitor.new(@@program)
     IC.run_file "./ic_prelude.cr"
     @@result = IC.nop
     @@busy = false

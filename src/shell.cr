@@ -180,6 +180,12 @@ module IC
         puts "\n => #{"✔".colorize.green}"
         print prompt
         return
+      when /^( )*#( )*reset/
+        IC.reset
+        validate_line
+        puts "\n => #{"✔".colorize.green}"
+        print prompt
+        return
       when .blank?, /^( )*#.*/
         @line_number += 1
         validate_line no_history: true
