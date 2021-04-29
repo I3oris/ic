@@ -355,4 +355,48 @@ describe IC do
         CODE
     end
   end
+
+  describe :enums do
+    it "declares a basic enum" do
+      IC.run_spec(<<-'CODE').should eq %({0, 1, 2, 5, 3})
+        enum Enum1
+          A
+          B
+          C
+          D = B+2*C
+          E = D*C - (C|D)
+        end
+        {Enum1::A, Enum1::B, Enum1::C, Enum1::D, Enum1::E}
+        CODE
+    end
+
+    it "declares a flags enum" do
+      IC.run_spec(<<-'CODE').should eq %({1, 2, 4, 8, 16})
+        @[Flags]
+        enum Enum2
+          A
+          B
+          C
+          D
+          E
+        end
+        {Enum2::A, Enum2::B, Enum2::C, Enum1::D, Enum1::E}
+        CODE
+    end
+
+    it "declares a typed enum" do
+      IC.run_spec(<<-'CODE').should eq %({4_u8, 5_u8, 6_u8})
+        enum Enum3 : UInt8
+          A = 4
+          B
+          C
+        end
+        {Enum3::A, Enum3::B, Enum3::C}
+        CODE
+    end
+
+    pending "gives the good type" do
+      IC.run_spec(%(Enum1::A.class)).should eq %(Enum1)
+    end
+  end
 end

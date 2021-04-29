@@ -147,6 +147,7 @@ module IC
         when Crystal::CharType   then as_char.inspect
         when Crystal::SymbolType then ":#{IC.symbol_from_value(as_int32)}"
         when Crystal::NilType    then "nil"
+        when Crystal::EnumType   then todo "Enum result"
         when Crystal::TupleInstanceType
           entries = @type.map_ivars { |name| self[name].result }
           "{#{entries.join(", ")}}"

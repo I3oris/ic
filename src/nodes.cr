@@ -93,6 +93,7 @@ class Crystal::Assign
     when Crystal::InstanceVar then IC.assign_ivar(t.name, self.value.run)
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then ic_error "Can't assign to '_'"
+    # TODO use full name:
     when Crystal::Path        then IC.assign_const(t.target_const.not_nil!.name, self.value.run)
     else                           bug! "Unexpected assign target #{t.class}"
     end
@@ -105,7 +106,6 @@ class Crystal::UninitializedVar
     when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type), uninitialized?: true)
     when Crystal::InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
     when Crystal::ClassVar    then todo "Uninitialized cvar"
-    when Crystal::Path        then todo "Uninitialized CONST"
     else                           bug! "Unexpected uninitialized-assign target #{v.class}"
     end
   end
@@ -135,6 +135,29 @@ end
 
 class Crystal::Macro
   def run
+    IC.nop
+  end
+end
+
+class Crystal::EnumDef
+  def run
+    @members.each do |arg|
+      case arg
+      when Arg
+        # TODO use full name:
+        value = arg.default_value.try &.run || bug! "no value found for enum #{arg}"
+        IC.assign_const(arg.name, value)
+      when Def
+        arg.run
+      else
+        bug! "Unexpected #{arg.class} in EnumDef"
+      end
+      # restriction
+      # default_value
+      # name
+      # external_name
+
+    end
     IC.nop
   end
 end
