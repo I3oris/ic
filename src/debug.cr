@@ -59,6 +59,8 @@ module IC
       debug_msg "[receiver] : #{r.type.cr_type} = #{r.result}"
     end
     print_vars
+    puts
+    a_def.body.print_debug
 
     ret = previous_def
 

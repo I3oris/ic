@@ -232,11 +232,14 @@ class Crystal::GenericInstanceType
   def ic_type_vars
     type_vars = {} of String => IC::ICType
     @type_vars.each do |name, ast|
-      type_vars[name] = IC::ICType.new ast.as(Crystal::Var).type
+      case ast
+      when Var, NumberLiteral
+        type_vars[name] = IC::ICType.new ast.type
+      else
+        bug! "Cannot get type_vars for #{ast.class}"
+      end
     end
     type_vars
-  rescue e
-    bug! "Cannot get type_vars for #{self}, cause: #{e}"
   end
 end
 

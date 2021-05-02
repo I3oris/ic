@@ -163,9 +163,7 @@ class Crystal::TypeDeclaration
     case v = self.var
     when Var then IC.assign_var(v.name, value)
     when InstanceVar # nothing
- then
-    when ClassVar # nothing
- then
+    when ClassVar    # nothing
     else bug! "Unexpected var #{v.class} in type declaration"
     end
     IC.nil
@@ -178,6 +176,8 @@ class Crystal::Path
   def run
     if const = self.target_const
       IC.get_const(const.name)
+    elsif s = self.syntax_replacement
+      s.run
     else
       IC.class(self.type)
     end

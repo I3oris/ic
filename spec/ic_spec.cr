@@ -308,6 +308,10 @@ describe IC do
     end
   end
 
+  describe :generics do
+    IC.run_spec(%(SpecGenericClass(Int32, 42, 31u8).type_vars)).should eq %({Int32, 42, 31u8})
+  end
+
   describe :const do
     it "declares a CONST" do
       IC.run_spec(%(FOO1 = "foo")).should eq %("foo")

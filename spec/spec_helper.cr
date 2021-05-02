@@ -58,6 +58,12 @@ IC.parse(<<-'CODE').run
     end
   end
 
+  class SpecGenericClass(X,Y,Z)
+    def type_vars
+      {X,Y,Z}
+    end
+  end
+
   def yield_func1(*args)
     yield args
   end
