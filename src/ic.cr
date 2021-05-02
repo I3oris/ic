@@ -9,8 +9,10 @@ require "./types"
 require "./objects"
 require "./primitives"
 require "./execution"
+require "./vars"
 require "./highlighter"
 require "./shell"
+require "./commands"
 require "./errors"
 require "colorize"
 
@@ -58,7 +60,7 @@ module IC
     # TODO redirect @@program.stdout
 
     Shell.new.run do |expr|
-      IC.clear_callstack
+      # CallStack.clear
 
       @@busy = true
       @@result = IC.parse(expr).run
@@ -87,6 +89,9 @@ module IC
   def self.running_spec?
     false
   end
+end
+
+def debug_msg(msg)
 end
 
 {% if flag? :_debug %}

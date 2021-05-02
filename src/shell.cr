@@ -147,6 +147,11 @@ module IC
       @history_index = 0
     end
 
+    def clear_history
+      @history = [""]
+      @history_index = -1
+    end
+
     private def history_up
       unless @history_index == @history.size - 1
         @history_index += 1
@@ -173,17 +178,15 @@ module IC
 
     private def on_newline(&)
       case @edited_line
-      when /^( )*#( )*clear_history/
-        @history = [""]
-        @history_index = -1
+      when /^( )*#( )*(clear_history)/
         validate_line no_history: true
-        puts "\n => #{"✔".colorize.green}"
+        clear_history
+        puts " => #{"✔".colorize.green}"
         print prompt
         return
-      when /^( )*#( )*reset/
-        IC.reset
+      when /^( )*#( )*(#{Commands.commands_regex_names})(( [a-z\-]+)*)/
         validate_line
-        puts "\n => #{"✔".colorize.green}"
+        Commands.run_cmd($~[3]?, $~[4].split(" ", remove_empty: true))
         print prompt
         return
       when .blank?, /^( )*#.*/

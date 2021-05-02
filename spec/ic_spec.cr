@@ -55,6 +55,30 @@ describe IC do
         {t1, t2, t3}
         CODE
     end
+
+    it "runs scenario 5" do
+      IC.run_spec(<<-'CODE').should eq %(177_189_926)
+
+        yield_func4(42, 7) do |a, b|
+          if a < b
+            yield_func3(a, b - 1) { |x| x }
+          else
+            yield_func3(b, yield_func4(1, 7) { |a| a + 1 }) do |x|
+              x + a - b + (yield_func5(a) do |x|
+                x2 = x//100
+                if x2 == 0
+                  a*1000
+                elsif x2 > 1000
+                  next x*7
+                else
+                  x*7
+                end
+              end)
+            end
+          end
+        end
+        CODE
+    end
   end
 
   describe :string do
@@ -352,6 +376,76 @@ describe IC do
         foo.union_reference_like = "foo"
         foo.union_mixed = SpecClass.new
         foo.all
+        CODE
+    end
+  end
+
+  describe :yield do
+    it "yields" do
+      IC.run_spec(<<-'CODE').should eq %(10)
+        yield_func1(1,2,3,4) do |a,b,c,d|
+          yield_func1(a+b,c,d) do |a,b,c|
+            yield_func1(a+b,c) do |a,b|
+              yield_func1(a+b) do |a|
+                a[0]
+              end
+            end
+          end
+        end
+        CODE
+      IC.run_spec(<<-'CODE').should eq %(41)
+        a = 42
+        yield_func1(0) do |a|
+          yield_func2(a[0] + 10) { |a| a }
+        end
+        CODE
+    end
+
+    it "breaks" do
+      IC.run_spec(<<-'CODE').should eq %(3)
+        i = 0
+        while i < 10
+          break if i == 3
+          i += 1
+        end
+        i
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %({42, 31})
+        yield_func1 do
+          break 42, 31
+        end
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %(7)
+        yield_func1 do
+          yield_func1 do
+            break 42, 31
+          end
+          7
+        end
+        CODE
+    end
+
+    it "next" do
+      IC.run_spec(<<-'CODE').should eq %(9)
+        i = 0
+        x = 0
+        while i<6
+          i += 1
+          next if i % 2 == 0
+          x += i
+        end
+        x
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %(9)
+        x = 0
+        times_func(6) do |i|
+          next if i % 2 == 0
+          x += i
+        end
+        x
         CODE
     end
   end

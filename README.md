@@ -26,7 +26,6 @@ cd ic && make
 
 #### Not implemented:
 * some Primitives (in progress)
-* yield & blocks
 * ClassVar
 * Enum
 * CONST (in progress)

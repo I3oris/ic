@@ -11,7 +11,8 @@ end
 
 class Exception
   def display
-    puts ("\nIC(UNKNOWN BUG): #{self.message}").colorize.red.bold.to_s
+    puts ("\nIC(UNKNOWN BUG):").colorize.red.bold.to_s
+    puts inspect_with_backtrace
   end
 end
 

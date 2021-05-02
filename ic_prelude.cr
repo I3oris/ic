@@ -44,6 +44,14 @@ struct Int
   def //(other)
     unsafe_div(other)
   end
+
+  def times
+    i = 0
+    while i < self
+      yield i
+      i += 1
+    end
+  end
 end
 
 struct Pointer(T)
@@ -99,6 +107,16 @@ class Array(T)
     self
   end
 
+  def each
+    size.times { |i| yield @buffer[i] }
+  end
+
+  def map(& : T -> X) forall X
+    new_a = Array(X).new @capacity
+    self.each { |x| new_a << yield x }
+    new_a
+  end
+
   def to_unsafe
     @buffer
   end
@@ -127,5 +145,11 @@ class String
 
   def to_unsafe
     pointerof(@c)
+  end
+end
+
+def loop
+  while true
+    yield
   end
 end

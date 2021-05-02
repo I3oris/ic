@@ -279,3 +279,10 @@ end
     end
   end
 {% end %}
+
+{% for other_type in %w(EnumType VoidType LibType) %}
+  class Crystal::{{other_type.id}}
+    def each_ivar_types(&)
+    end
+  end
+{% end %}

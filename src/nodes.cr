@@ -102,7 +102,7 @@ end
 class Crystal::UninitializedVar
   def run
     case v = self.var
-    when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type), uninitialized?: true)
+    when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type))
     when Crystal::InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
     when Crystal::ClassVar    then todo "Uninitialized cvar"
     when Crystal::Path        then todo "Uninitialized CONST"
@@ -159,6 +159,15 @@ end
 
 class Crystal::TypeDeclaration
   def run
+    value = self.value.try &.run || IC.nil
+    case v = self.var
+    when Var then IC.assign_var(v.name, value)
+    when InstanceVar # nothing
+ then
+    when ClassVar # nothing
+ then
+    else bug! "Unexpected var #{v.class} in type declaration"
+    end
     IC.nil
   end
 end
@@ -185,12 +194,22 @@ class Crystal::Call
   def run
     if a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
 
-      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run)
+      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run, self.block, id: self.object_id)
     else
       bug! "Cannot find target def matching with this call: #{name}"
     end
   rescue e : IC::Return
-    return e.return_value
+    IC.handle_return(e)
+  rescue e : IC::Break
+    IC.handle_break(e, self.object_id)
+  end
+end
+
+class Crystal::Yield
+  def run
+    IC.yield(self.exps.map &.run)
+  rescue e : IC::Next
+    IC.handle_next(e, self.object_id)
   end
 end
 
@@ -237,48 +256,54 @@ class Crystal::While
     while self.cond.run.truthy?
       begin
         self.body.run
-      rescue IC::Break
-        break
-      rescue IC::Next
+      rescue e : IC::Next
+        IC.handle_next(e, self.object_id)
         next
+      rescue e : IC::Break
+        IC.handle_break(e, self.object_id)
+        break
       end
     end
     IC.nil
   end
 end
 
-class IC::Break < Exception
-end
+class IC::ControlFlowBreak < Exception
+  getter value : ICObject
+  getter call_id : UInt64
 
-class IC::Next < Exception
-end
-
-class IC::Return < Exception
-  getter return_value
-
-  def initialize(@return_value : IC::ICObject)
+  # value = nil for `return`
+  # value = x for `return x`
+  # value = {x,y,z,..} for `return x,y,z,...`
+  def initialize(args, @call_id)
+    @value = args ? args.run : IC.nil
   end
+end
+
+class IC::Return < IC::ControlFlowBreak
+end
+
+class IC::Next < IC::ControlFlowBreak
+end
+
+class IC::Break < IC::ControlFlowBreak
 end
 
 class Crystal::Next
   def run
-    ::raise IC::Next.new
+    ::raise IC::Next.new self.exp, self.target.object_id
   end
 end
 
 class Crystal::Break
   def run
-    ::raise IC::Break.new
+    ::raise IC::Break.new self.exp, self.target.object_id
   end
 end
 
 class Crystal::Return
   def run
-    if exp = self.exp
-      ::raise IC::Return.new exp.run
-    else
-      ::raise IC::Return.new IC.nil
-    end
+    ::raise IC::Return.new self.exp, self.target.object_id
   end
 end
 

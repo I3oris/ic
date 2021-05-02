@@ -1,3 +1,8 @@
+def debug_msg(msg)
+  IC.debug_indent
+  puts msg
+end
+
 module IC
   # ## Override some methods to display useful debug infos : ###
 
@@ -14,23 +19,91 @@ module IC
     ast
   end
 
+  module CallStack
+    class_getter callstack
+  end
+
+  module VarStack
+    class_getter vars
+  end
+
+  def self.debug_indent
+    CallStack.callstack.size.times { print "  " }
+  end
+
+  def self.print_callstack
+    print "["
+    print CallStack.callstack.join("/") { |c| c.name }
+    print "]"
+  end
+
+  def self.print_vars
+    VarStack.vars.last.vars.each do |name, value|
+      debug_msg "#{name} : #{value.type.cr_type} = #{value.result}"
+    end
+  end
+
+  # class_getter yieldstack
+
   private def self.run_method_body(a_def)
+    # context = CallStack.callstack.last.as(CallStack::FunctionCallContext)
+    context = CallStack.last?.not_nil!
+
     puts
-    context = @@callstack.last
-    puts "====== Call #{context.function_name} (#{context.receiver.try &.type.cr_type}) ======"
-    puts a_def.body.print_debug
+    IC.debug_indent
+    print "\b\b===== Call #{context.name} "
+    print_callstack
+    puts " ====="
+
+    if r = context.receiver
+      debug_msg "[receiver] : #{r.type.cr_type} = #{r.result}"
+    end
+    print_vars
 
     ret = previous_def
 
-    puts
-    puts "===== End Call #{context.function_name} ======"
-
+    debug_msg "\b\b===== End Call #{context.name}, returns #{ret.result} ====="
     ret
+  end
+
+  def self.yield(args) : ICObject
+    puts
+    IC.debug_indent
+    print "=== Yield #{args.join(", ") { |a| a.result }} "
+    print_callstack
+    puts " ==="
+    print_vars
+    puts
+
+    ret = previous_def
+
+    debug_msg "=== End yield, returns #{ret.result} ==="
+    ret
+  end
+
+  def self.handle_break(e, id)
+    if e.call_id == id
+      debug_msg "-> #{id} rescue Break"
+      e.value
+    else
+      debug_msg "-> #{id} forward Break"
+      ::raise e
+    end
+  end
+
+  def self.handle_next(e, id)
+    debug_msg "-> #{id} rescue Next"
+    previous_def
+  end
+
+  def self.handle_return(e)
+    debug_msg "-> rescue Return"
+    previous_def
   end
 
   module Primitives
     def self.call(p : Crystal::Primitive)
-      puts "Primitve called: #{p.name}:#{p.type}:#{p.extra}"
+      debug_msg "Primitve called: #{p.name}:#{p.type}:#{p.extra}"
       previous_def
     end
   end
@@ -93,6 +166,27 @@ module IC
         layout[1].print_debug(visited, indent + 1)
       end
     end
+  end
+end
+
+class Crystal::Next
+  def run
+    debug_msg "<- throws Next"
+    previous_def
+  end
+end
+
+class Crystal::Break
+  def run
+    debug_msg "<- throws Break #{self.target.object_id}"
+    previous_def
+  end
+end
+
+class Crystal::Return
+  def run
+    debug_msg "<- throws Return"
+    previous_def
   end
 end
 
