@@ -309,7 +309,7 @@ describe IC do
   end
 
   describe :generics do
-    IC.run_spec(%(SpecGenericClass(Int32, 42, 31u8).type_vars)).should eq %({Int32, 42, 31u8})
+    IC.run_spec(%(SpecGenericClass(Int32, 42, 31u8).type_vars)).should eq %({Int32, 42, 31_u8})
   end
 
   describe :const do

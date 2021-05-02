@@ -59,7 +59,7 @@ IC.parse(<<-'CODE').run
   end
 
   class SpecGenericClass(X,Y,Z)
-    def type_vars
+    def self.type_vars
       {X,Y,Z}
     end
   end
