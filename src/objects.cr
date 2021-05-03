@@ -121,6 +121,37 @@ module IC
       p
     end
 
+    def enum_value
+      bug! "Trying to read enum value on a non-enum type #{@type.cr_type}" unless (t = @type.cr_type).is_a? Crystal::EnumType
+
+      case t.base_type.kind
+      when :i8   then as_int8
+      when :u8   then as_uint8
+      when :i16  then as_int16
+      when :u16  then as_uint16
+      when :i32  then as_int32
+      when :u32  then as_uint32
+      when :i64  then as_int64
+      when :u64  then as_uint64
+      when :i128 then todo "Enum to #{t.base_type.kind}"
+      when :u128 then todo "Enum to #{t.base_type.kind}"
+      else            bug! "Unexpected enum number kind #{t.base_type.kind}"
+      end
+    end
+
+    def enum_name
+      bug! "Trying to read enum value on a non-enum type #{@type.cr_type}" unless (t = @type.cr_type).is_a? Crystal::EnumType
+      val = self.enum_value
+      t.types.each do |member_name, member|
+        member_name
+        const = member.as(Crystal::Const)
+        if val == const.value.as(Crystal::NumberLiteral).integer_value
+          return member_name
+        end
+      end
+      "#{t}:#{val}"
+    end
+
     # Gives a string representation used by IC to display the result of an instruction.
     def result : String
       result =
@@ -147,7 +178,7 @@ module IC
         when Crystal::CharType   then as_char.inspect
         when Crystal::SymbolType then ":#{IC.symbol_from_value(as_int32)}"
         when Crystal::NilType    then "nil"
-        when Crystal::EnumType   then todo "Enum result"
+        when Crystal::EnumType   then "#{enum_name}"
         when Crystal::TupleInstanceType
           entries = @type.map_ivars { |name| self[name].result }
           "{#{entries.join(", ")}}"
@@ -290,6 +321,33 @@ module IC
     obj = ICObject.new(ICType.new(type))
     obj.as_int32 = IC.type_id(type.instance_type, instance: false)
     obj
+  end
+
+  def self.enum(type : Crystal::EnumType, value)
+    # bug! "Cannot create a enum from a non-enum type" unless type.is_a? Crystal::EnumType
+    obj = ICObject.new(ICType.new(type))
+    case type.base_type.kind
+    when :i8   then obj.as_int8 = value.to_i8
+    when :u8   then obj.as_uint8 = value.to_u8
+    when :i16  then obj.as_int16 = value.to_i16
+    when :u16  then obj.as_uint16 = value.to_u16
+    when :i32  then obj.as_int32 = value.to_i32
+    when :u32  then obj.as_uint32 = value.to_u32
+    when :i64  then obj.as_int64 = value.to_i64
+    when :u64  then obj.as_uint64 = value.to_u64
+    when :i128 then todo "Enum from #{type.base_type.kind}"
+    when :u128 then todo "Enum from #{type.base_type.kind}"
+    end
+    obj
+  end
+
+  def self.enum_from_symbol(type : Crystal::EnumType, symbol : ICObject)
+    name = IC.symbol_from_value(symbol.as_int32)
+    const = type.find_member(name)
+    bug! "cannot create a enum #{type} from the symbol #{name}" unless const
+
+    value = const.value.as(Crystal::NumberLiteral).integer_value
+    IC.enum(type, value)
   end
 
   def self.uninitialized(type : Crystal::Type)

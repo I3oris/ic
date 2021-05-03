@@ -20,10 +20,10 @@ module IC
       when "class_crystal_instance_type_id" then class_crystal_instance_type_id(IC.get_var("self"))
       when "class"                          then _class(IC.get_var("self"))
       when "symbol_to_s"                    then symbol_to_s(IC.get_var("self"))
+      when "enum_value"                     then enum_value(IC.get_var("self"))
+      when "enum_new"                       then enum_new(p.type, IC.get_var("value"))
         # TODO:
         # build in:
-        # * enum_value
-        # * enum_new
         # * struct_or_union_set (c-struct)
         # * external_var_set (extern-c)
         # * external_var_get (extern-c)
@@ -186,6 +186,14 @@ module IC
 
     private def self.symbol_to_s(obj : ICObject)
       IC.string(IC.symbol_from_value(obj.as_int32))
+    end
+
+    private def self.enum_value(obj : ICObject)
+      IC.number(obj.enum_value)
+    end
+
+    private def self.enum_new(type : Crystal::Type, value : ICObject)
+      IC.enum(type.as(Crystal::EnumType), value.as_number)
     end
   end
 end

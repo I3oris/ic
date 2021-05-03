@@ -93,9 +93,9 @@ class Crystal::Assign
     when Crystal::InstanceVar then IC.assign_ivar(t.name, self.value.run)
     when Crystal::ClassVar    then todo "ClassVar assign"
     when Crystal::Underscore  then ic_error "Can't assign to '_'"
-    # TODO use full name:
-    when Crystal::Path        then IC.assign_const(t.target_const.not_nil!.name, self.value.run)
-    else                           bug! "Unexpected assign target #{t.class}"
+      # TODO use full name:
+    when Crystal::Path then IC.assign_const(t.target_const.not_nil!.name, self.value.run)
+    else                    bug! "Unexpected assign target #{t.class}"
     end
   end
 end
@@ -103,7 +103,7 @@ end
 class Crystal::UninitializedVar
   def run
     case v = self.var
-    when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type), uninitialized?: true)
+    when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type))
     when Crystal::InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
     when Crystal::ClassVar    then todo "Uninitialized cvar"
     else                           bug! "Unexpected uninitialized-assign target #{v.class}"
@@ -144,19 +144,17 @@ class Crystal::EnumDef
     @members.each do |arg|
       case arg
       when Arg
+        # value = arg.default_value.try &.run || bug! "No value found on enum member #{arg}"
+        value = arg.default_value.as?(NumberLiteral).try &.integer_value || bug! "No integer value found on enum member #{arg}"
+
         # TODO use full name:
-        value = arg.default_value.try &.run || bug! "no value found for enum #{arg}"
-        IC.assign_const(arg.name, value)
+        # bug! "Expected a enum type on the enum menber #{arg}, not #{type}" unless (type=arg.type).is_a? Crystal::EnumType
+        IC.assign_const(arg.name, IC.enum(resolved_type.not_nil!, value))
       when Def
         arg.run
       else
         bug! "Unexpected #{arg.class} in EnumDef"
       end
-      # restriction
-      # default_value
-      # name
-      # external_name
-
     end
     IC.nop
   end
@@ -182,6 +180,13 @@ end
 
 class Crystal::TypeDeclaration
   def run
+    value = self.value.try &.run || IC.nil
+    case v = self.var
+    when Var then IC.assign_var(v.name, value)
+    when InstanceVar # nothing
+    when ClassVar    # nothing
+    else bug! "Unexpected var #{v.class} in type declaration"
+    end
     IC.nil
   end
 end
@@ -192,6 +197,8 @@ class Crystal::Path
   def run
     if const = self.target_const
       IC.get_const(const.name)
+    elsif s = self.syntax_replacement
+      s.run
     else
       IC.class(self.type)
     end
@@ -208,12 +215,22 @@ class Crystal::Call
   def run
     if a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
 
-      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run)
+      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run, self.block, id: self.object_id)
     else
       bug! "Cannot find target def matching with this call: #{name}"
     end
   rescue e : IC::Return
-    return e.return_value
+    IC.handle_return(e)
+  rescue e : IC::Break
+    IC.handle_break(e, self.object_id)
+  end
+end
+
+class Crystal::Yield
+  def run
+    IC.yield(self.exps.map &.run)
+  rescue e : IC::Next
+    IC.handle_next(e, self.object_id)
   end
 end
 
@@ -260,48 +277,54 @@ class Crystal::While
     while self.cond.run.truthy?
       begin
         self.body.run
-      rescue IC::Break
-        break
-      rescue IC::Next
+      rescue e : IC::Next
+        IC.handle_next(e, self.object_id)
         next
+      rescue e : IC::Break
+        IC.handle_break(e, self.object_id)
+        break
       end
     end
     IC.nil
   end
 end
 
-class IC::Break < Exception
-end
+class IC::ControlFlowBreak < Exception
+  getter value : ICObject
+  getter call_id : UInt64
 
-class IC::Next < Exception
-end
-
-class IC::Return < Exception
-  getter return_value
-
-  def initialize(@return_value : IC::ICObject)
+  # value = nil for `return`
+  # value = x for `return x`
+  # value = {x,y,z,..} for `return x,y,z,...`
+  def initialize(args, @call_id)
+    @value = args ? args.run : IC.nil
   end
+end
+
+class IC::Return < IC::ControlFlowBreak
+end
+
+class IC::Next < IC::ControlFlowBreak
+end
+
+class IC::Break < IC::ControlFlowBreak
 end
 
 class Crystal::Next
   def run
-    ::raise IC::Next.new
+    ::raise IC::Next.new self.exp, self.target.object_id
   end
 end
 
 class Crystal::Break
   def run
-    ::raise IC::Break.new
+    ::raise IC::Break.new self.exp, self.target.object_id
   end
 end
 
 class Crystal::Return
   def run
-    if exp = self.exp
-      ::raise IC::Return.new exp.run
-    else
-      ::raise IC::Return.new IC.nil
-    end
+    ::raise IC::Return.new self.exp, self.target.object_id
   end
 end
 

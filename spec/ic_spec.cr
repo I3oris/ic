@@ -55,6 +55,30 @@ describe IC do
         {t1, t2, t3}
         CODE
     end
+
+    it "runs scenario 5" do
+      IC.run_spec(<<-'CODE').should eq %(177_189_926)
+
+        yield_func4(42, 7) do |a, b|
+          if a < b
+            yield_func3(a, b - 1) { |x| x }
+          else
+            yield_func3(b, yield_func4(1, 7) { |a| a + 1 }) do |x|
+              x + a - b + (yield_func5(a) do |x|
+                x2 = x//100
+                if x2 == 0
+                  a*1000
+                elsif x2 > 1000
+                  next x*7
+                else
+                  x*7
+                end
+              end)
+            end
+          end
+        end
+        CODE
+    end
   end
 
   describe :string do
@@ -258,6 +282,19 @@ describe IC do
       IC.run_spec(%(:"$/*♥".to_s)).should eq %("$/*♥")
       IC.run_spec(%(:+.to_s)).should eq %("+")
     end
+
+    it "gets enum value" do
+      IC.run_spec(%(SpecEnum::A.value)).should eq %(0)
+      IC.run_spec(%(SpecEnum::B.value)).should eq %(1)
+      IC.run_spec(%(SpecEnum::C.value)).should eq %(2)
+    end
+
+    it "creates new enum" do
+      IC.run_spec(%(SpecEnum.new 0)).should eq %(A)
+      IC.run_spec(%(SpecEnum.new 1)).should eq %(B)
+      IC.run_spec(%(SpecEnum.new 2)).should eq %(C)
+      IC.run_spec(%(SpecEnum.new 42)).should eq %(SpecEnum:42)
+    end
   end
 
   describe :classes do
@@ -282,6 +319,10 @@ describe IC do
         }
         CODE
     end
+  end
+
+  describe :generics do
+    IC.run_spec(%(SpecGenericClass(Int32, 42, 31u8).type_vars)).should eq %({Int32, 42, 31_u8})
   end
 
   describe :const do
@@ -366,8 +407,10 @@ describe IC do
           D = B+2*C
           E = D*C - (C|D)
         end
-        {Enum1::A, Enum1::B, Enum1::C, Enum1::D, Enum1::E}
+        {Enum1::A.value, Enum1::B.value, Enum1::C.value, Enum1::D.value, Enum1::E.value}
         CODE
+
+      IC.run_spec(%(Enum1::A.class)).should eq %(Enum1)
     end
 
     it "declares a flags enum" do
@@ -380,7 +423,7 @@ describe IC do
           D
           E
         end
-        {Enum2::A, Enum2::B, Enum2::C, Enum1::D, Enum1::E}
+        {Enum2::A.value, Enum2::B.value, Enum2::C.value, Enum2::D.value, Enum2::E.value}
         CODE
     end
 
@@ -391,12 +434,84 @@ describe IC do
           B
           C
         end
-        {Enum3::A, Enum3::B, Enum3::C}
+        {Enum3::A.value, Enum3::B.value, Enum3::C.value}
         CODE
     end
 
-    pending "gives the good type" do
-      IC.run_spec(%(Enum1::A.class)).should eq %(Enum1)
+    it "convert symbol to enum" do
+      IC.run_spec(<<-'CODE').should eq %({A, {B, C}, {foo: A, bar: B}})
+        enum_func :a, :b, :c, foo: :a, bar: :b
+        CODE
+    end
+  end
+
+  describe :yield do
+    it "yields" do
+      IC.run_spec(<<-'CODE').should eq %(10)
+        yield_func1(1,2,3,4) do |a,b,c,d|
+          yield_func1(a+b,c,d) do |a,b,c|
+            yield_func1(a+b,c) do |a,b|
+              yield_func1(a+b) do |a|
+                a[0]
+              end
+            end
+          end
+        end
+        CODE
+      IC.run_spec(<<-'CODE').should eq %(41)
+        a = 42
+        yield_func1(0) do |a|
+          yield_func2(a[0] + 10) { |a| a }
+        end
+        CODE
+    end
+
+    it "breaks" do
+      IC.run_spec(<<-'CODE').should eq %(3)
+        i = 0
+        while i < 10
+          break if i == 3
+          i += 1
+        end
+        i
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %({42, 31})
+        yield_func1 do
+          break 42, 31
+        end
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %(7)
+        yield_func1 do
+          yield_func1 do
+            break 42, 31
+          end
+          7
+        end
+        CODE
+    end
+
+    it "next" do
+      IC.run_spec(<<-'CODE').should eq %(9)
+        i = 0
+        x = 0
+        while i<6
+          i += 1
+          next if i % 2 == 0
+          x += i
+        end
+        x
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %(9)
+        x = 0
+        times_func(6) do |i|
+          next if i % 2 == 0
+          x += i
+        end
+        x
+        CODE
     end
   end
 end

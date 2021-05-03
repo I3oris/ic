@@ -1,131 +1,117 @@
 module IC
-  # Context when a function is call, contain the slots for instance of function vars (args)
-  class FunctionCallContext
-    getter receiver, args, function_name
+  module CallStack
+    record FunctionCallContext,
+      receiver : ICObject?,
+      name : String,
+      block : Crystal::Block?
 
-    def initialize(@receiver : ICObject?, @args : Hash(String, ICObject), @function_name : String)
+    @@callstack = [] of FunctionCallContext
+
+    def self.push(receiver, name, block, &)
+      @@callstack << FunctionCallContext.new receiver, name, block
+      yield
+    ensure
+      @@callstack.pop
+    end
+
+    def self.pop(&)
+      c = @@callstack.pop? || bug! "CallStack shouldn't be empty"
+      begin
+        yield c
+      ensure
+        @@callstack << c
+      end
+    end
+
+    def self.last?
+      @@callstack.last?
+    end
+
+    def self.last_receiver
+      @@callstack.last?.try &.receiver || bug! "Cannot found a receiver on callstack"
     end
   end
 
-  @@callstack = [] of FunctionCallContext
-  @@top_level_vars = {} of String => ICObject
-  @@consts = {} of String => ICObject
-
-  def self.with_context(*args, &) : ICObject
-    @@callstack << FunctionCallContext.new(*args)
-    ret = yield
-    @@callstack.pop
-    ret
-  end
-
-  def self.clear_callstack
-    @@callstack.clear
-  end
-
-  def self.run_method(receiver, a_def, args) : ICObject
-    if a_def.args.size != args.size
-      bug! "args doesn't matches with this def"
-    end
+  private def self.bind_args(obj, args)
     hash = {} of String => ICObject
-    a_def.args.each_with_index { |a, i| hash[a.name] = args[i] }
+    obj.args.each_with_index do |a, i|
+      if (enum_t = a.type).is_a? Crystal::EnumType && args[i].type.cr_type.is_a? Crystal::SymbolType
+        puts "converted #{a.name}(#{args[i].result}) to enum"
+        hash[a.name] = IC.enum_from_symbol(enum_t, args[i])
+      else
+        hash[a.name] = args[i]
+      end
+    end
+    hash
+  end
 
-    receiver ||= @@callstack.last?.try &.receiver # if receiver if nil, take the receiver of the last call
+  # private def self.transform_symbols_to_enum(obj, args)
+  # obj.args.each_with_index do |a, i|
+  # end
 
-    self.with_context(receiver, hash, a_def.name) { run_method_body(a_def) }
+  def self.run_method(receiver, a_def, args, block, id) : ICObject
+    bug! "Args doesn't matches with this def" if a_def.args.size != args.size
+
+    # if receiver if nil, take the receiver of the last call:
+    receiver ||= CallStack.last?.try &.receiver
+
+    VarStack.push(bind_args(a_def, args)) do
+      CallStack.push(receiver, a_def.name, block) do
+        run_method_body(a_def)
+      end
+    end
   end
 
   private def self.run_method_body(a_def)
     a_def.body.run
   end
 
-  def self.get_var(name) : ICObject
-    if c = @@callstack.last?
-      case name
-      when "self"
-        c.receiver || bug! "Cannot found receiver for 'self'"
-      else
-        c.args[name]? || bug! "Cannot found argument '#{name}'"
+  def self.yield(args) : ICObject
+    CallStack.pop do |c|
+      VarStack.pop(all_yield_vars: true) do
+        bug! "Cannot found the yield block" unless block = c.block
+
+        # If a tuple is yielded, it must be splatted, unless the block have one argument:
+        # i.e:
+        # ```
+        # def foo
+        #   yield({0, 1, 2})
+        # end
+        #
+        # foo { |a, b| puts(a, b) } # => 0 # => 1
+        # foo { |a| puts(a) }       # => {0,1,2}
+        # ```
+        if args.size == 1 && args[0].type.cr_type.is_a? Crystal::TupleInstanceType
+          unless block.args.size == 1
+            tuple = args[0]
+            args = tuple.type.map_ivars { |name| tuple[name] }
+          end
+        end
+
+        VarStack.push(bind_args(block, args), yield_vars: true) do
+          block.body.run
+        end
       end
-    else
-      @@top_level_vars[name]? || bug! "Cannot found top level var '#{name}'"
     end
   end
 
-  def self.assign_var(name, value : ICObject, uninitialized? = false) : ICObject
-    if c = @@callstack.last?
-      c.args[name] = value
-    else
-      return value if uninitialized? && @@top_level_vars[name]?
-      @@top_level_vars[name] = value
-    end
+  def self.handle_break(e, id)
+    e.call_id == id ? e.value : (::raise e)
   end
 
-  def self.get_ivar(name) : ICObject
-    if c = @@callstack.last?
-      c.receiver.try &.[name] || bug! "Cannot found receiver for var '#{name}'"
-    else
-      bug! "Trying to access an ivar without context"
-    end
+  def self.handle_next(e, id)
+    e.value
   end
 
-  def self.assign_ivar(name, value : ICObject) : ICObject
-    if c = @@callstack.last?
-      c.receiver.try(&.[name] = value) || bug! "Cannot found receiver for ivar '#{name}'"
-    else
-      bug! "Trying to assign an ivar without context"
-    end
-  end
-
-  def self.get_const(name)
-    @@consts[name]? || bug! "Cannot found the CONST '#{name}'"
-  end
-
-  def self.assign_const(name, value : ICObject) : ICObject
-    @@consts[name] = value
-  end
-
-  def self.underscore=(value : ICObject)
-    @@top_level_vars["__"] = value
-    @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type.cr_type
-  end
-
-  def self.clear_vars
-    @@program.@vars.clear
-    @@top_level_vars.clear
-  end
-
-  def self.clear_const
-    @@consts.clear
-  end
-
-  def self.declared_vars_syntax
-    vars = [Set{"__"}]
-    # use @@program.vars ?
-    @@top_level_vars.each do |name, _|
-      vars.last.add(name)
-    end
-    vars
-  end
-
-  def self.declared_vars
-    vars_names = @@top_level_vars.keys
-    @@program.vars.select &.in? vars_names
-  end
-
-  def self.reset
-    IC.clear_vars
-    IC.clear_callstack
-    IC.clear_const
-    @@program = Crystal::Program.new
-    IC.run_file "./ic_prelude.cr"
-    @@result = IC.nop
-    @@busy = false
-    IC.underscore = IC.nil
+  def self.handle_return(e)
+    e.value
   end
 
   def self.current_function_name
-    @@callstack.last?.try &.function_name || bug! "Trying to get the current function name, without having call a function"
+    CallStack.last?.try &.name || "Cannot found the current function name"
   end
+
+  # Symbol & type id :
 
   def self.symbol_value(name : String)
     IC.program.symbols.index(name) || begin

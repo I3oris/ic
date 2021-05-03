@@ -26,11 +26,12 @@ module IC::Highlighter
   class_getter? is_str = false
   class_getter line_number = 0
   class_setter invitation : Proc(String) = ->{ "" }
+  @@no_invitation = false
 
   def self.invitation
-    i = @@invitation.call
+    invit = @@no_invitation ? "" : @@invitation.call
     @@line_number += 1
-    i
+    invit
   end
 
   KEYWORDS = Set{
@@ -59,11 +60,10 @@ module IC::Highlighter
     :"+=", :"-=", :"*=", :"/=", :"//=", :"|=", :"&=", :"%=",
   }
 
-  def self.highlight(code, *, no_invitation = false)
+  def self.highlight(code, *, @@no_invitation = false)
     @@is_str = false
     @@line_number = 0
     highlight_stack.clear
-    invit = no_invitation ? "" : self.invitation
     error = false
 
     lexer = Crystal::Lexer.new(code)
@@ -73,7 +73,7 @@ module IC::Highlighter
 
     # Colorize the *code* following the `Lexer`:
     colorized = String.build do |io|
-      io.print invit
+      io.print self.invitation
       begin
         highlight_normal_state lexer, io
         io.puts "\e[m"
