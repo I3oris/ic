@@ -36,7 +36,6 @@ module IC
     hash = {} of String => ICObject
     obj.args.each_with_index do |a, i|
       if (enum_t = a.type).is_a? Crystal::EnumType && args[i].type.cr_type.is_a? Crystal::SymbolType
-        puts "converted #{a.name}(#{args[i].result}) to enum"
         hash[a.name] = IC.enum_from_symbol(enum_t, args[i])
       else
         hash[a.name] = args[i]
