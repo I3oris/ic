@@ -6,6 +6,9 @@ IC will execute crystal code without never compile it. In addition of giving res
 
 ## Installation
 
+You need to install the same dependencies as the crystal compiler, follow the instructions [here](https://github.com/crystal-lang/crystal/wiki/All-required-libraries).
+
+Then:
 ```sh
 git clone https://github.com/I3oris/ic.git
 
@@ -37,6 +40,17 @@ cd ic && make
 * Lib
 * Fibers
 * ...
+
+## Troubleshooting
+
+### Installation
+
+If you get an error `Undefined symbols for architecture x86_64: "llvm::AtomicCmpXchgInst::AtomicCmpXchgInst...` (#1), that mean your crystal compiler use a different version of llvm than this installed on your system. (check `crystal --version` and `llvm-config --version`)
+
+To fix it, you can install the compiler from [sources](https://crystal-lang.org/install/from_sources/) (if it's not already done) and compile IC with it:
+```sh
+make COMPILER=path/to/crystal-compiler/bin/crystal
+```
 
 ## How IC works?
 
