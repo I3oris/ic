@@ -35,7 +35,7 @@ module IC
   private def self.bind_args(obj, args)
     hash = {} of String => ICObject
     obj.args.each_with_index do |a, i|
-      if (enum_t = a.type).is_a? Crystal::EnumType && args[i].type.cr_type.is_a? Crystal::SymbolType
+      if (enum_t = a.type).is_a? Crystal::EnumType && args[i].type.is_a? Crystal::SymbolType
         hash[a.name] = IC.enum_from_symbol(enum_t, args[i])
       else
         hash[a.name] = args[i]
@@ -43,10 +43,6 @@ module IC
     end
     hash
   end
-
-  # private def self.transform_symbols_to_enum(obj, args)
-  # obj.args.each_with_index do |a, i|
-  # end
 
   def self.run_method(receiver, a_def, args, block, id) : ICObject
     bug! "Args doesn't matches with this def" if a_def.args.size != args.size
@@ -80,7 +76,7 @@ module IC
         # foo { |a, b| puts(a, b) } # => 0 # => 1
         # foo { |a| puts(a) }       # => {0,1,2}
         # ```
-        if args.size == 1 && args[0].type.cr_type.is_a? Crystal::TupleInstanceType
+        if args.size == 1 && args[0].type.is_a? Crystal::TupleInstanceType
           unless block.args.size == 1
             tuple = args[0]
             args = tuple.type.map_ivars { |name| tuple[name] }
@@ -116,7 +112,7 @@ module IC
     IC.program.symbols.index(name) || begin
       # If name not found in the Program, add it.
       #
-      # This append on a CONST initialization (i.e. FOO = :foo)
+      # This happens on a CONST initialization (i.e. FOO = :foo)
       # In this case crystal don't execute the semantics of :foo
       # because it 'see' that FOO is not used.
       IC.program.symbols.add(name).index(name).not_nil!
@@ -131,9 +127,9 @@ module IC
   end
 
   # This Set permit to associate an unique id for each type, works like the `Program::symbol` set.
-  @@crystal_types = Set(Crystal::Type).new
+  @@crystal_types = Set(Type).new
 
-  def self.type_id(type : Crystal::Type, instance = true)
+  def self.type_id(type : Type, instance = true)
     if instance && type.is_a? Crystal::UnionType || type.is_a? Crystal::VirtualType
       bug! "Cannot get crystal_id_type on a union or virtual type"
     end

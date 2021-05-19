@@ -3,24 +3,24 @@ module IC
     def self.call(p : Crystal::Primitive)
       case p.name
       when "allocate"                       then allocate(p.type)
-      when "binary"                         then binary(IC.current_function_name, IC.get_var("self"), IC.get_var("other"))
-      when "convert"                        then convert(IC.current_function_name, IC.get_var("self"))
-      when "unchecked_convert"              then convert(IC.current_function_name, IC.get_var("self"))
+      when "binary"                         then binary(IC.current_function_name, IC.self_var, IC.get_var("other"))
+      when "convert"                        then convert(IC.current_function_name, IC.self_var)
+      when "unchecked_convert"              then convert(IC.current_function_name, IC.self_var)
       when "pointer_malloc"                 then pointer_malloc(p.type, IC.get_var("size"))
       when "pointer_new"                    then pointer_new(p.type, IC.get_var("address"))
-      when "pointer_realloc"                then pointer_realloc(IC.get_var("self"), IC.get_var("size"))
-      when "pointer_get"                    then pointer_get(IC.get_var("self"))
-      when "pointer_set"                    then pointer_set(IC.get_var("self"), IC.get_var("value"))
-      when "pointer_add"                    then pointer_add(IC.get_var("self"), IC.get_var("offset"))
-      when "pointer_diff"                   then pointer_diff(IC.get_var("self"), IC.get_var("other"))
-      when "pointer_address"                then pointer_address(IC.get_var("self"))
-      when "tuple_indexer_known_index"      then tuple_indexer(IC.get_var("self"), p.as(Crystal::TupleIndexer).index)
-      when "object_id"                      then object_id(IC.get_var("self"))
-      when "object_crystal_type_id"         then object_crystal_type_id(IC.get_var("self"))
-      when "class_crystal_instance_type_id" then class_crystal_instance_type_id(IC.get_var("self"))
-      when "class"                          then _class(IC.get_var("self"))
-      when "symbol_to_s"                    then symbol_to_s(IC.get_var("self"))
-      when "enum_value"                     then enum_value(IC.get_var("self"))
+      when "pointer_realloc"                then pointer_realloc(IC.self_var, IC.get_var("size"))
+      when "pointer_get"                    then pointer_get(IC.self_var)
+      when "pointer_set"                    then pointer_set(IC.self_var, IC.get_var("value"))
+      when "pointer_add"                    then pointer_add(IC.self_var, IC.get_var("offset"))
+      when "pointer_diff"                   then pointer_diff(IC.self_var, IC.get_var("other"))
+      when "pointer_address"                then pointer_address(IC.self_var)
+      when "tuple_indexer_known_index"      then tuple_indexer(IC.self_var, p.as(Crystal::TupleIndexer).index)
+      when "object_id"                      then object_id(IC.self_var)
+      when "object_crystal_type_id"         then object_crystal_type_id(IC.self_var)
+      when "class_crystal_instance_type_id" then class_crystal_instance_type_id(IC.self_var)
+      when "class"                          then _class(IC.self_var)
+      when "symbol_to_s"                    then symbol_to_s(IC.self_var)
+      when "enum_value"                     then enum_value(IC.self_var)
       when "enum_new"                       then enum_new(p.type, IC.get_var("value"))
         # TODO:
         # build in:
@@ -45,7 +45,7 @@ module IC
     end
 
     private def self.allocate(type)
-      ICObject.new ICType.new type || bug! "No type to allocate"
+      ICObject.new type || bug! "No type to allocate"
     end
 
     private def self.binary(name, arg0 : ICObject, arg1 : ICObject)
@@ -98,42 +98,32 @@ module IC
       # TODO rescue OverflowError
     end
 
-    private def self.pointer_malloc(pointer_type : Crystal::Type, size : ICObject)
-      type_var = ICType.new(pointer_type).type_vars["T"]
+    private def self.pointer_malloc(type : Type, size : ICObject)
+      size = size.as_number.to_u64 * type.pointer_element_size
 
-      size = size.as_number.to_u64 * type_var.size
-      p = ICObject.new(ICType.pointer_of(type_var.cr_type))
-      p.as_uint64 = Pointer(Byte).malloc(size).address
-      p
+      IC.pointer(type, address: Pointer(Byte).malloc(size).address)
     end
 
-    private def self.pointer_new(pointer_type : Crystal::Type, address : ICObject)
-      type_var = ICType.new(pointer_type).type_vars["T"]
-
-      p = ICObject.new(ICType.pointer_of(type_var.cr_type))
-      p.as_uint64 = address.as_number.to_u64
-      p
+    private def self.pointer_new(type : Type, address : ICObject)
+      IC.pointer(type, address: address.as_number.to_u64)
     end
 
     private def self.pointer_realloc(p : ICObject, size : ICObject)
-      type = p.type.type_vars["T"]
       src = Pointer(Byte).new(p.as_uint64)
+      size = size.as_number.to_u64 * p.type.pointer_element_size
 
-      size = size.as_number.to_u64 * type.size
-      p2 = ICObject.new(ICType.pointer_of(type.cr_type))
-      p2.as_uint64 = src.realloc(size).address
-      p2
+      IC.pointer(p.type, address: src.realloc(size).address)
     end
 
     private def self.pointer_set(p : ICObject, value : ICObject)
-      type = p.type.type_vars["T"]
+      type = p.type.pointer_type_var
       dst = Pointer(Byte).new(p.as_uint64)
 
       type.write value, to: dst
     end
 
     private def self.pointer_get(p : ICObject)
-      type = p.type.type_vars["T"]
+      type = p.type.pointer_type_var
       src = Pointer(Byte).new(p.as_uint64)
 
       type.read from: src
@@ -141,18 +131,18 @@ module IC
 
     private def self.pointer_add(p : ICObject, x : ICObject)
       new_p = ICObject.new(p.type)
-      new_p.as_uint64 = p.as_uint64 + x.as_int32*p.type.type_vars["T"].size
+      new_p.as_uint64 = p.as_uint64 + x.as_int32*p.type.pointer_element_size
       new_p
     end
 
     private def self.pointer_diff(p : ICObject, other : ICObject)
-      type = p.type.type_vars["T"]
+      size = p.type.pointer_element_size
       addr1 = p.as_uint64
       addr2 = other.as_uint64
       if addr1 > addr2
-        IC.number(((addr1 - addr2)//type.size).to_i64)
+        IC.number(((addr1 - addr2)//size).to_i64)
       else
-        IC.number(-((addr2 - addr1)//type.size).to_i64)
+        IC.number(-((addr2 - addr1)//size).to_i64)
       end
     end
 
@@ -173,7 +163,7 @@ module IC
     end
 
     private def self.object_crystal_type_id(obj : ICObject)
-      IC.number(IC.type_id(obj.type.cr_type))
+      IC.number(IC.type_id(obj.type))
     end
 
     private def self.class_crystal_instance_type_id(obj : ICObject)
@@ -181,7 +171,7 @@ module IC
     end
 
     private def self._class(obj : ICObject)
-      IC.class(obj.type.cr_type.metaclass)
+      IC.class(obj.type.metaclass)
     end
 
     private def self.symbol_to_s(obj : ICObject)
@@ -192,7 +182,7 @@ module IC
       IC.number(obj.enum_value)
     end
 
-    private def self.enum_new(type : Crystal::Type, value : ICObject)
+    private def self.enum_new(type : Type, value : ICObject)
       IC.enum(type.as(Crystal::EnumType), value.as_number)
     end
   end

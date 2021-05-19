@@ -29,11 +29,11 @@ module IC
 
   def self.cmd_vars
     VarStack.top_level_vars.each do |name, value|
-      puts Highlighter.highlight(" #{name} : #{value.type.cr_type} = #{value.result}", no_invitation: true)
+      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}", no_invitation: true)
     end
     puts unless @@consts.empty?
     @@consts.each do |name, value|
-      puts Highlighter.highlight(" #{name} : #{value.type.cr_type} = #{value.result}", no_invitation: true)
+      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}", no_invitation: true)
     end
   end
 

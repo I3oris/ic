@@ -1,6 +1,27 @@
 require "./spec_helper"
 
 describe IC do
+  describe Crystal::Type do
+    it "describe Nil" do
+      IC.program.nil.reference?.should eq false
+      IC.program.nil.ic_size.should eq 0
+      IC.program.nil.copy_size.should eq 8
+    end
+
+    it "describe Int32" do
+      IC.program.int32.reference?.should eq false
+      IC.program.int32.ic_size.should eq 4
+      IC.program.int32.copy_size.should eq 4
+    end
+
+    it "describe String" do
+      IC.program.string.reference?.should eq true
+      IC.program.string.ic_size.should eq 8
+      IC.program.string.copy_size.should eq 8
+      IC.program.string.ic_class_size.should eq 16
+    end
+  end
+
   describe :scenarios do
     it "runs scenario 1" do
       IC.run_spec("1+1").should eq "2"
@@ -511,6 +532,15 @@ describe IC do
           x += i
         end
         x
+        CODE
+    end
+
+    it "cover the good scope" do
+      IC.run_spec(<<-'CODE').should eq %({42, 0})
+        x,y = 0,0
+        yield_func1(0) { |a| x = 42 } # should modify x
+        yield_func2(0) { |y| y = 42 } # should not modify y
+        {x, y}
         CODE
     end
   end

@@ -340,7 +340,7 @@ class Crystal::PointerOf
   def run
     if (exp = self.exp).is_a?(InstanceVar)
       # when it is a pointerof an ivar, take the address of `self` + offsetof @ivar
-      IC.get_var("self").pointerof(ivar: exp.name)
+      IC.self_var.pointerof(ivar: exp.name)
     else
       self.exp.run.pointerof_self
     end
@@ -377,7 +377,7 @@ end
 
 class Crystal::RespondsTo
   def run
-    type = self.obj.run.type.cr_type
+    type = self.obj.run.type
     IC.bool !!(type.has_def? self.name)
   end
 end

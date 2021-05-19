@@ -39,14 +39,13 @@ module IC
 
   def self.print_vars
     VarStack.vars.last.vars.each do |name, value|
-      debug_msg "#{name} : #{value.type.cr_type} = #{value.result}"
+      debug_msg "#{name} : #{value.type} = #{value.result}"
     end
   end
 
   # class_getter yieldstack
 
   private def self.run_method_body(a_def)
-    # context = CallStack.callstack.last.as(CallStack::FunctionCallContext)
     context = CallStack.last?.not_nil!
 
     puts
@@ -56,7 +55,7 @@ module IC
     puts " ====="
 
     if r = context.receiver
-      debug_msg "[receiver] : #{r.type.cr_type} = #{r.result}"
+      debug_msg "[receiver] : #{r.type} = #{r.result}"
     end
     print_vars
     puts
@@ -114,7 +113,7 @@ module IC
     def print_debug
       return if nop?
       print "\n=== ICObject: 0x#{@raw.address.to_s(16)}"
-      if @type.reference_like?
+      if @type.reference?
         addr = @raw.as(UInt64*).value
         if addr == 0
           puts
@@ -127,13 +126,13 @@ module IC
       puts
       @type.print_debug
       puts "==="
-      if @type.cr_type.pointer?
+      if @type.pointer?
         # for pointers display the first allocated slot
-        size = @type.type_vars["T"].size
+        size = @type.pointer_element_size
         addr = @raw.as(UInt64*).value
         data = Pointer(Byte).new(addr)
       else
-        size = @type.reference_like? ? @type.class_size : @type.size
+        size = @type.reference? ? @type.ic_class_size : @type.ic_size
         data = self.data
       end
       size.times do |i|
@@ -150,19 +149,20 @@ module IC
     end
   end
 
-  class ICType
-    def print_debug(visited = [] of ICType, indent = 0)
+  class Crystal::Type
+    def print_debug(visited = [] of Type, indent = 0)
+      print "#{self}[#{ic_size}]"
+      print "(#{ic_class_size})" if reference?
+      print ':' unless self.ic_ivars_layout.empty?
+      puts
+
       if self.in? visited
-        print "..."
+        print "..." unless self.ic_ivars_layout.empty?
         return
       end
       visited << self
 
-      print "#{@cr_type}[#{@size}]"
-      print "(#{@class_size})" if @cr_type.reference_like?
-      print ':' unless @instance_vars.empty?
-      puts
-      @instance_vars.each do |name, layout|
+      self.ic_ivars_layout.each do |name, layout|
         print "  "*(indent + 1)
         print "#{name}[+#{layout[0]}]: \t"
         layout[1].print_debug(visited, indent + 1)

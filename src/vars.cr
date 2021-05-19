@@ -43,7 +43,7 @@ module IC
 
     def self.[]=(name, value)
       @@vars.reverse_each do |v|
-        next if v.yield_vars
+        next if v.yield_vars unless v.vars[name]?
         return v.vars[name] = value
       end
       bug! "Cannot set the var '#{name}', VarStack contain only yield vars"
@@ -92,7 +92,7 @@ module IC
 
   def self.underscore=(value : ICObject)
     VarStack.top_level_vars["__"] = value
-    @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type.cr_type
+    @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type
   end
 
   def self.declared_vars_syntax
