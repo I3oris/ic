@@ -89,13 +89,12 @@ end
 class Crystal::Assign
   def run
     case t = self.target
-    when Crystal::Var         then IC.assign_var(t.name, self.value.run)
-    when Crystal::InstanceVar then IC.assign_ivar(t.name, self.value.run)
-    when Crystal::ClassVar    then todo "ClassVar assign"
-    when Crystal::Underscore  then ic_error "Can't assign to '_'"
-      # TODO use full name:
-    when Crystal::Path then IC.assign_const(t.target_const.not_nil!.name, self.value.run)
-    else                    bug! "Unexpected assign target #{t.class}"
+    when Var         then IC.assign_var(t.name, self.value.run)
+    when InstanceVar then IC.assign_ivar(t.name, self.value.run)
+    when ClassVar    then todo "ClassVar assign"
+    when Underscore  then ic_error "Can't assign to '_'"
+    when Path        then IC.assign_const(t.target_const.not_nil!.full_name, self.value.run)
+    else bug! "Unexpected assign target #{t.class}"
     end
   end
 end
@@ -103,10 +102,10 @@ end
 class Crystal::UninitializedVar
   def run
     case v = self.var
-    when Crystal::Var         then IC.assign_var(v.name, IC.uninitialized(self.type))
-    when Crystal::InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
-    when Crystal::ClassVar    then todo "Uninitialized cvar"
-    else                           bug! "Unexpected uninitialized-assign target #{v.class}"
+    when Var         then IC.assign_var(v.name, IC.uninitialized(self.type))
+    when InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
+    when ClassVar    then todo "Uninitialized cvar"
+    else                  bug! "Unexpected uninitialized-assign target #{v.class}"
     end
   end
 end
@@ -141,15 +140,14 @@ end
 
 class Crystal::EnumDef
   def run
+    type = resolved_type || bug! "No type found for EnumDef"
+
     @members.each do |arg|
       case arg
       when Arg
-        # value = arg.default_value.try &.run || bug! "No value found on enum member #{arg}"
         value = arg.default_value.as?(NumberLiteral).try &.integer_value || bug! "No integer value found on enum member #{arg}"
 
-        # TODO use full name:
-        # bug! "Expected a enum type on the enum menber #{arg}, not #{type}" unless (type=arg.type).is_a? Crystal::EnumType
-        IC.assign_const(arg.name, IC.enum(resolved_type.not_nil!, value))
+        IC.assign_const("#{type.full_name}::#{arg.name}", IC.enum(type, value))
       when Def
         arg.run
       else
@@ -196,7 +194,7 @@ end
 class Crystal::Path
   def run
     if const = self.target_const
-      IC.get_const(const.name)
+      IC.get_const(const.full_name)
     elsif s = self.syntax_replacement
       s.run
     else
