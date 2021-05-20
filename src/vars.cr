@@ -1,5 +1,6 @@
 module IC
   @@consts = {} of String => ICObject
+  @@global = {} of String => ICObject
 
   module VarStack
     record Vars,
@@ -63,15 +64,23 @@ module IC
   end
 
   def self.get_var(name) : ICObject
-    if name == "self"
+    case name
+    when "self"
       self_var
+    when .starts_with? '$'
+      get_global(name)
     else
       VarStack[name]
     end
   end
 
   def self.assign_var(name, value : ICObject) : ICObject
-    VarStack[name] = value
+    case name
+    when .starts_with? '$'
+      assign_global(name, value)
+    else
+      VarStack[name] = value
+    end
   end
 
   def self.get_ivar(name) : ICObject
@@ -82,12 +91,20 @@ module IC
     CallStack.last_receiver[name] = value
   end
 
-  def self.get_const(name)
+  def self.get_const(name) : ICObject
     @@consts[name]? || bug! "Cannot found the CONST '#{name}'"
   end
 
   def self.assign_const(name, value : ICObject) : ICObject
     @@consts[name] = value
+  end
+
+  def self.get_global(name) : ICObject
+    @@global[name]? || IC.nil
+  end
+
+  def self.assign_global(name, value : ICObject) : ICObject
+    @@global[name] = value
   end
 
   def self.underscore=(value : ICObject)

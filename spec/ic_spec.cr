@@ -388,6 +388,16 @@ describe IC do
     end
   end
 
+  describe :globals do
+    # undefined method 'not_nil!' for Nil
+    pending "use $~" do
+      IC.run_spec(<<-'CODE').should eq %("foo")
+        set_global("foo")
+        $~
+       CODE
+    end
+  end
+
   describe :union do
     # got SpecClass+ instead of SpecClass
     pending "gives a good union virtual type" do

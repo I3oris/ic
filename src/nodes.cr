@@ -86,6 +86,12 @@ class Crystal::InstanceVar
   end
 end
 
+class Crystal::Global
+  def run
+    IC.get_global(self.name)
+  end
+end
+
 class Crystal::Assign
   def run
     case t = self.target
@@ -94,7 +100,8 @@ class Crystal::Assign
     when ClassVar    then todo "ClassVar assign"
     when Underscore  then ic_error "Can't assign to '_'"
     when Path        then IC.assign_const(t.target_const.not_nil!.full_name, self.value.run)
-    else bug! "Unexpected assign target #{t.class}"
+    when Global      then IC.assign_global(t.name, self.value.run)
+    else                  bug! "Unexpected assign target #{t.class}"
     end
   end
 end

@@ -111,4 +111,8 @@ IC.parse(<<-'CODE').run
     {x, args, options}
   end
 
+  def set_global(value)
+    $~ = value
+  end
+
   CODE

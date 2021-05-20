@@ -137,8 +137,7 @@ module IC
     if id = @@crystal_types.index(type)
       id
     else
-      @@crystal_types << type
-      @@crystal_types.index(type).not_nil!
+      @@crystal_types.add(type).index(type).not_nil!
     end
   end
 
