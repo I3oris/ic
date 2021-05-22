@@ -86,6 +86,12 @@ class Crystal::InstanceVar
   end
 end
 
+class Crystal::ClassVar
+  def run
+    IC.get_cvar(self.name, self.var)
+  end
+end
+
 class Crystal::Global
   def run
     IC.get_global(self.name)
@@ -97,10 +103,10 @@ class Crystal::Assign
     case t = self.target
     when Var         then IC.assign_var(t.name, self.value.run)
     when InstanceVar then IC.assign_ivar(t.name, self.value.run)
-    when ClassVar    then todo "ClassVar assign"
-    when Underscore  then ic_error "Can't assign to '_'"
-    when Path        then IC.assign_const(t.target_const.not_nil!.full_name, self.value.run)
+    when ClassVar    then IC.assign_cvar(t.name, self.value.run, t.var.owner)
     when Global      then IC.assign_global(t.name, self.value.run)
+    when Path        then IC.assign_const(t.target_const.not_nil!.full_name, self.value.run)
+    when Underscore  then ic_error "Can't assign to '_'"
     else                  bug! "Unexpected assign target #{t.class}"
     end
   end
@@ -183,13 +189,25 @@ class Crystal::VisibilityModifier
   end
 end
 
+class Crystal::Include
+  def run
+    IC.nop
+  end
+end
+
+class Crystal::Extend
+  def run
+    IC.nop
+  end
+end
+
 class Crystal::TypeDeclaration
   def run
     value = self.value.try &.run || IC.nil
     case v = self.var
-    when Var then IC.assign_var(v.name, value)
+    when Var         then IC.assign_var(v.name, value)
+    when ClassVar    then IC.assign_cvar(v.name, value, v.var.owner)
     when InstanceVar # nothing
-    when ClassVar    # nothing
     else bug! "Unexpected var #{v.class} in type declaration"
     end
     IC.nil

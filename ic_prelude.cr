@@ -26,6 +26,26 @@ class Object
     getter {{*names}}
     setter {{*names}}
   end
+
+  macro class_getter(*names)
+    {% for n in names %}
+      def self.{{n.id}}
+        @@{{n.id}}
+      end
+    {% end %}
+  end
+
+  macro class_setter(*names)
+    {% for n in names %}
+      def self.{{n.id}}=(@@{{n.id}})
+      end
+    {% end %}
+  end
+
+  macro class_property(*names)
+    class_getter {{*names}}
+    class_setter {{*names}}
+  end
 end
 
 struct Int

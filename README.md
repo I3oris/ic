@@ -29,8 +29,6 @@ cd ic && make
 
 #### Not implemented:
 * some Primitives (in progress)
-* ClassVar
-* CONST (in progress)
 * Union Type (almost supported)
 * InstanceVar Initializers
 * raise

@@ -388,6 +388,38 @@ describe IC do
     end
   end
 
+  describe :class_vars do
+    it "initializes cvars" do
+      IC.run_spec(<<-'CODE').should eq %({nil, "bar", nil, "sub_bar", nil, "bar"})
+        {
+          SpecClass.c_foo,
+          SpecClass.c_bar,
+          SpecSubClass1.c_foo,
+          SpecSubClass1.c_bar,
+          SpecSubClass2.c_foo,
+          SpecSubClass2.c_bar,
+        }
+        CODE
+    end
+
+    it "sets cvars" do
+      IC.run_spec(<<-'CODE').should eq %({:a, "bar", nil, "b", :c, :d})
+        SpecClass.c_foo = :a
+        SpecSubClass1.c_bar = "b"
+        SpecSubClass2.c_foo = :c
+        SpecSubClass2.c_bar = :d
+        {
+          SpecClass.c_foo,
+          SpecClass.c_bar,
+          SpecSubClass1.c_foo,
+          SpecSubClass1.c_bar,
+          SpecSubClass2.c_foo,
+          SpecSubClass2.c_bar,
+        }
+        CODE
+    end
+  end
+
   describe :globals do
     # undefined method 'not_nil!' for Nil
     pending "use $~" do

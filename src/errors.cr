@@ -49,6 +49,7 @@ class Crystal::Error < Exception
       "Unexpected EOF on heredoc identifier",
       "unterminated parenthesized expression",
       "Unterminated string literal",
+      "unterminated hash literal",
       "Unterminated command literal",
       "unterminated array literal",
       "unterminated tuple literal",

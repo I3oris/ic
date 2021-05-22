@@ -18,6 +18,10 @@ IC.parse(<<-'CODE').run
     property y
     property name
 
+    class_property c_foo, c_bar
+    @@c_foo : Symbol?
+    @@c_bar = "bar"
+
     def initialize(@x = 0, @y = 0, @name = "unnamed")
     end
   end
@@ -25,17 +29,16 @@ IC.parse(<<-'CODE').run
   class SpecSubClass1 < SpecClass
     @bar = "foo"
     property bar
+
+    @@c_bar = "sub_bar"
   end
 
   class SpecSubClass2 < SpecClass
     @baz = :baz
     property baz
-  end
 
-  # class SpecSubSubClass < SpecSubClass1
-  #   @bam = :bam
-  #   property bam
-  # end
+    @@c_foo : Symbol?
+  end
 
   struct SpecStruct
     property x
