@@ -173,3 +173,32 @@ def loop
     yield
   end
 end
+
+module ICOUT
+  @@out = ""
+
+  def self.<<(str)
+    @@out += str
+    self
+  end
+
+  def self.flush
+    o = @@out
+    @@out = ""
+    o
+  end
+end
+
+def puts(x)
+  ICOUT << x.to_s << "  "
+end
+
+def flush
+  ICOUT.flush
+end
+
+class String
+  def to_s
+    self
+  end
+end

@@ -21,10 +21,6 @@ class Crystal::Type
     nil_type? ? 8u64 : self.ic_size
   end
 
-  def reference?
-    nil_type? ? false : reference_like?
-  end
-
   private def get_ivars_layout
     ivars_layout = {} of String => {UInt64, Type}
 
@@ -50,23 +46,6 @@ class Crystal::Type
   private def llvm_struct_type?
     (is_a?(NonGenericClassType) || is_a?(GenericClassInstanceType)) &&
       !is_a?(PointerInstanceType) && !is_a?(ProcInstanceType)
-  end
-
-  # IC disallow instance of ICObject to be virtual or union typed.
-  def instantiable?
-    !is_a? UnionType && !is_a? VirtualType
-  end
-
-  def offset_and_type_of(name)
-    self.ic_ivars_layout[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
-  end
-
-  def pointer_type_var
-    raise "Called pointer_type_var on a non-pointer type"
-  end
-
-  def pointer_element_size
-    pointer_type_var.ic_size
   end
 
   # Considers *src* as this *type*, and returns the ICObject read.
@@ -166,15 +145,15 @@ class Crystal::Type
     end
     a
   end
-end
 
-class Crystal::PointerInstanceType
-  def pointer_type_var
-    @type_vars["T"].type
+  def offset_and_type_of(name)
+    self.ic_ivars_layout[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
   end
-end
 
-class Crystal::Type
+  def reference?
+    nil_type? ? false : reference_like?
+  end
+
   def <(other : Type)
     self_type = self.devirtualize
     other_type = other.devirtualize
@@ -188,13 +167,34 @@ class Crystal::Type
   end
 
   def string?
-    self.to_s == "String"
+    self.is_a? NamedType && self.name == "String"
   end
 
   def array?
-    self.to_s.starts_with? "Array"
+    self.is_a? NamedType && self.name == "Array"
   end
 
+  # IC disallow instance of ICObject to be virtual or union typed.
+  def instantiable?
+    !is_a? UnionType && !is_a? VirtualType
+  end
+
+  def pointer_type_var
+    raise "Called pointer_type_var on a non-pointer type"
+  end
+
+  def pointer_element_size
+    pointer_type_var.ic_size
+  end
+end
+
+class Crystal::PointerInstanceType
+  def pointer_type_var
+    @type_vars["T"].type
+  end
+end
+
+class Crystal::Type
   # Yields each ivar with its type: {name, Type}
   def each_ivar_types(&)
     # classes start with a TYPE_ID : Int32

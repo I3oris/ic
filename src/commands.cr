@@ -19,6 +19,8 @@ module IC
 
   def self.cmd_reset
     VarStack.reset
+    @@cvars.clear
+    @@global.clear
     @@consts.clear
     @@program = Crystal::Program.new
     IC.run_file "./ic_prelude.cr"

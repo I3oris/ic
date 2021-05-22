@@ -34,6 +34,7 @@ module IC
 
   def self.parse(text)
     ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
+    ast_node = ICTransformer.new.transform(ast_node)
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     ast_node
@@ -157,3 +158,24 @@ end
 #     node
 #   end
 # end
+
+class ICTransformer < Crystal::Transformer
+  # Because crystal analyses the type of a constant only when used,
+  # replace all occurrences of `FOO=some_exp` by `(FOO=some_exp; FOO)`
+  def transform(node : Crystal::Assign)
+    if (t = node.target).is_a? Crystal::Path
+      Crystal::Expressions.new [node, t]
+    else
+      node
+    end
+  end
+
+  # Replace also `private FOO=some_exp` by `(private FOO=some_exp; FOO)
+  def transform(node : Crystal::VisibilityModifier)
+    if (a = node.exp).is_a? Crystal::Assign && (t = a.target).is_a? Crystal::Path
+      Crystal::Expressions.new [node, t]
+    else
+      node
+    end
+  end
+end

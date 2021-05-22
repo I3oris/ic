@@ -1,11 +1,9 @@
 module IC
   @@consts = {} of String => ICObject
   @@global = {} of String => ICObject
-  @@cvars = Hash(Type, Hash(String,ICObject)).new do |hash, key|
-    puts "new hash on key #{key}"
+  @@cvars = Hash(Type, Hash(String, ICObject)).new do |hash, key|
     hash[key] = {} of String => ICObject
   end
-   # {} of Type => Hash(String,ICObject)
 
   module VarStack
     record Vars,
@@ -96,41 +94,22 @@ module IC
     CallStack.last_receiver[name] = value
   end
 
-
-  # def lookup_cvar(name, owner)
-  #   @@cvars[type]?.try &.[name]? || begin
-  #     owner.base_type.all_subclasses.each do |subclass|
-  #       return @@cvars[subclass]?.try &.[name]? || next
-  #     end
-  #   end
-  # end
-
   def self.get_cvar(name, var) : ICObject
-    puts "get cvar #{name} on #{var.owner}"
     @@cvars[var.owner][name]? || begin
       # If cvar not found, initializer must be executed
       # If no initializer, return nil (i.e. `@@foo : Int32?` is nil)
-      puts "initializer executed for #{name} on #{var.owner}"
       @@cvars[var.owner][name] = var.initializer.try &.node.run || IC.nil
-        # @@cvars[] i.node.run
-      # bug! "Cannot found the cvar '#{name}' on #{owner}"
     end
   end
 
   def self.assign_cvar(name, value : ICObject, owner : Type) : ICObject
     @@cvars[owner][name] = value
-    # unless cvars = @@cvars[owner]?
-    #   cvars = @@cvars[owner] = {} of String => ICObject
-    # end
-    # cvars[name] = value
   end
 
-  def self.get_const(name) : ICObject
-    @@consts[name]? || bug! "Cannot found the CONST '#{name}'"
-  end
-
-  def self.assign_const(name, value : ICObject) : ICObject
-    @@consts[name] = value
+  def self.get_const_value(const) : ICObject
+    @@consts[const.full_name]? || begin
+      @@consts[const.full_name] = const.value.run
+    end
   end
 
   def self.get_global(name) : ICObject
@@ -145,10 +124,6 @@ module IC
     VarStack.top_level_vars["__"] = value
     @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type
   end
-
-  # def self.get_owner(var : Crystal::Var) : Type
-  #   var.initializer.try &.owner.as(Type) || var.owner
-  # end
 
   def self.declared_vars_syntax
     vars = [Set{"__"}]

@@ -378,12 +378,25 @@ describe IC do
         CODE
     end
 
-    # Got a "TODO: ASTNode MacroExpression" because
-    # semantic isn't executed inside the CONST
-    # initializer (because FOO3 is unused), so MacroExpression isn't expended.
-    pending "executes semantics on initializers" do
+    it "executes semantics on initializers" do
       IC.run_spec(<<-'CODE').should eq %("foo")
         FOO3=({{"foo"}})
+        CODE
+    end
+
+    it "preserves initialization order" do
+      IC.run_spec(<<-'CODE').should eq %({"1, begin A, B, end A, 2, 3", 2, 2, 1})
+        class Trace
+          @@trace = ""
+          class_property trace
+        end
+
+        Trace.trace = "1, "
+        A=(Trace.trace += "begin A, "; a=B+1; Trace.trace += "end A, "; a)
+        Trace.trace += "2, "
+        B=(Trace.trace += "B, "; 1)
+        Trace.trace += "3"
+        {Trace.trace, A, A, B}
         CODE
     end
   end
@@ -400,9 +413,7 @@ describe IC do
           SpecSubClass2.c_bar,
         }
         CODE
-    end
 
-    it "sets cvars" do
       IC.run_spec(<<-'CODE').should eq %({:a, "bar", nil, "b", :c, :d})
         SpecClass.c_foo = :a
         SpecSubClass1.c_bar = "b"

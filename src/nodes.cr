@@ -105,7 +105,7 @@ class Crystal::Assign
     when InstanceVar then IC.assign_ivar(t.name, self.value.run)
     when ClassVar    then IC.assign_cvar(t.name, self.value.run, t.var.owner)
     when Global      then IC.assign_global(t.name, self.value.run)
-    when Path        then IC.assign_const(t.target_const.not_nil!.full_name, self.value.run)
+    when Path        then IC.get_const_value(t.target_const || bug! "Cannot assign constant #{self}")
     when Underscore  then ic_error "Can't assign to '_'"
     else                  bug! "Unexpected assign target #{t.class}"
     end
@@ -153,20 +153,6 @@ end
 
 class Crystal::EnumDef
   def run
-    type = resolved_type || bug! "No type found for EnumDef"
-
-    @members.each do |arg|
-      case arg
-      when Arg
-        value = arg.default_value.as?(NumberLiteral).try &.integer_value || bug! "No integer value found on enum member #{arg}"
-
-        IC.assign_const("#{type.full_name}::#{arg.name}", IC.enum(type, value))
-      when Def
-        arg.run
-      else
-        bug! "Unexpected #{arg.class} in EnumDef"
-      end
-    end
     IC.nop
   end
 end
@@ -205,8 +191,8 @@ class Crystal::TypeDeclaration
   def run
     value = self.value.try &.run || IC.nil
     case v = self.var
-    when Var         then IC.assign_var(v.name, value)
-    when ClassVar    then IC.assign_cvar(v.name, value, v.var.owner)
+    when Var      then IC.assign_var(v.name, value)
+    when ClassVar then IC.assign_cvar(v.name, value, v.var.owner)
     when InstanceVar # nothing
     else bug! "Unexpected var #{v.class} in type declaration"
     end
@@ -219,7 +205,12 @@ end
 class Crystal::Path
   def run
     if const = self.target_const
-      IC.get_const(const.full_name)
+      value = IC.get_const_value(const)
+      if (t = type).is_a? EnumType && !value.type.is_a? EnumType
+        IC.enum(t, value.as_number)
+      else
+        value
+      end
     elsif s = self.syntax_replacement
       s.run
     else
