@@ -45,7 +45,19 @@ module IC
     end
 
     private def self.allocate(type)
-      ICObject.new type || bug! "No type to allocate"
+      obj = ICObject.new type || bug! "No type to allocate"
+
+      case type
+      when Crystal::InstanceVarInitializerContainer
+        type.all_instance_vars.each do |name, ivar|
+          obj[name] = type.get_instance_var_initializer(name).try &.value.run || IC.nil
+        end
+      when Crystal::InstanceVarContainer
+        type.all_instance_vars.each do |name, ivar|
+          obj[name] = IC.nil
+        end
+      end
+      obj
     end
 
     private def self.binary(name, arg0 : ICObject, arg1 : ICObject)

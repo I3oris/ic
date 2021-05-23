@@ -202,3 +202,9 @@ class String
     self
   end
 end
+
+struct Nil
+  def to_s
+    "nil"
+  end
+end

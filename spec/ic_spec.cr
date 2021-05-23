@@ -471,6 +471,33 @@ describe IC do
     end
   end
 
+  describe :ivars_initializers do
+    it "initializes ivars" do
+      IC.run_spec(<<-'CODE').should eq %({:foo, nil, :foo, nil, 7, :foo, nil, nil})
+        a = SpecIvarsInitializer.new
+        b = SpecSubIvarsInitializer.new
+        c = SpecIvarsInitializerGeneric(Symbol, Float64).new
+        {a.foo, a.bar, b.foo, b.bar, b.baz, c.foo, c.bar, c.t}
+        CODE
+    end
+
+    it "changes value of initialized ivars" do
+      IC.run_spec(<<-'CODE').should eq %({:FOO, "bar", :FOO2, "BAR", :FOO, "bar", :foo, nil, {:T, 3.14}})
+        a = SpecIvarsInitializer.new
+        b = SpecSubIvarsInitializer.new
+        c = SpecIvarsInitializerGeneric(Symbol, Float64).new
+        a.foo = :FOO
+        a.bar = "bar"
+        b.foo = :FOO2
+        b.bar = "BAR"
+        b.baz = a
+        c.t = {:T, 3.14}
+        baz = b.baz.as(SpecIvarsInitializer)
+        {a.foo, a.bar, b.foo, b.bar, baz.foo, baz.bar, c.foo, c.bar, c.t}
+        CODE
+    end
+  end
+
   describe :enums do
     it "declares a basic enum" do
       IC.run_spec(<<-'CODE').should eq %({0, 1, 2, 5, 3})

@@ -67,6 +67,25 @@ IC.parse(<<-'CODE').run
     end
   end
 
+  class SpecIvarsInitializer
+    @foo = :foo
+    @bar : String?
+
+    property foo, bar
+  end
+
+  class SpecSubIvarsInitializer < SpecIvarsInitializer
+    @baz : Int32|SpecIvarsInitializer = 7
+
+    property baz
+  end
+
+  class SpecIvarsInitializerGeneric(T,U) < SpecIvarsInitializer
+    @t : T|{T,U}?
+
+    property t
+  end
+
   enum SpecEnum
     A
     B

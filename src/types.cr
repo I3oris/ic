@@ -150,6 +150,18 @@ class Crystal::Type
     self.ic_ivars_layout[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
   end
 
+  def update_layout
+    # layout = get_ivars_layout
+    # if @ic_ivars_layout.size > layout.size
+    #   unless reference?
+    #     ic_error "Cannot add instance vars on struct types (#{self}), \
+    #       this would enlarge the type and break arrays or references of this type"
+    #   end
+    #   @ic_ivars_layout = layout
+    # end
+    @ic_ivars_layout = get_ivars_layout
+  end
+
   def reference?
     nil_type? ? false : reference_like?
   end

@@ -133,6 +133,7 @@ end
 
 class Crystal::ClassDef
   def run
+    self.resolved_type.try &.update_layout if self.type_vars.nil?
     self.body.run
     IC.nop
   end
