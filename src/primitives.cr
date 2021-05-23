@@ -22,6 +22,8 @@ module IC
       when "symbol_to_s"                    then symbol_to_s(IC.self_var)
       when "enum_value"                     then enum_value(IC.self_var)
       when "enum_new"                       then enum_new(p.type, IC.get_var("value"))
+      when "argv"                           then argv(p.type)
+      when "argc"                           then argc
         # TODO:
         # build in:
         # * struct_or_union_set (c-struct)
@@ -196,6 +198,14 @@ module IC
 
     private def self.enum_new(type : Type, value : ICObject)
       IC.enum(type.as(Crystal::EnumType), value.as_number)
+    end
+
+    private def self.argv(type : Type)
+      IC.pointer(type, address: ARGV_UNSAFE.address)
+    end
+
+    private def self.argc
+      IC.number(ARGC_UNSAFE)
     end
   end
 end
