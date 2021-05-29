@@ -59,7 +59,7 @@ module IC
     end
     print_vars
     puts
-    a_def.body.print_debug
+    # a_def.body.print_debug
 
     ret = previous_def
 
@@ -168,6 +168,32 @@ module IC
         layout[1].print_debug(visited, indent + 1)
       end
     end
+  end
+
+  def self.get_closure_var?(id)
+    v = previous_def
+    if v
+      IC.debug_indent
+      puts "=> [Get closured var #{id}]"
+    end
+    v
+  end
+
+  def self.collect_closured_vars(a_def)
+    closured_vars = previous_def
+    unless closured_vars.empty?
+      IC.debug_indent
+      puts "~~~ Closure capture: ~~~"
+
+      closured_vars.each do |id, var|
+        IC.debug_indent
+        puts "  #{id} : #{var.result}"
+      end
+      IC.debug_indent
+      puts "~~~ ~~~"
+    end
+
+    closured_vars
   end
 end
 

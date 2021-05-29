@@ -66,17 +66,31 @@ class Crystal::NamedTupleLiteral
   end
 end
 
-# Vars #
+class Crystal::ProcLiteral
+  def run
+    closured_vars = IC.collect_closured_vars self.def
 
-# class Crystal::Underscore
-#   def run
-#     IC.result
-#   end
-# end
+    IC.proc(self.type) do |proc_id|
+      # The proc stored inside the ICObject:
+      ->(args : Array(IC::ICObject)) do
+        # The beautiful thing is that `closured_vars` are itself taken as closure.
+        IC.closure_context(proc_id, closured_vars) do
+          IC.run_method(nil, self.def, args, nil)
+        end
+      end
+    end
+  end
+end
+
+# Vars #
 
 class Crystal::Var
   def run
-    IC.get_var(self.name)
+    if var = IC.get_closure_var?(self.object_id)
+      var
+    else
+      IC.get_var(self.name)
+    end
   end
 end
 
@@ -100,6 +114,10 @@ end
 
 class Crystal::Assign
   def run
+    if var = IC.get_closure_var?(self.target.object_id)
+      return var.assign self.value.run
+    end
+
     case t = self.target
     when Var         then IC.assign_var(t.name, self.value.run)
     when InstanceVar then IC.assign_ivar(t.name, self.value.run)
@@ -230,7 +248,7 @@ class Crystal::Call
   def run
     if a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
 
-      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run, self.block, id: self.object_id)
+      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run, self.block)
     else
       bug! "Cannot find target def matching with this call: #{name}"
     end

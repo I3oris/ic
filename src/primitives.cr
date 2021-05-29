@@ -22,6 +22,7 @@ module IC
       when "symbol_to_s"                    then symbol_to_s(IC.self_var)
       when "enum_value"                     then enum_value(IC.self_var)
       when "enum_new"                       then enum_new(p.type, IC.get_var("value"))
+      when "proc_call"                      then proc_call(IC.self_var, IC.primitives_args)
       when "argv"                           then argv(p.type)
       when "argc"                           then argc
         # TODO:
@@ -198,6 +199,10 @@ module IC
 
     private def self.enum_new(type : Type, value : ICObject)
       IC.enum(type.as(Crystal::EnumType), value.as_number)
+    end
+
+    private def self.proc_call(proc : ICObject, args : Array(ICObject))
+      proc.as_proc.call(args)
     end
 
     private def self.argv(type : Type)

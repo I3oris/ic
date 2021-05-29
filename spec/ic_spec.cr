@@ -316,6 +316,10 @@ describe IC do
       IC.run_spec(%(SpecEnum.new 2)).should eq %(C)
       IC.run_spec(%(SpecEnum.new 42)).should eq %(SpecEnum:42)
     end
+
+    it "call proc" do
+      IC.run_spec(%(->(x : Int32){x+1}.call 1)).should eq %(2)
+    end
   end
 
   describe :classes do
@@ -344,6 +348,20 @@ describe IC do
 
   describe :generics do
     IC.run_spec(%(SpecGenericClass(Int32, 42, 31u8).type_vars)).should eq %({Int32, 42, 31_u8})
+  end
+
+  describe :pointerof do
+    it "takes address of a local var" do
+      IC.run_spec(<<-'CODE').should eq %({42, 31})
+        a = 7
+        p = pointerof(a)
+        a = 42
+        r1 = p.value # 42
+        p.value = 31
+        r2 = a # 31
+        {r1, r2}
+        CODE
+    end
   end
 
   describe :const do
@@ -621,6 +639,62 @@ describe IC do
         yield_func1(0) { |a| x = 42 } # should modify x
         yield_func2(0) { |y| y = 42 } # should not modify y
         {x, y}
+        CODE
+    end
+  end
+
+  describe :proc do
+    it "handles many arguments" do
+      IC.run_spec(<<-'CODE').should eq %("abc")
+        p = ->(a : String, b : String, c : String){a+b+c}
+
+        p.call "a", "b", "c"
+        CODE
+    end
+
+    it "handles nested procs" do
+      IC.run_spec(<<-'CODE').should eq %("abcdef")
+        sum2 = ->(a : String, b : String){ a+b }
+        sum3 = ->(a : String, b : String, c : String){ a + sum2.call(b,c) }
+        sum5 = ->(a : String, b : String, c : String, d : String, e : String) do
+          a + sum3.call(b,c, sum2.call(d,e))
+        end
+
+        sum5.call("a", sum2.call("b","c"), "d", "e", "f")
+        CODE
+    end
+
+    it "handles closure" do
+      IC.run_spec(<<-'CODE').should eq %(7)
+        closure = 42
+        p = ->(){ closure }
+        closure = 7
+        p.call
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %(7)
+        closure = 42
+        p = ->(x : Int32){ closure = x }
+        p.call 7
+        closure
+        CODE
+    end
+
+    it "handles closure in def" do
+      IC.run_spec(<<-'CODE').should eq %(6)
+        x_ = 1
+        p = ->(x : Int32, y : Int32){ x_+x+y }
+
+        call_proc_func(p, 2, 3)
+        CODE
+
+      IC.run_spec(<<-'CODE').should eq %({42, 7})
+        x = 42
+        get_42 = closure_in_def(x)
+        get_7 = closure_in_def(7)
+        x = 0
+
+        {get_42.call, get_7.call}
         CODE
     end
   end

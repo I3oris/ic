@@ -38,14 +38,16 @@ module IC
       if (enum_t = a.type).is_a? Crystal::EnumType && args[i].type.is_a? Crystal::SymbolType
         hash[a.name] = IC.enum_from_symbol(enum_t, args[i])
       else
-        hash[a.name] = args[i]
+        hash[a.name] = args[i].copy # We must copy because function and yield args have their own slot.
       end
     end
     hash
   end
 
-  def self.run_method(receiver, a_def, args, block, id) : ICObject
+  def self.run_method(receiver, a_def, args, block) : ICObject
     bug! "Args doesn't matches with this def" if a_def.args.size != args.size
+
+    IC.primitives_args = args
 
     # if receiver if nil, take the receiver of the last call:
     receiver ||= CallStack.last?.try &.receiver
@@ -150,5 +152,40 @@ module IC
       return t if i == id
     end
     bug! "Cannot found the type corresponding to the id #{id}"
+  end
+
+  class_property primitives_args = [] of ICObject
+end
+
+module IC
+  @@closure_stack = [] of ClosureContext
+  record ClosureContext,
+    proc_id : UInt64,
+    closured_vars = {} of UInt64 => ICObject
+
+  def self.closure_context(proc_id, closured_vars)
+    @@closure_stack << ClosureContext.new proc_id, closured_vars
+    yield
+  ensure
+    @@closure_stack.pop
+  end
+
+  def self.get_closure_var?(id)
+    @@closure_stack.last?.try &.closured_vars[id]?
+  end
+
+  def self.collect_closured_vars(a_def)
+    vars = Crystal::CleanupTransformer::ClosuredVarsCollector.collect a_def
+
+    closured_vars = {} of UInt64 => IC::ICObject
+    vars.each do |v|
+      case v
+      when Crystal::Var
+        closured_vars[v.object_id] = IC.get_var(v.name)
+      else
+        todo "Closure var #{v.class}"
+      end
+    end
+    closured_vars
   end
 end

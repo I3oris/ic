@@ -103,7 +103,7 @@ IC.parse(<<-'CODE').run
     end
   end
 
-  def yield_func3(a,b)
+  def yield_func3(a, b)
     (yield a+b)+(yield(yield a*2))
   end
 
@@ -135,6 +135,14 @@ IC.parse(<<-'CODE').run
 
   def set_global(value)
     $~ = value
+  end
+
+  def call_proc_func(p, x_, y_)
+    p.call x_, y_
+  end
+
+  def closure_in_def(x)
+    ->{x}
   end
 
   CODE

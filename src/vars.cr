@@ -47,8 +47,12 @@ module IC
 
     def self.[]=(name, value)
       @@vars.reverse_each do |v|
-        next if v.yield_vars unless v.vars[name]?
-        return v.vars[name] = value
+        if var = v.vars[name]?
+          return var.assign value
+        else
+          next if v.yield_vars
+          return v.vars[name] = value
+        end
       end
       bug! "Cannot set the var '#{name}', VarStack contain only yield vars"
     end

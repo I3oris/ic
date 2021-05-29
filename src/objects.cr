@@ -102,8 +102,21 @@ module IC
     end
 
     def is_a(type : Type?)
-      bug! "#{@type}.is_a? failed" if type.nil?
+      bug! ".is_a?(#{@type}) failed" if type.nil?
       @type <= type
+    end
+
+    def assign(other : ICObject) : ICObject
+      # TODO check if ic_size is not too small
+      @raw.copy_from(other.raw, other.type.ic_size)
+      @type = other.type
+      self
+    end
+
+    def copy
+      obj = ICObject.new(@type)
+      obj.raw.copy_from(@raw, @type.ic_size)
+      obj
     end
 
     # Returns a new ICObject(Pointer) pointing on the raw data of this object
@@ -247,6 +260,14 @@ module IC
         bug! "Trying to read #{@type} as a number"
       end
     end
+
+    def as_proc
+      @raw.as(Proc(Array(ICObject), ICObject)*).value
+    end
+
+    def as_proc=(proc)
+      @raw.as(Proc(Array(ICObject), ICObject)*).value = proc
+    end
   end
 
   # Creates the corresponding ICObject from values:
@@ -350,7 +371,7 @@ module IC
   def self.enum_from_symbol(type : Crystal::EnumType, symbol : ICObject)
     name = IC.symbol_from_value(symbol.as_int32)
     const = type.find_member(name)
-    bug! "cannot create a enum #{type} from the symbol #{name}" unless const
+    bug! "Cannot create a enum #{type} from the symbol #{name}" unless const
 
     value = const.value.as(Crystal::NumberLiteral).integer_value
     IC.enum(type, value)
@@ -358,6 +379,12 @@ module IC
 
   def self.uninitialized(type : Type)
     ICObject.new(type, uninitialized?: true)
+  end
+
+  def self.proc(type : Type, & : -> Proc(Array(ICObject), ICObject))
+    obj = ICObject.new(type)
+    obj.as_proc = yield obj.object_id
+    obj
   end
 end
 
