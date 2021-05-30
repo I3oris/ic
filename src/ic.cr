@@ -16,7 +16,7 @@ require "./commands"
 require "./errors"
 require "colorize"
 
-IC.run_file "./ic_prelude.cr"
+IC.run_file Path[__DIR__, "../ic_prelude.cr"]
 
 unless IC.running_spec?
   if ARGV[0]?

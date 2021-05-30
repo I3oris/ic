@@ -59,7 +59,7 @@ module IC
     end
     print_vars
     puts
-    # a_def.body.print_debug
+    a_def.body.print_debug
 
     ret = previous_def
 

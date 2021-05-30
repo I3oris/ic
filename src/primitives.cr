@@ -31,9 +31,6 @@ module IC
         # * external_var_set (extern-c)
         # * external_var_get (extern-c)
         #
-        # primitives.cr
-        # * proc_call
-        #
         # other:
         # * throw_info
         # * va_arg

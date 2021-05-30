@@ -69,13 +69,15 @@ end
 class Crystal::ProcLiteral
   def run
     closured_vars = IC.collect_closured_vars self.def
+    receiver = IC::CallStack.last?.try &.receiver
 
     IC.proc(self.type) do |proc_id|
       # The proc stored inside the ICObject:
       ->(args : Array(IC::ICObject)) do
         # The beautiful thing is that `closured_vars` are itself taken as closure.
         IC.closure_context(proc_id, closured_vars) do
-          IC.run_method(nil, self.def, args, nil)
+          # IC.run_method(nil, self.def, args, nil)
+          IC.run_method(receiver, self.def, args, nil)
         end
       end
     end

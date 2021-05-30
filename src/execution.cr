@@ -174,6 +174,20 @@ module IC
     @@closure_stack.last?.try &.closured_vars[id]?
   end
 
+  # Capture and collect the closured var inside the given proc literal
+  # ```
+  # x = 1
+  # y = 2
+  # p = ->(z : Int32) do
+  #   x + y + z # (3)
+  # end         # (1)
+  #
+  # p.call 3 # (2)
+  # ```
+  # At (1): we capture the closured vars `x` & `y` thank to the `ClosuredVarsCollector` and store their current
+  # value (get_var("x") & get_var("y")) indexed by their ASTNode object_id
+  #
+  # At (2): we call the body (3), then the ASTNode `x` & `y` will retrieve theirs value from their object id.
   def self.collect_closured_vars(a_def)
     vars = Crystal::CleanupTransformer::ClosuredVarsCollector.collect a_def
 
@@ -181,7 +195,29 @@ module IC
     vars.each do |v|
       case v
       when Crystal::Var
-        closured_vars[v.object_id] = IC.get_var(v.name)
+        begin
+          closured_vars[v.object_id] = IC.get_var(v.name)
+        rescue IC::Error
+          # In case of proc argument taken in closure (here `x`):
+          # ```
+          # get = ->(x : Int32) do
+          #   ->{ x }
+          # end # (1)
+          #
+          # get_7 = get.call 7   # (2)
+          # get_42 = get.call 42 # (3)
+          #
+          # get_7.call
+          # get_42.call
+          # ```
+          # at (1), we must ignore the closure var x (because its value is not defined yet)
+          # but this only when the body of `get` will be run that we can capture the closure var `x`(at (2) & (3))
+          #
+          # if ever x is defined but is the wrong x, wrong x will be captured as closure, but
+          # the good closure will be captured anyway at (2) & (3).
+          #
+          # TODO: rescue only missing var errors
+        end
       else
         todo "Closure var #{v.class}"
       end

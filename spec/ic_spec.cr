@@ -100,6 +100,25 @@ describe IC do
         end
         CODE
     end
+
+    it "runs scenario 6" do
+      IC.run_spec(<<-'CODE').should eq %(617_918)
+        x=42
+
+        p1 = ->(a : Int32, b : Int32){a+b}
+        p2 = ->(a : Int32, b : Int32, c : Int32){a+p1.call(b,c)}
+        p3 = ->(a : Int32, b : Int32){ p2.call(b, p2.call(a,2*a,b), a-10 )}
+        p4 = ->(p1_ : Proc(Int32,Int32,Int32,Int32), p2_ : Proc(Proc(Int32)), arg : Int32) do
+          ->(y : Int32) do
+            p3.call( p1_.call(arg+x,5,arg-4), p2_.call.call)*y
+          end
+        end
+
+        p4.call(->(c : Int32, b : Int32, a : Int32) do
+          p4.call(p2, ->{p1.partial(42, c)}, 7+c ).call 31+a+b
+        end,->{p3.partial(1,2)},-1).call 7
+        CODE
+    end
   end
 
   describe :string do
@@ -692,6 +711,20 @@ describe IC do
         x = 42
         get_42 = closure_in_def(x)
         get_7 = closure_in_def(7)
+        x = 0
+
+        {get_42.call, get_7.call}
+        CODE
+    end
+
+    it "takes proc argument as closure" do
+      IC.run_spec(<<-'CODE').should eq %({42, 7})
+        get = ->(x : Int32) do
+          ->{x}
+        end
+        x = 42
+        get_42 = get.call x
+        get_7 = get.call 7
         x = 0
 
         {get_42.call, get_7.call}
