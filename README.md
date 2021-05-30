@@ -30,11 +30,10 @@ cd ic && make
 #### Not implemented:
 * some Primitives (in progress)
 * Union Type (almost supported)
-* InstanceVar Initializers
 * raise
 * ARGV, ENV, \`
 * IO
-* Proc
+* Proc (in progress)
 * Lib
 * Fibers
 * ...
