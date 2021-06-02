@@ -59,6 +59,7 @@ module IC::Highlighter
     :"&-", :"&+", :"&*", :"&**",
     :"[]", :"[]?", :"[]=", :"<=>", :"===",
     :"+=", :"-=", :"*=", :"/=", :"//=", :"|=", :"&=", :"%=",
+    :"&+=", :"&-=", :"&*=",
   }
 
   def self.highlight(code, *, @@no_invitation = false)
@@ -146,13 +147,12 @@ module IC::Highlighter
       when :CONST, :"::"
         highlight token, :const, io
       when :DELIMITER_START
-        if token.raw == "/" && last_token[:type].in?(:NUMBER,:CONST,:INSTANCE_VAR,:CLASS_VAR,:IDENT)
+        if token.raw == "/" && last_token[:type].in?(:NUMBER, :CONST, :INSTANCE_VAR, :CLASS_VAR, :IDENT)
           highlight "/", :operator, io
         else
           @@is_str = true
           highlight_delimiter_state lexer, token, io
         end
-
       when :STRING_ARRAY_START, :SYMBOL_ARRAY_START
         @@is_str = true
         highlight_string_array lexer, token, io
