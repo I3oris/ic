@@ -60,11 +60,7 @@ module IC
   end
 
   private def self.run_method_body(a_def)
-    if a_def.is_a? Crystal::External
-      todo "fun def '#{a_def.real_name}'"
-    else
-      a_def.body.run
-    end
+    a_def.body.run
   end
 
   def self.yield(args) : ICObject

@@ -88,11 +88,7 @@ end
 
 class Crystal::Var
   def run
-    if var = IC.get_closure_var?(self.object_id)
-      var
-    else
-      IC.get_var(self.name)
-    end
+    IC.get_closure_var?(self.object_id) || IC.get_var(self.name)
   end
 end
 
@@ -248,11 +244,12 @@ end
 
 class Crystal::Call
   def run
-    if a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
+    receiver = self.obj.try &.run
 
-      return IC.run_method(self.obj.try &.run, a_def, self.args.map &.run, self.block)
-    else
-      bug! "Cannot find target def matching with this call: #{name}"
+    case a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
+    when Nil      then bug! "Cannot find target def matching with this call: #{name}"
+    when External then return IC.run_fun_body(receiver, a_def, self.args.map &.run, self.type)
+    else               return IC.run_method(receiver, a_def, self.args.map &.run, self.block)
     end
   rescue e : IC::Return
     IC.handle_return(e)
