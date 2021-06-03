@@ -8,6 +8,8 @@ module IC
 
   def self.run_spec(code)
     VarStack.reset
+    @@code_lines.clear
+    @@program.vars.clear
     IC.parse(code).run.result
   end
 end
