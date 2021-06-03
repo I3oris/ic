@@ -21,11 +21,12 @@ class Crystal::CodeError
     puts
     self.color = true
     self.error_trace = true
+
     if self.is_a? ErrorFormat
       print IC.program.filename ? "In " : "At "
       puts self.format_error(
         filename: IC.program.filename || "",
-        lines: IC.code_lines,
+        lines: self.lines,
         line_number: self.line_number,
         column_number: self.column_number,
         size: self.size
@@ -34,6 +35,14 @@ class Crystal::CodeError
       self.inner.try &.display if responds_to? :inner
     else
       puts self
+    end
+  end
+
+  def lines
+    if responds_to?(:location) && (filename = self.location.filename).is_a? VirtualFile
+      filename.source.lines.to_a
+    else
+      IC.code_lines
     end
   end
 end
