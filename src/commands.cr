@@ -27,6 +27,7 @@ module IC
     @@result = IC.nop
     @@busy = false
     IC.underscore = IC.nil
+    @@code_lines = [""]
   end
 
   def self.cmd_vars

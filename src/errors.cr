@@ -16,18 +16,36 @@ class Exception
   end
 end
 
-class Crystal::Error < Exception
+class Crystal::CodeError
   def display
     puts
-
-    # This kind of message need to display more informations:
-    if self.message.try &.starts_with?(/instantiating|while requiring|expanding macro/)
-      puts self.colorize.yellow.bold
+    self.color = true
+    self.error_trace = true
+    if self.is_a? ErrorFormat
+      print IC.program.filename ? "In " : "At "
+      puts self.format_error(
+        filename: IC.program.filename || "",
+        lines: IC.code_lines,
+        line_number: self.line_number,
+        column_number: self.column_number,
+        size: self.size
+      )
+      puts "Error: #{self.message}".colorize.yellow.bold
+      self.inner.try &.display if responds_to? :inner
     else
-      puts self.message.colorize.yellow.bold
+      puts self
     end
   end
+end
 
+class Crystall::Error
+  def display
+    puts
+    puts "Error: #{self.message}".colorize.yellow.bold
+  end
+end
+
+class Crystal::Error < Exception
   # Dirtily catches exceptions for unterminated syntax, such as "class Foo", or "{", so the
   # user have a change to terminate his expressions.
   def unterminated?

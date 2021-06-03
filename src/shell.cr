@@ -45,7 +45,6 @@ module IC
   class Shell
     @edited_line = ""
     @prompt_type = :normal
-    @line_number = 1
     @indent = 0
     @history = [""]
     @history_index = -1
@@ -53,7 +52,7 @@ module IC
     private getter? multiline = false
 
     private def prompt : String
-      n = sprintf("%02d", @line_number + Highlighter.line_number)
+      n = sprintf("%02d", IC.code_lines.size + 1 + Highlighter.line_number)
       # p = "ic(1.0.0):#{n}"
       p = "ic(#{Crystal::VERSION}):".colorize(:white)
       p = "#{p}#{n.colorize.magenta}"
@@ -141,8 +140,7 @@ module IC
       end
     end
 
-    private def add_to_history(line, error)
-      @line_number += line.chomp("\n").split('\n').size unless error
+    private def add_to_history(line)
       @history.push line
       @history_index = 0
     end
@@ -166,32 +164,35 @@ module IC
       end
     end
 
-    private def validate_line(*, error = false, no_history = false)
+    private def validate_line(*, no_history = false)
       @indent = 0
       @multiline = false
-      formate_line unless error
       unless no_history
-        add_to_history @edited_line, error: error
+        add_to_history @edited_line
       end
       @edited_line = ""
     end
 
     private def on_newline(&)
+      formate_line
+
       case @edited_line
-      when /^( )*#( )*(clear_history)/
+      when "# clear_history"
         validate_line no_history: true
         clear_history
         puts " => #{"✔".colorize.green}"
+        IC.code_lines << @edited_line
         print prompt
         return
-      when /^( )*#( )*(#{Commands.commands_regex_names})(( [a-z\-]+)*)/
+      when /^# (#{Commands.commands_regex_names})(( [a-z\-]+)*)/
         validate_line
-        Commands.run_cmd($~[3]?, $~[4].split(" ", remove_empty: true))
+        Commands.run_cmd($~[1]?, $~[2].split(" ", remove_empty: true))
+        IC.code_lines << @edited_line
         print prompt
         return
-      when .blank?, /^( )*#.*/
-        @line_number += 1
+      when .blank?, /^#.*/
         validate_line no_history: true
+        IC.code_lines << @edited_line
         puts
         print prompt
         return
@@ -200,7 +201,7 @@ module IC
 
       case status
       when :error
-        validate_line error: true
+        validate_line
       when :multiline
         self.increase_indent
         @multiline = true

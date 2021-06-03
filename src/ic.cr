@@ -16,7 +16,8 @@ require "./commands"
 require "./errors"
 require "colorize"
 
-IC.run_file Path[__DIR__, "../ic_prelude.cr"]
+# IC.program.stdout = stdout
+IC.run_file Path[__DIR__, "../ic_prelude.cr"].normalize
 
 unless IC.running_spec?
   if ARGV[0]?
@@ -31,8 +32,12 @@ module IC
 
   class_property program = Crystal::Program.new
   class_getter? busy = false
+  class_getter code_lines = [] of String
 
-  def self.parse(text)
+  def self.parse(expr)
+    text = "\n"*@@code_lines.size + expr
+    expr.each_line { |l| @@code_lines << l }
+
     ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
     ast_node = ICTransformer.new.transform(ast_node)
     ast_node = @@program.normalize(ast_node)
@@ -41,6 +46,7 @@ module IC
   end
 
   def self.run_file(path)
+    @@program.filename = path.to_s
     IC.parse(File.read(path)).run
   rescue e
     e.display
@@ -58,11 +64,11 @@ module IC
 
   def self.run
     IC.underscore = IC.nil
+    @@code_lines.clear
+    @@program.filename = nil
     # TODO redirect @@program.stdout
 
     Shell.new.run do |expr|
-      # CallStack.clear
-
       @@busy = true
       @@result = IC.parse(expr).run
       @@busy = false
@@ -75,14 +81,17 @@ module IC
       :line
     rescue e : CompileTimeError
       if e.unterminated?
+        @@code_lines.pop(expr.lines.size)
         # let a change to the user to finish his text on the next line
         :multiline
       else
         e.display
+        @@code_lines.pop(expr.lines.size)
         :error
       end
     rescue e
       e.display
+      @@code_lines.pop(expr.lines.size)
       :error
     end
   end
