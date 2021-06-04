@@ -731,4 +731,14 @@ describe IC do
         CODE
     end
   end
+
+  describe :out do
+    it "takes a 'out' c-binding value" do
+      IC.run_spec(<<-'CODE').should eq %({true, true, true})
+
+        status = LibC.gettimeofday(out time, nil)
+        {status == 0, time.tv_usec > 0, time.tv_sec > 0}
+        CODE
+    end
+  end
 end
