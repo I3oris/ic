@@ -197,6 +197,7 @@ module IC
         print prompt
         return
       end
+      puts
       status = yield @edited_line
 
       case status
@@ -210,7 +211,6 @@ module IC
         validate_line
         IC.display_result
       end
-      puts
       print prompt
       print "  "*@indent
       highlight_line if status == :multiline

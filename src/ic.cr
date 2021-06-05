@@ -9,6 +9,7 @@ require "./types"
 require "./objects"
 require "./primitives"
 require "./execution"
+require "./fun"
 require "./vars"
 require "./highlighter"
 require "./shell"
@@ -56,9 +57,9 @@ module IC
 
   def self.display_result
     if @@result.nop?
-      print "\n => #{"✔".colorize.green}"
+      puts " => #{"✔".colorize.green}"
     else
-      print "\n => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
+      puts " => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
     end
   end
 
