@@ -194,29 +194,6 @@ def loop
   end
 end
 
-module ICOUT
-  @@out = ""
-
-  def self.<<(str)
-    @@out += str
-    self
-  end
-
-  def self.flush
-    o = @@out
-    @@out = ""
-    o
-  end
-end
-
-def puts(x)
-  ICOUT << x.to_s << "  "
-end
-
-def flush
-  ICOUT.flush
-end
-
 class String
   def to_s
     self
@@ -227,4 +204,21 @@ struct Nil
   def to_s
     "nil"
   end
+end
+
+lib LibC
+  fun printf(UInt8*, ...) : Int32
+  fun exit(Int32) : NoReturn
+end
+
+def puts(s : String) : Nil
+  LibC.printf "%s\n", s
+end
+
+def puts(i : Int) : Nil
+  LibC.printf "%d\n", i
+end
+
+def exit
+  LibC.exit 0
 end

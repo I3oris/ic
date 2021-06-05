@@ -29,7 +29,7 @@ unless IC.running_spec?
 end
 
 module IC
-  VERSION = "0.1.0"
+  VERSION = "0.2.0"
 
   class_property program = Crystal::Program.new
   class_getter? busy = false
