@@ -216,6 +216,10 @@ module IC
       end
     {% end %}
 
+    def as!(type : T.class) : T forall T
+      @raw.as(T*).value
+    end
+
     def as_integer
       unless (t = @type).is_a? Crystal::IntegerType
         bug! "Trying to read #{t} as Int"
@@ -267,6 +271,14 @@ module IC
 
     def as_proc=(proc)
       @raw.as(Proc(Array(ICObject), ICObject)*).value = proc
+    end
+
+    def as_va_arg
+      if @type.pointer?
+        as_uint64
+      else
+        as_number.to_u64
+      end
     end
   end
 

@@ -384,12 +384,10 @@ class Crystal::Out
     # `out x` would be equivalent to `pointerof(x = uninitialized Type)`:
     case var = self.exp
     when Var then IC.assign_var(var.name, IC.uninitialized(var.type)).pointerof_self
-    else todo "Out expression with #{exp.class}"
+    else          todo "Out expression with #{exp.class}"
     end
   end
 end
-
-
 
 # Casts #
 

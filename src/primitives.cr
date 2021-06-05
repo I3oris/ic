@@ -37,8 +37,8 @@ module IC
         # * cmpxchg
         # * atomicrmw
         # * fence
-        # * load_atomic
         # * store_atomic
+      when "load_atomic" then load_atomic(IC.primitives_args[0], IC.primitives_args[1], IC.primitives_args[2])
       else
         todo "Primitive #{p.name}"
       end
@@ -208,6 +208,26 @@ module IC
 
     private def self.argc
       IC.number(ARGC_UNSAFE)
+    end
+
+    private def self.load_atomic(p : ICObject, ordering : ICObject, volatile : ICObject)
+      # Temporary alternative:
+      pointer_get(p)
+
+      # ptr = Pointer(Void).new(p.as_uint64)
+      # if (v=IC.symbol_from_value(ordering.as_int32)) != "sequentially_consistent"
+      #   todo "Atomic Ordering :#{v}"
+      # end
+      # volatile = volatile.as_bool
+
+      # result =
+      # if volatile
+      #   Atomic::Ops.load(ptr, :sequentially_consistent, true)
+      # else
+      #   Atomic::Ops.load(ptr, :sequentially_consistent, false)
+      # end
+
+      # ICObject.new(p.type.pointer_type_var, address: result)
     end
   end
 end
