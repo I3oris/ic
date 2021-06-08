@@ -75,6 +75,7 @@ class Crystal::Error < Exception
       "unexpected token: EOF (expecting ',', ';' or '\n')",
       "Unexpected EOF on heredoc identifier",
       "unterminated parenthesized expression",
+      "unterminated call",
       "Unterminated string literal",
       "unterminated hash literal",
       "Unterminated command literal",
