@@ -196,6 +196,11 @@ module IC
         puts
         print prompt
         return
+
+        # Replace lines starting by '.' by "__."
+        # so ".foo" become "__.foo":
+      when /^\.(?!\.)/ # don't match begin-less range ("..x")
+        @edited_line = "__#{@edited_line}"
       end
       puts
       status = yield @edited_line
