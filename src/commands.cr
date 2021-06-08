@@ -23,11 +23,12 @@ module IC
     @@global.clear
     @@consts.clear
     @@program = Crystal::Program.new
-    IC.run_file "./ic_prelude.cr"
+    @@main_visitor = nil
     @@result = IC.nop
     @@busy = false
-    IC.underscore = IC.nil
     @@code_lines = [""]
+    IC.run_file IC::PRELUDE_PATH
+    IC.underscore = IC.nil
   end
 
   def self.cmd_vars

@@ -125,8 +125,11 @@ module IC
   end
 
   def self.underscore=(value : ICObject)
+    meta_var = Crystal::MetaVar.new "__", value.type
+
+    @@program.@vars["__"] = meta_var
+    IC.main_visitor.@vars["__"] = meta_var
     VarStack.top_level_vars["__"] = value
-    @@program.@vars["__"] = Crystal::MetaVar.new "__", value.type
   end
 
   def self.declared_vars_syntax

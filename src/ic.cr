@@ -18,7 +18,7 @@ require "./errors"
 require "colorize"
 
 # IC.program.stdout = stdout
-IC.run_file Path[__DIR__, "../ic_prelude.cr"].normalize
+IC.run_file IC::PRELUDE_PATH
 
 unless IC.running_spec?
   if ARGV[0]?
@@ -29,7 +29,8 @@ unless IC.running_spec?
 end
 
 module IC
-  VERSION = "0.2.0"
+  VERSION      = "0.2.0"
+  PRELUDE_PATH = Path[__DIR__, "../ic_prelude.cr"].normalize
 
   class_property program = Crystal::Program.new
   class_getter? busy = false
@@ -40,7 +41,6 @@ module IC
     expr.each_line { |l| @@code_lines << l }
 
     ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
-    ast_node = ICTransformer.new.transform(ast_node)
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     ast_node
@@ -86,15 +86,19 @@ module IC
         # let a change to the user to finish his text on the next line
         :multiline
       else
-        e.display
-        @@code_lines.pop(expr.lines.size)
+        on_error(e, expr)
         :error
       end
     rescue e
-      e.display
-      @@code_lines.pop(expr.lines.size)
+      on_error(e, expr)
       :error
     end
+  end
+
+  def self.on_error(e, expr)
+    e.display
+    @@code_lines.pop(expr.lines.size)
+    IC.main_visitor.clean
   end
 
   def self.running_spec?
@@ -105,12 +109,46 @@ end
 def debug_msg(msg)
 end
 
+# Print debug info on `make DEBUG=true`:
 {% if flag? :_debug %}
   require "./debug.cr"
 {% end %}
 
-# Force TopLevelVisitor and MainVisitor to keep the declared vars of the
-# previous semantic:
+# Use one same main visitor instead of create a new one on each evaluation,
+# so the meta-vars are keep:
+module IC
+  class_getter main_visitor do
+    Crystal::MainVisitor.new(@@program)
+  end
+end
+
+# Use that visitor here:
+class Crystal::Program
+  def visit_main(node, visitor = IC.main_visitor, process_finished_hooks = false, cleanup = true)
+    previous_def
+  end
+end
+
+# If a exception is raised during the main visit, the state of the visitor can be let inconsistent
+# so, we must clean it:
+class Crystal::MainVisitor
+  def clean
+    @exp_nest = 0 # Avoid the error "can't declare def dynamically"
+    @in_type_args = 0
+  end
+end
+
+
+# In some contexts vars are not keep, for example here:
+# ```
+# x = 42
+# {% begin %}
+#   x # considered undeclared
+# {% end %}
+# ```
+#
+# This happen because here an other visitor are used
+# so we merge the declared vars with the vars of this visitor:
 class Crystal::SemanticVisitor
   def initialize(@program, @vars = MetaVars.new)
     # previous_def:
@@ -120,56 +158,24 @@ class Crystal::SemanticVisitor
     @in_c_struct_or_union = false
     @in_is_a = false
 
-    # Added code:
-    if @vars.empty?
-      case self
-      when TopLevelVisitor, MainVisitor
-        @vars = IC.declared_vars
-      end
-    end
+    # # Added code:
+    @vars.merge! IC.declared_vars
   end
 end
-
-# Alternative to the code above (safer & cleaner), but doesn't work with the following:
-# ```
-# x = 42
-# {% begin %}
-#   x # considered undeclared
-# {% end %}
-# ```
-
-# class Crystal::Program
-#   def visit_main(node, visitor = IC.main_visitor, process_finished_hooks = false, cleanup = true)
-#     previous_def
-#   end
-# end
-
-# module IC
-#   def self.main_visitor
-#     Crystal::MainVisitor.new(@@program, vars: IC.declared_vars)
-#   end
-# end
 
 # Invite the user to use '__' instead of '_':
 class Crystal::MainVisitor
   def visit(node : Underscore)
     if @in_type_args == 0
       ic_error "'_' is reserved by crystal, use '__' instead"
-      node
     else
       node.raise "can't use underscore as generic type argument"
     end
   end
 end
 
-# class Crystal::CleanupTransformer
-#   # Don't cleanup underscore:
-#   def untyped_expression(node, msg = nil)
-#     node
-#   end
-# end
-
-class ICTransformer < Crystal::Transformer
+# `Transformer` applied between the syntax parsing and the semantics phase:
+class IC::Transformer < Crystal::Transformer
   # Because crystal analyses the type of a constant only when used,
   # replace all occurrences of `FOO=some_exp` by `(FOO=some_exp; FOO)`
   def transform(node : Crystal::Assign)
@@ -187,5 +193,17 @@ class ICTransformer < Crystal::Transformer
     else
       node
     end
+  end
+end
+
+# Call this transformer just after parsing:
+# Note that the transformer will be executed on a `Require` node too.
+class Crystal::Parser
+  def parse
+    IC::Transformer.new.transform(previous_def)
+  end
+
+  def parse(mode : ParseMode)
+    IC::Transformer.new.transform(previous_def)
   end
 end
