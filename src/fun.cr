@@ -47,19 +47,19 @@ module IC
         case fun_name
         # We will take the info given by the fun method `m` for generate the call:
         {% for m, i in T.resolve.methods %}
-          {% # puts m
+          # puts m
+          {%
+            lib_name = T.stringify
+            fun_name = m.name
+            fun_declaration = m.stringify                   # the string fun declaration
+            have_va_args = fun_declaration.includes?("...") # true if fun contains va-vars
+            returns_void = fun_declaration.ends_with?(" : Void") ||
+                           RETURN_VOID_LIST[lib_name].includes?(fun_name.stringify) # true if fun returns void
 
-lib_name = T.stringify
-fun_name = m.name
-fun_declaration = m.stringify                   # the string fun declaration
-have_va_args = fun_declaration.includes?("...") # true if fun contains va-vars
-returns_void = fun_declaration.ends_with?(" : Void") ||
-               RETURN_VOID_LIST[lib_name].includes?(fun_name.stringify) # true if fun returns void
-
-# all regular type of argument (e.g ["Pointer(Char)"] for printf):
-arg_types = m.args.map do |arg|
-  arg.stringify.split(" : ")[-1]
-end
+            # all regular type of argument (e.g ["Pointer(Char)"] for printf):
+            arg_types = m.args.map do |arg|
+              arg.stringify.split(" : ")[-1]
+            end
           %}
           {% if fun_declaration.empty? %}
             # `fun_declaration` turn out to be empty if `m` is a getter/setter on a lib global var (e.g. $environ)
