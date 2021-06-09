@@ -341,6 +341,17 @@ describe IC do
     end
   end
 
+  describe :assign do
+    it "keep target and value independent" do
+      IC.run_spec(<<-'CODE').should eq %({43, 42})
+        x = 42
+        y = x
+        x += 1
+        {x, y}
+        CODE
+    end
+  end
+
   describe :classes do
     it "supports instance vars" do
       IC.run_spec(<<-'CODE').should eq %({42, 31, "hello"})

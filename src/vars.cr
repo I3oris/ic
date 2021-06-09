@@ -51,7 +51,10 @@ module IC
           return var.assign value
         else
           next if v.yield_vars
-          return v.vars[name] = value
+
+          # Allocate slot for a new var:
+          # We copy value so `target` and `value` keep independent
+          return v.vars[name] = value.copy
         end
       end
       bug! "Cannot set the var '#{name}', VarStack contain only yield vars"
