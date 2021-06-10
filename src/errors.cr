@@ -36,6 +36,8 @@ class Crystal::CodeError
     else
       puts self
     end
+  rescue
+    puts self
   end
 
   def lines
