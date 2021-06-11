@@ -88,6 +88,42 @@ IC.parse(<<-'CODE').run
     property t
   end
 
+  class SpecDispatchFoo
+    def f
+      :Foo
+    end
+  end
+
+  module SpecDispatchM
+    def f
+      :M
+    end
+  end
+
+  class SpecDispatchBar
+    include SpecDispatchM
+    def f
+      :Bar
+    end
+  end
+
+  class SpecDispatchBaz < SpecDispatchFoo
+    def f
+      :Baz
+    end
+  end
+
+  module SpecDispatchN
+    include SpecDispatchM
+    def f
+      :N
+    end
+  end
+
+  class SpecDispatchBam < SpecDispatchBaz
+    include SpecDispatchN
+  end
+
   enum SpecEnum
     A
     B

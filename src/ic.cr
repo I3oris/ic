@@ -138,7 +138,6 @@ class Crystal::MainVisitor
   end
 end
 
-
 # In some contexts vars are not keep, for example here:
 # ```
 # x = 42

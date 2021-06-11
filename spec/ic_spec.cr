@@ -594,6 +594,25 @@ describe IC do
     end
   end
 
+  describe :dispatch do
+    pending "dispatch primitives int" do
+      IC.run_spec(%((1 || 2u8 || 3i64 ).class)).should eq %(Int32)
+    end
+
+    pending "dispatch classes" do
+      IC.run_spec(<<-'CODE').should eq %({:Foo, :Bar, :Baz, :N})
+        dispatch_var = [SpecDispatchFoo.new, SpecDispatchBar.new, SpecDispatchBaz.new, SpecDispatchBam.new]
+
+        {
+          dispatch_var[0].f,
+          dispatch_var[1].f,
+          dispatch_var[2].f,
+          dispatch_var[3].f,
+        }
+      CODE
+    end
+  end
+
   describe :yield do
     it "yields" do
       IC.run_spec(<<-'CODE').should eq %(10)

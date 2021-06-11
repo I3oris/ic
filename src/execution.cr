@@ -63,6 +63,34 @@ module IC
     a_def.body.run
   end
 
+  def self.dispatch_def(receiver, target_defs) : Crystal::Def?
+    return nil unless target_defs
+
+    # Don't enable dispatch for now, because it break other spec:
+    return target_defs.first?
+
+    if receiver.nil?
+      target_defs.first?
+    elsif target_defs.size == 1
+      target_defs.first
+    else
+      type = IC.type_from_id(receiver.read_type_id)
+      # puts "---many target_defs (#{type}):"
+      target_defs.each do |d|
+        # pp! d.owner,
+        d.original_owner
+      end
+
+      defs = target_defs.select do |a_def|
+        a_def.original_owner == type || a_def.owner == type
+      end
+
+      return nil if defs.size != 1
+
+      defs.first
+    end
+  end
+
   def self.yield(args) : ICObject
     CallStack.pop do |c|
       VarStack.pop(all_yield_vars: true) do

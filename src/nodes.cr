@@ -246,7 +246,7 @@ class Crystal::Call
   def run
     receiver = self.obj.try &.run
 
-    case a_def = self.target_defs.try &.first? # TODO, lockup self.type, and depending of the receiver.type, take the good target_def
+    case a_def = IC.dispatch_def(receiver, self.target_defs)
     when Nil      then bug! "Cannot find target def matching with this call: #{name}"
     when External then return IC.run_fun_body(receiver, a_def, self.args.map &.run, self.type)
     else               return IC.run_method(receiver, a_def, self.args.map &.run, self.block)

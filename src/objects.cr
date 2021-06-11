@@ -87,6 +87,10 @@ module IC
       @type.nil_type? || (@type.bool_type? && self.as_bool == false) || (@type.pointer? && self.as_uint64 == 0u64)
     end
 
+    def read_type_id
+      self.data.as(Int32*).value
+    end
+
     def cast(from : Type?, to : Type?)
       bug! "Cast from #{@type} failed" if from.nil? || to.nil?
       if @type.pointer?

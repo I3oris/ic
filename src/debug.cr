@@ -28,7 +28,11 @@ module IC
   end
 
   def self.debug_indent
-    CallStack.callstack.size.times { print "  " }
+    indent_level.times { print "  " }
+  end
+
+  def self.indent_level
+    CallStack.callstack.size
   end
 
   def self.print_callstack
@@ -59,11 +63,14 @@ module IC
     end
     print_vars
     puts
-    a_def.body.print_debug
+    IC.debug_indent
+    puts Highlighter.highlight(a_def.to_s.gsub("\n", "\n" + "  "*IC.indent_level), no_invitation: true)
+    # a_def.body.print_debug
+    puts
 
     ret = previous_def
 
-    debug_msg "\b\b===== End Call #{context.name}, returns #{ret.result} ====="
+    debug_msg "\b\b===== End Call #{context.name}, returns #{Highlighter.highlight(ret.result, no_invitation: true)} ====="
     ret
   end
 
@@ -102,12 +109,12 @@ module IC
     previous_def
   end
 
-  module Primitives
-    def self.call(p : Crystal::Primitive)
-      debug_msg "Primitve called: #{p.name}:#{p.type}:#{p.extra}"
-      previous_def
-    end
-  end
+  # module Primitives
+  #   def self.call(p : Crystal::Primitive)
+  #     debug_msg "Primitve called: #{p.name}:#{p.type}:#{p.extra}"
+  #     previous_def
+  #   end
+  # end
 
   class ICObject
     def print_debug
