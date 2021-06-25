@@ -1,3 +1,5 @@
+IC.run_file IC::PRELUDE_PATH
+
 IC.parse(<<-'CODE').run
 
   module UnionModule
