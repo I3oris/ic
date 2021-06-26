@@ -1,4 +1,3 @@
-
 IC.parse(<<-'CODE').run
 
   class PrimitivesClass

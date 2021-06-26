@@ -1,7 +1,6 @@
 require "./unions_helper"
 
 describe :Unions do
-
   # got UnionClass+ instead of UnionClass
   pending "gives a good union virtual type" do
     IC.run_spec(<<-'CODE').should eq %({UnionClass, true, false})

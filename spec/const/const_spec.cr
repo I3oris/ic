@@ -1,4 +1,3 @@
-
 describe :Const do
   it "declares a CONST" do
     IC.run_spec(%(FOO1 = "foo")).should eq %("foo")
