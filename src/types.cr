@@ -27,6 +27,10 @@ class Crystal::Type
     offset = 0u64
     each_ivar_types do |name, type|
       ivars_layout[name] = {offset, type}
+
+      # Align addresses:
+      # offset = 8u64 + (offset%8u64) if type.reference?
+
       offset += type.ic_size
     end
 
@@ -46,96 +50,6 @@ class Crystal::Type
   private def llvm_struct_type?
     (is_a?(NonGenericClassType) || is_a?(GenericClassInstanceType)) &&
       !is_a?(PointerInstanceType) && !is_a?(ProcInstanceType)
-  end
-
-  # Considers *src* as this *type*, and returns the ICObject read.
-  # Always return the instance type, never a Union or VirtualType.
-  # If *type* is Nil, return IC.nil without read the data.
-  #
-  # Expect that the data is:
-  #
-  # src -> ref -> | TYPE_ID (4)
-  #               | data...
-  #
-  # for reading a reference-like type (Classes, Union of Classes,...).
-  #
-  # src -> null (for nil reference-like).
-  #
-  # src -> |0| TYPE_ID (4)
-  #        |8| data|ref...
-  #
-  # for reading an union type (unbox).
-  def read(from src : Byte*)
-    case self
-    when .nil_type?
-      return IC.nil
-    when .reference?
-      p = src.as(Int32**)
-      return IC.nil if p.value.null?
-
-      id = p.value.value
-    when UnionType
-      id = src.as(Int32*).value
-      src += 8
-    end
-
-    # Gets the instance type if a TYPE_ID have been read (UnionType and reference_like):
-    instance_type = id ? IC.type_from_id(id) : self # devirtualize?
-
-    obj = IC::ICObject.new(instance_type)
-    obj.raw.copy_from(src, instance_type.copy_size)
-    obj
-  end
-
-  # Considers *dst* as this *type*, and write *value* to *dst*.
-  # If *type* is Nil, return IC.nil without writing the data.
-  #
-  #
-  # writes with the format:
-  #
-  # dst -> ref -> | TYPE_ID (4)
-  #               | data...
-  #
-  # for reference-like type.
-  #
-  # dst -> null (for nil reference-like).
-  #
-  #
-  #
-  # src -> |0| TYPE_ID (4)
-  #        |8| data|ref...
-  #
-  # for union type (box).
-  def write(value : IC::ICObject, to dst : Byte*)
-    case self
-    when .nil_type?
-      return value
-    when .reference?
-      # including VirtualType,
-      # reference_like UnionType,
-      # and instance type Nil
-    when UnionType
-      # box: write the TYPE_ID first:
-      dst.as(Int32*).value = IC.type_id(value.type)
-      dst += 8
-    end
-
-    value.raw.copy_to(dst, value.type.copy_size)
-    value
-  end
-
-  # Considers *src* as this *type*, and return the value of the ivar *name*
-  def read_ivar(name, from src : Byte*)
-    index, type = self.ic_ivars_layout[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
-
-    type.read from: (src + index)
-  end
-
-  # Considers *dst* as this *type*, and set *value* to the ivar *name*
-  def write_ivar(name, value : IC::ICObject, to dst : Byte*)
-    index, type = self.ic_ivars_layout[name]? || ic_error "Cannot found the ivar #{name}. Defining ivars on a type isn't retroactive yet."
-
-    type.write value, to: (dst + index)
   end
 
   def map_ivars(& : String -> T) forall T
@@ -162,10 +76,6 @@ class Crystal::Type
     @ic_ivars_layout = get_ivars_layout
   end
 
-  def reference?
-    nil_type? ? false : reference_like?
-  end
-
   def <(other : Type)
     self_type = self.devirtualize
     other_type = other.devirtualize
@@ -186,9 +96,16 @@ class Crystal::Type
     self.is_a? NamedType && self.name == "Array"
   end
 
-  # IC disallow instance of ICObject to be virtual or union typed.
-  def instantiable?
-    !is_a? UnionType && !is_a? VirtualType
+  def union?
+    self.is_a? UnionType
+  end
+
+  def instantiatable?
+    !self.union? && !self.is_a? VirtualType
+  end
+
+  def reference?
+    nil_type? ? false : reference_like?
   end
 
   def pointer_type_var

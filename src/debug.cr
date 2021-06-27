@@ -19,6 +19,12 @@ module IC
     ast
   end
 
+  class Error < Exception
+    def display
+      puts inspect_with_backtrace
+    end
+  end
+
   module CallStack
     class_getter callstack
   end
@@ -116,12 +122,14 @@ module IC
   #   end
   # end
 
-  class ICObject
+  struct ICObject
     def print_debug
       return if nop?
-      print "\n=== ICObject: 0x#{@raw.address.to_s(16)}"
-      if @type.reference?
-        addr = @raw.as(UInt64*).value
+
+      return self.unboxed.print_debug if self.type.union?
+      print "\n=== Object: 0x#{@address.address.to_s(16)}"
+      if self.type.reference?
+        addr = @address.as(UInt64*).value
         if addr == 0
           puts
           @type.print_debug
@@ -136,7 +144,7 @@ module IC
       if @type.pointer?
         # for pointers display the first allocated slot
         size = @type.pointer_element_size
-        addr = @raw.as(UInt64*).value
+        addr = @address.as(UInt64*).value
         data = Pointer(Byte).new(addr)
       else
         size = @type.reference? ? @type.ic_class_size : @type.ic_size
@@ -153,6 +161,22 @@ module IC
       end
       puts
       puts "==="
+    end
+
+    def unboxed : ICObject
+      previous_type = @type
+      ret = previous_def
+      IC.debug_indent
+      puts "Unbox #{previous_type} -> #{ret.type}" if previous_type != ret.type
+      ret
+    end
+
+    def box(new_type) : ICObject
+      previous_type = @type
+      ret = previous_def
+      IC.debug_indent
+      puts "Box #{previous_type} -> #{ret.type}" if previous_type != ret.type
+      ret
     end
   end
 

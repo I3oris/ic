@@ -152,7 +152,7 @@ module IC
       # We must copy in a new pointer because *ret* is a local var
       p = Pointer(Void).malloc size
       p.copy_from pointerof(ret).as(Void*), size
-      ICObject.new ret_type, from: p
+      ICObject.sub(ret_type, from: p)
     end
 
     private def self.memcpy(args, ret_type) : ICObject

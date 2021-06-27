@@ -39,11 +39,11 @@ end
 class Crystal::NumberLiteral
   def run
     case self.kind
-    when :f32  then IC.number self.value.to_f32
-    when :f64  then IC.number self.value.to_f64
+    when :f32  then IC.number(self.value.to_f32)
+    when :f64  then IC.number(self.value.to_f64)
     when :i128 then todo "Big Integer"
     when :u128 then todo "Big Integer"
-    else            IC.number self.integer_value
+    else            IC.number(self.integer_value)
     end
   end
 end
@@ -117,7 +117,7 @@ class Crystal::Assign
     end
 
     case t = self.target
-    when Var         then IC.assign_var(t.name, self.value.run)
+    when Var         then IC.assign_var(t.type, t.name, self.value.run)
     when InstanceVar then IC.assign_ivar(t.name, self.value.run)
     when ClassVar    then IC.assign_cvar(t.name, self.value.run, t.var.owner)
     when Global      then IC.assign_global(t.name, self.value.run)
@@ -131,8 +131,8 @@ end
 class Crystal::UninitializedVar
   def run
     case v = self.var
-    when Var         then IC.assign_var(v.name, IC.uninitialized(self.type))
-    when InstanceVar then IC.assign_ivar(v.name, IC.uninitialized(self.type))
+    when Var         then IC.assign_var(self.declared_type.type, v.name, IC.nop)
+    when InstanceVar then IC.assign_ivar(v.name, IC.nop)
     when ClassVar    then todo "Uninitialized cvar"
     else                  bug! "Unexpected uninitialized-assign target #{v.class}"
     end
@@ -208,7 +208,7 @@ class Crystal::TypeDeclaration
   def run
     value = self.value.try &.run || IC.nil
     case v = self.var
-    when Var      then IC.assign_var(v.name, value)
+    when Var      then IC.assign_var(self.declared_type.type, v.name, value)
     when ClassVar then IC.assign_cvar(v.name, value, v.var.owner)
     when InstanceVar # nothing
     else bug! "Unexpected var #{v.class} in type declaration"
@@ -244,12 +244,12 @@ end
 
 class Crystal::Call
   def run
-    receiver = self.obj.try &.run
+    receiver = self.obj.try &.run.unboxed
 
     case a_def = IC.dispatch_def(receiver, self.target_defs)
     when Nil      then bug! "Cannot find target def matching with this call: #{name}"
-    when External then return IC.run_fun_body(receiver, a_def, self.args.map &.run, self.type)
-    else               return IC.run_method(receiver, a_def, self.args.map &.run, self.block)
+    when External then return IC.run_fun_body(receiver, a_def, self.args.map &.run.unboxed, self.type)
+    else               return IC.run_method(receiver, a_def, self.args.map &.run.unboxed, self.block)
     end
   rescue e : IC::Return
     IC.handle_return(e)
@@ -301,6 +301,7 @@ class Crystal::If
     else
       self.else.run
     end
+      .boxed(self.type)
   end
 end
 
@@ -370,11 +371,11 @@ end
 
 class Crystal::PointerOf
   def run
-    if (exp = self.exp).is_a?(InstanceVar)
-      # when it is a pointerof an ivar, take the address of `self` + offsetof @ivar
-      IC.self_var.pointerof(ivar: exp.name)
-    else
-      self.exp.run.pointerof_self
+    case exp = self.exp
+    # when it is a pointerof an ivar, take the address of `self` + offsetof @ivar
+    when InstanceVar then IC.self_var.pointerof(ivar: exp.name)
+    when Var         then exp.run.pointerof_self
+    else                  todo "pointerof #{exp.class}"
     end
   end
 end
@@ -383,7 +384,7 @@ class Crystal::Out
   def run
     # `out x` would be equivalent to `pointerof(x = uninitialized Type)`:
     case var = self.exp
-    when Var then IC.assign_var(var.name, IC.uninitialized(var.type)).pointerof_self
+    when Var then IC.assign_var(var.type, var.name, IC.nop).pointerof_self
     else          todo "Out expression with #{exp.class}"
     end
   end
@@ -393,7 +394,7 @@ end
 
 class Crystal::Cast
   def run
-    if new_obj = self.obj.run.cast from: self.obj.type, to: @type
+    if new_obj = self.obj.run.cast? to: @type
       new_obj
     else
       todo "Raise an error on invalid cast"
@@ -403,7 +404,7 @@ end
 
 class Crystal::NilableCast
   def run
-    if new_obj = self.obj.run.cast from: self.obj.type, to: @type
+    if new_obj = self.obj.run.cast? to: @type
       new_obj
     else
       IC.nil

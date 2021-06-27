@@ -38,23 +38,25 @@ module IC
       end
     end
 
-    def self.[](name)
+    def self.[](name) : ICObject
       @@vars.reverse_each do |v|
         return v.vars[name]? || next
       end
       bug! "Cannot found the var '#{name}'"
     end
 
-    def self.[]=(name, value)
+    def self.assign(type, name, value : ICObject) : ICObject
       @@vars.reverse_each do |v|
         if var = v.vars[name]?
-          return var.assign value
+          # update the existing var, and merge his type with the assigned type:
+          merged_type = IC.program.type_merge([var.type, type]) || bug! "Cannot merge type of #{name}: #{var.type} + #{type}"
+          v.vars[name] = var.updated(merged_type)
+          return v.vars[name].assign value
         else
           next if v.yield_vars
 
           # Allocate slot for a new var:
-          # We copy value so `target` and `value` keep independent
-          return v.vars[name] = value.copy
+          return v.vars[name] = ICObject.create_var(type, value)
         end
       end
       bug! "Cannot set the var '#{name}', VarStack contain only yield vars"
@@ -69,7 +71,7 @@ module IC
     end
   end
 
-  def self.self_var
+  def self.self_var : ICObject
     CallStack.last_receiver
   end
 
@@ -84,12 +86,12 @@ module IC
     end
   end
 
-  def self.assign_var(name, value : ICObject) : ICObject
+  def self.assign_var(type, name, value : ICObject) : ICObject
     case name
     when .starts_with? '$'
       assign_global(name, value)
     else
-      VarStack[name] = value
+      VarStack.assign(type, name, value)
     end
   end
 
@@ -147,5 +149,12 @@ module IC
   def self.declared_vars
     vars_names = VarStack.top_level_vars.keys
     @@program.vars.select &.in? vars_names
+  end
+
+  def self.update_vars
+    VarStack.top_level_vars.each do |name, obj|
+      var = @@program.vars[name]? || next
+      VarStack.top_level_vars[name] = obj.updated(var.type)
+    end
   end
 end

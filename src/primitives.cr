@@ -45,7 +45,7 @@ module IC
     end
 
     private def self.allocate(type)
-      obj = ICObject.new type || bug! "No type to allocate"
+      obj = ICObject.create(type || bug! "No type to allocate").allocate
 
       case type
       when Crystal::InstanceVarInitializerContainer
@@ -131,18 +131,18 @@ module IC
       type = p.type.pointer_type_var
       dst = Pointer(Byte).new(p.as_uint64)
 
-      type.write value, to: dst
+      ICObject.sub(type, from: dst).assign value
     end
 
     private def self.pointer_get(p : ICObject)
       type = p.type.pointer_type_var
       src = Pointer(Byte).new(p.as_uint64)
 
-      type.read from: src
+      ICObject.sub(type, from: src)
     end
 
     private def self.pointer_add(p : ICObject, x : ICObject)
-      new_p = ICObject.new(p.type)
+      new_p = ICObject.create(p.type)
       new_p.as_uint64 = p.as_uint64 + x.as_int32*p.type.pointer_element_size
       new_p
     end
@@ -175,7 +175,7 @@ module IC
     end
 
     private def self.object_crystal_type_id(obj : ICObject)
-      IC.number(IC.type_id(obj.type))
+      IC.number(obj.runtime_type_id)
     end
 
     private def self.class_crystal_instance_type_id(obj : ICObject)
@@ -183,7 +183,7 @@ module IC
     end
 
     private def self._class(obj : ICObject)
-      IC.class(obj.type.metaclass)
+      IC.class(obj.runtime_type.metaclass)
     end
 
     private def self.symbol_to_s(obj : ICObject)

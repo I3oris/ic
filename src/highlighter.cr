@@ -68,6 +68,10 @@ module IC::Highlighter
     highlight_stack.clear
     error = false
 
+    if code == "∅"
+      return "∅".colorize.bold.red
+    end
+
     lexer = Crystal::Lexer.new(code)
     lexer.comments_enabled = true
     lexer.count_whitespace = true

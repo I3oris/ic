@@ -1,81 +1,312 @@
 module IC
   # ICObject are transmitted through the AST Tree, and represents Object created with IC
   #
-  # There are constituted of a `Type` and a pointer on the binary representation of the object (`raw`)
+  # There are constituted of a `Type` and a pointer to the object (@address)
   # i.e for a Int32, raw will be a pointer on 4 bytes.
   #
-  # For classes, raw will be a pointer on 8 bytes (address), pointing itself on the classes size.
+  # For classes, raw will be a pointer on 8 bytes (ref), pointing itself on class data.
   #
-  # The `Type` will give information of how to treat the raw binary.
-  #
-  # `@type` is always the **runtime* type of the object, and cannot be virtual or an union.
-  class ICObject
+  # The `Type` will give information of how to treat the binary object.
+  struct ICObject
+    # The address of this object, (representing an address on the stack):
+    getter address : Pointer(Byte)
+
+    # The **compile time** type of this object:
     getter type : Type
-    getter raw : Pointer(Byte)
+
     getter? nop = false
 
-    def initialize(@type)
-      if !@type.instantiable?
-        bug! "Cannot create a object with a runtime union or virtual type (#{@type})"
+    # Creates a new Object for literals, CONST, temporary Objects, and boxed/unboxed Object
+    #
+    # The returned object has is own address
+    def self.create(type)
+      new(type)
+    end
+
+    # Creates a new Object for vars, @@cvars, and $globals
+    #
+    # The returned object has is own address, but its type can be enlarged
+    # with `with_merged_type` (if possible)
+    def self.create_var(type : Type, value : ICObject) : ICObject
+      var = new(type, resizable?: true)
+      # var.allocate
+      var.assign(value) unless value.nop?
+      var
+    end
+
+    # Returns an object on an address, used for @ivars, or pointer_get.
+    def self.sub(type, from address)
+      new(type, address)
+    end
+
+    # Fictitious nop object, used on nodes that can't return, like a `Def` or a `ClassDef`.
+    def self.nop
+      new
+    end
+
+    # create:
+    private def initialize(@type : Type, resizable? = false)
+      if resizable?
+        # Allocate min 8 bytes so we can store an address in this slot after
+        # so if `x : Int32`, is re-assigned and change its type (`x = Foo.new`) we
+        # can store the new value and keep the address of `x` (so eventual pointer or closure on x wont break)
+        #
+        # However changing `x` type by a bigger struct isn't supported yet, because this mean break eventual pointers and closures.
+        #
+        # NOTE: in no-prompt mode, inside a function or a `Assign`; the problem doesn't appear because the type of the var is always fully known
+        # in advance.
+        @address = Pointer(Byte).malloc({@type.ic_size, 16}.max)
+      else
+        @address = Pointer(Byte).malloc(@type.ic_size)
+      end
+    end
+
+    # sub:
+    private def initialize(@type : Type, @address : Byte*)
+    end
+
+    # nop:
+    private def initialize
+      @type = IC.program.nil
+      @address = Pointer(Byte).null
+      @nop = true
+    end
+
+    # If this object is a reference: allocate its reference:
+    #
+    # address -> ref -> | TYPE_ID (4)
+    #                   | @ivar 1
+    #                   | @ivar 2
+    #                   | ...
+    def allocate
+      if @type.reference?
+        @address = Pointer(Byte).malloc(8)
+        @address.as(Byte**).value = Pointer(Byte).malloc(@type.ic_class_size)
+        @address.as(Int32**).value.value = IC.type_id(@type)
+      end
+      self
+    end
+
+    # Unsafe cast without changing the object address.
+    def hard_cast!(new_type)
+      ICObject.sub(new_type, from: @address)
+    end
+
+    # Returns this object with an updated type
+    #
+    # Used to change the type of a local var but keeping its address e.g:
+    # ```
+    # x = 42
+    # p = pointerof(x)
+    # p.value # => 42
+    #
+    # x = "foo!"
+    # # here x is updated to Int32|String and is boxed,
+    # # then p is updated to Pointer(Int32|String)
+    #
+    # p.value # => "foo!" # works because x keep the same address.
+    # ```
+    #
+    # The type cannot be update to a too lard type, because this need a reallocation
+    # and we doesn't want change the object address.
+    def updated(new_type)
+      if {new_type.ic_size, 16}.max > {@type.ic_size, 16}.max
+        # /!\ this will break pointers on this object!
+        ic_error "Cannot enlarge the type #{@type} to #{new_type}"
+        #
+      end
+      # TODO: execute missing @ivars initializers here!
+
+      if new_type != @type
+        obj = self.hard_cast!(new_type)
+        obj.assign self
+        obj
+      else
+        self
+      end
+    end
+
+    # Returns:
+    #   address -> data        (for value types)
+    #   address -> ref -> data (for references)
+    def data : Byte*
+      if type.reference?
+        @address.as(Byte**).value
+      else
+        @address
+      end
+    end
+
+    # Read the ivar @name of this object, if possible
+    def [](name) : ICObject
+      offset, type = @type.offset_and_type_of(name)
+
+      ICObject.sub(type, from: self.data + offset)
+    end
+
+    # Assign the ivar @name = *value*, if possible
+    def []=(name, value : ICObject) : ICObject
+      self[name].assign(value)
+    end
+
+    # ASSIGN: copy *value* into *self*
+    #
+    # * if self Nil: nothing to do (e.g assignment of ivar `@foo : Nil`)
+    #
+    # * if same type: simple copy byte to byte
+    #
+    # * value is unboxed (e.g `x : Int32 = 42||"42"`, `42||"42"` => `42`)
+    #
+    # * then is self is Union, we box it: (e.g `y : Int32|String = 42`)
+    def assign(value : ICObject) : ICObject
+      return value if @type.nil_type?
+
+      if @type == value.type
+        value.address.copy_to(@address, value.type.copy_size)
+      else
+        value = value.unboxed
+
+        bug! "Cannot assign #{@type} <- #{value.type}" if value.type.ic_size > @type.ic_size
+
+        if @type.union?
+          self.box(value)
+        else
+          value.address.copy_to(@address, value.type.copy_size)
+        end
+      end
+      value
+    end
+
+    # Box: Assign a *value* to this union type
+    #
+    # Format of union is:
+    # | TYPE_ID    (4)
+    # | padding    (4)
+    # | data_union (...)
+    #
+    #
+    # If the union is reference_like (e.g `String|Nil|AClass`)
+    # format is:
+    # | reference (8)
+    #
+    def box(value : ICObject)
+      bug! "Cannot box to a non-union type (#{@type})" unless @type.union?
+
+      value = value.unboxed
+      # puts "box #{@type} <- #{value.type} (#{value.type.copy_size} bytes)"
+
+      if @type.reference_like?
+        # Write reference:
+        @address.copy_from(value.address, value.type.copy_size)
+        return self
       end
 
+      # Write TYPE_ID and data_union:
+      self.as_int32 = IC.type_id(value.type)
+      (self.address + 8).copy_from(value.address, value.type.copy_size)
+      self
+    end
+
+    # Returns a new object that box *self* with *new_type*:
+    def boxed(new_type : Type) : ICObject
+      case new_type
+      when @type   then self
+      when .union? then ICObject.create(new_type).box(self)
+        # .virtual?
+      else self
+      end
+    end
+
+    # Returns a new object unboxed from *self*
+    #
+    # The object returned is always instantiatable and keep its address unless is was unboxed from an union
+    def unboxed : ICObject
+      if @type.virtual? || @type.union? && @type.reference_like?
+        run_type = self.runtime_type
+        self.hard_cast!(run_type)
+      elsif @type.union?
+        run_type = self.runtime_type
+
+        obj = ICObject.create(run_type)
+        obj.address.copy_from(@address + 8, run_type.copy_size)
+        obj
+      else
+        self
+      end
+    end
+
+    # Returns the runtime type of this object,
+    # runtime type **Cannot** be union or virtual
+    def runtime_type
+      run_type =
+        if @type.union? || @type.reference_like?
+          IC.type_from_id(self.runtime_type_id)
+        else
+          @type
+        end
+      if !run_type.instantiatable?
+        bug! "Runtime type should be instantiatable: not #{run_type}"
+      end
+      run_type
+    end
+
+    # Returns the type if of the `runtime` type
+    def runtime_type_id
       case @type
       when .nil_type?
-        # raw -> null (8)
-        raw = Pointer(Byte*).malloc
-        raw.value = Pointer(Byte).null
-        @raw = raw.as(Byte*)
-      when .reference?
-        # raw -> ref -> | TYPE_ID (4)
-        #               | @ivar 1
-        #               | @ivar 2
-        #               | ...
-        raw = Pointer(Byte*).malloc
-        raw.value = Pointer(Byte).malloc(@type.ic_class_size)
-        raw.value.as(Int32*).value = IC.type_id(@type)
-        @raw = raw.as(Byte*)
-      else
-        # raw -> | @ivar 1
-        #        | @ivar 2
+        IC.type_id(IC.program.nil)
+      when .reference_like?
+        if (data = self.data).null?
+          # address -> null
+          IC.type_id(IC.program.nil)
+        else
+          # address -> data -> | TYPE_ID
+          #                | ...
+          data.as(Int32*).value
+        end
+      when .union?
+        # address -> | TYPE_ID
         #        | ...
-        @raw = Pointer(Byte).malloc(@type.ic_size)
-      end
-    end
-
-    def initialize(@type, from @raw)
-      if !@type.instantiable?
-        bug! "Cannot create a object with a runtime union or virtual type (#{@type})"
-      end
-    end
-
-    def initialize(@type, uninitialized? : Bool)
-      @raw = Pointer(Byte).malloc(@type.ic_size)
-    end
-
-    def initialize(@nop : Bool)
-      @type = IC.program.nil
-      @raw = Pointer(Byte).null
-    end
-
-    # Returns the pointer on the data of this object:
-    # raw -> data (for struct)
-    # raw -> ref -> data (for classes)
-    def data
-      if !@type.reference?
-        @raw
+        self.as_int32
       else
-        @raw.as(Byte**).value
+        # Otherwise, runtime type id is the compile time type id
+        IC.type_id(@type)
       end
     end
 
-    # Read an ivar from this object
-    def [](name)
-      @type.read_ivar(name, from: self.data)
+    # Performs a safe cast (`as`):
+    # returns a new boxed/unboxed value if needed
+    # returns nil if cast is invalid.
+    def cast?(to : Type?) : ICObject?
+      bug! "cast from #{to} failed" if to.nil?
+
+      if self.is_a(to)
+        if @type == to
+          self
+        else
+          value = self.unboxed
+
+          if to.union?
+            value.boxed(to)
+          else
+            value.hard_cast!(to)
+          end
+        end
+      elsif (@type.pointer? && to.pointer?) ||
+            (@type.pointer? && to.reference_like?) ||
+            (to.pointer? && @type.reference_like?)
+        self.hard_cast!(to)
+      else
+        puts "INVALID CAST #{@type}(#{self.runtime_type}) vs #{to}"
+        nil
+      end
     end
 
-    # Write an ivar of this object
-    def []=(name, value : ICObject)
-      @type.write_ivar(name, value, to: self.data)
+    # `is_a?` compares runtime type to the given type.
+    def is_a(type : Type?)
+      bug! ".is_a?(#{type}) failed" if type.nil?
+
+      self.runtime_type <= type
     end
 
     def truthy?
@@ -84,348 +315,47 @@ module IC
 
     # Falsey if is nil, false, or null Pointer
     def falsey?
-      @type.nil_type? || (@type.bool_type? && self.as_bool == false) || (@type.pointer? && self.as_uint64 == 0u64)
+      value = self.unboxed
+
+      value.type.nil_type? || (value.type.bool_type? && value.as_bool == false) || (value.type.pointer? && value.as_uint64 == 0u64)
     end
 
-    def read_type_id
-      self.data.as(Int32*).value
-    end
-
-    def cast(from : Type?, to : Type?)
-      bug! "Cast from #{@type} failed" if from.nil? || to.nil?
-      if @type.pointer?
-        # Pointer cast seems never fail
-        return ICObject.new(to, from: @raw)
-      end
-
-      if @type <= to
-        self
-      else
-        nil
-      end
-    end
-
-    def is_a(type : Type?)
-      bug! ".is_a?(#{@type}) failed" if type.nil?
-      @type <= type
-    end
-
-    def assign(other : ICObject) : ICObject
-      # TODO check if ic_size is not too small
-      @raw.copy_from(other.raw, other.type.ic_size)
-      @type = other.type
-      self
-    end
-
-    def copy
-      obj = ICObject.new(@type)
-      obj.raw.copy_from(@raw, @type.ic_size)
-      obj
-    end
-
-    # Returns a new ICObject(Pointer) pointing on the raw data of this object
-    def pointerof_self
-      IC.pointer_of(@type, address: @raw.address)
+    # Returns a new ICObject(Pointer) pointing on the address of this object.
+    def pointerof_self : ICObject
+      IC.pointer_of(@type, address: @address.address)
     end
 
     # Returns a new ICObject(Pointer) pointing on the offset of *ivar*
-    def pointerof(*, ivar : String)
+    def pointerof(*, ivar : String) : ICObject
       offset, type = @type.offset_and_type_of(ivar)
       IC.pointer_of(type, address: (self.data + offset).address)
     end
 
-    def enum_value
-      bug! "Trying to read enum value on a non-enum type #{@type}" unless (t = @type).is_a? Crystal::EnumType
-
-      case k = t.base_type.kind
-      when :i8   then as_int8
-      when :u8   then as_uint8
-      when :i16  then as_int16
-      when :u16  then as_uint16
-      when :i32  then as_int32
-      when :u32  then as_uint32
-      when :i64  then as_int64
-      when :u64  then as_uint64
-      when :i128 then todo "Enum to #{k}"
-      when :u128 then todo "Enum to #{k}"
-      else            bug! "Unexpected enum number kind #{k}"
-      end
-    end
-
-    def enum_name
-      bug! "Trying to read enum value on a non-enum type #{@type}" unless @type.is_a? Crystal::EnumType
-
-      val = self.enum_value
-      @type.types.each do |member_name, member|
-        member_name
-        const = member.as(Crystal::Const)
-        if val == const.value.as(Crystal::NumberLiteral).integer_value
-          return member_name
+    # Performs the implicit conversion between int-types or symbol to enum.
+    def implicit_convert(to new_type) : ICObject
+      case new_type
+      when @type
+        self
+      when Crystal::EnumType
+        if @type.is_a? Crystal::SymbolType
+          IC.enum_from_symbol(new_type, self)
         end
-      end
-      "#{@type}:#{val}"
-    end
-
-    # Gives a string representation used by IC to display the result of an instruction.
-    def result : String
-      result =
-        case t = @type
-        when Crystal::IntegerType
-          case t.kind
-          when :i8   then "#{as_int8.to_s.underscored}_i8"
-          when :u8   then "#{as_uint8.to_s.underscored}_u8"
-          when :i16  then "#{as_int16.to_s.underscored}_i16"
-          when :u16  then "#{as_uint16.to_s.underscored}_u16"
-          when :i32  then as_int32.to_s.underscored
-          when :u32  then "#{as_uint32.to_s.underscored}_u32"
-          when :i64  then "#{as_int64.to_s.underscored}_i64"
-          when :u64  then "0x#{as_uint64.to_s(16)}"
-          when :i128 then todo "#{t.kind} as number"
-          when :u128 then todo "#{t.kind} as number"
-          end
-        when Crystal::FloatType
-          case t.kind
-          when :f32 then "#{as_float32.to_s.underscored}_f32"
-          when :f64 then as_float64.to_s.underscored
-          end
-        when Crystal::BoolType   then as_bool.inspect
-        when Crystal::CharType   then as_char.inspect
-        when Crystal::SymbolType then ":#{IC.symbol_from_value(as_int32)}"
-        when Crystal::NilType    then "nil"
-        when Crystal::EnumType   then "#{enum_name}"
-        when Crystal::TupleInstanceType
-          entries = @type.map_ivars { |name| self[name].result }
-          "{#{entries.join(", ")}}"
-        when Crystal::NamedTupleInstanceType
-          entries = @type.map_ivars { |name| "#{t.entries[name.to_i].name}: #{self[name].result}" }
-          "{#{entries.join(", ")}}"
-          # when .array?
-        when .string?    then as_string.inspect
-        when .metaclass? then t.to_s.chomp(".class").chomp(":Module")
-        when .reference? then "#<#{t}:0x#{as_uint64.to_s(16)}>"
-        when .struct?    then "#<#{t}>"
+      when Crystal::FloatType, Crystal::IntegerType
+        case new_type.kind
+        when :i8   then IC.number(self.as_number.to_i8)
+        when :u8   then IC.number(self.as_number.to_u8)
+        when :i16  then IC.number(self.as_number.to_i16)
+        when :u16  then IC.number(self.as_number.to_u16)
+        when :i32  then IC.number(self.as_number.to_i32)
+        when :u32  then IC.number(self.as_number.to_u32)
+        when :i64  then IC.number(self.as_number.to_i64)
+        when :u64  then IC.number(self.as_number.to_u64)
+        when :f32  then IC.number(self.as_number.to_f32)
+        when :f64  then IC.number(self.as_number.to_f64)
+        when :i128 then todo "implicit_convert #{@type} -> #{new_type}"
+        when :u128 then todo "implicit_convert #{@type} -> #{new_type}"
         end
-      result || "??? #{t}"
-    end
-
-    # Treat this ICObject as Int32,UInt64,..
-    # Used by primitives.
-    {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64 Bool Char String) %}
-      def as_{{t.downcase.id}}
-        @raw.as({{t.id}}*).value
-      end
-
-      def as_{{t.downcase.id}}=(value : {{t.id}})
-        @raw.as({{t.id}}*).value = value
-      end
-    {% end %}
-
-    def as!(type : T.class) : T forall T
-      @raw.as(T*).value
-    end
-
-    def as_integer
-      unless (t = @type).is_a? Crystal::IntegerType
-        bug! "Trying to read #{t} as Int"
-      end
-
-      case t.kind
-      when :i8   then self.as_int8
-      when :u8   then self.as_uint8
-      when :i16  then self.as_int16
-      when :u16  then self.as_uint16
-      when :i32  then self.as_int32
-      when :u32  then self.as_uint32
-      when :i64  then self.as_int64
-      when :u64  then self.as_uint64
-      when :i128 then todo "#{t.kind} as number"
-      when :u128 then todo "#{t.kind} as number"
-      else
-        bug! "Unexpected Number kind #{t.kind}"
-      end
-    end
-
-    def as_float
-      unless (t = @type).is_a? Crystal::FloatType
-        bug! "Trying to read #{t} as Float"
-      end
-
-      case t.kind
-      when :f32 then self.as_float32
-      when :f64 then self.as_float64
-      else
-        bug! "Unexpected Float Number kind #{t.kind}"
-      end
-    end
-
-    def as_number : Number
-      case @type
-      when Crystal::IntegerType                   then self.as_integer
-      when Crystal::FloatType                     then self.as_float
-      when Crystal::BoolType                      then self.as_bool ? 1 : 0
-      when Crystal::SymbolType, Crystal::CharType then self.as_int32
-      else
-        bug! "Trying to read #{@type} as a number"
-      end
-    end
-
-    def as_proc
-      @raw.as(Proc(Array(ICObject), ICObject)*).value
-    end
-
-    def as_proc=(proc)
-      @raw.as(Proc(Array(ICObject), ICObject)*).value = proc
-    end
-
-    def as_va_arg
-      if @type.pointer?
-        as_uint64
-      else
-        as_number.to_u64
-      end
-    end
-  end
-
-  # Creates the corresponding ICObject from values:
-
-  def self.nop
-    ICObject.new(nop: true)
-  end
-
-  def self.nil
-    ICObject.new(IC.program.nil)
-  end
-
-  def self.bool(value : Bool)
-    obj = ICObject.new(IC.program.bool)
-    obj.as_bool = value
-    obj
-  end
-
-  {% for t in %w(Int8 UInt8 Int16 UInt16 Int32 UInt32 Int64 UInt64 Float32 Float64) %}
-    def self.number(value : {{t.id}})
-      obj = ICObject.new(IC.program.{{t.downcase.id}})
-      obj.as_{{t.downcase.id}} = value
-      obj
-    end
-  {% end %}
-
-  def self.number(value)
-    todo "#{value.class} to ICObject"
-  end
-
-  def self.char(value : Char)
-    obj = ICObject.new(IC.program.char)
-    obj.as_char = value
-    obj
-  end
-
-  # obj.raw -> ref -> | TYPE_ID (4)
-  #                   | @bytesize (4)
-  #                   | @length (4)
-  #                   | @c    (@bytesize times)
-  #                   | ...
-  def self.string(value : String)
-    obj = ICObject.new(IC.program.string)
-    (obj.data + 4).as(Int32*).value = value.@bytesize
-    (obj.data + 8).as(Int32*).value = value.@length
-    (obj.data + 12).as(UInt8*).copy_from(pointerof(value.@c), value.@bytesize)
-    obj
-  end
-
-  def self.pointer(pointer_type : Type, address : UInt64)
-    obj = ICObject.new(pointer_type)
-    obj.as_uint64 = address
-    obj
-  end
-
-  def self.pointer_of(type : Type, address : UInt64)
-    IC.pointer(IC.program.pointer_of(type), address)
-  end
-
-  def self.symbol(value : String)
-    obj = ICObject.new(IC.program.symbol)
-    obj.as_int32 = IC.symbol_value(value)
-    obj
-  end
-
-  def self.tuple(type : Type, elements : Array(ICObject))
-    obj = ICObject.new(type)
-    elements.each_with_index do |e, i|
-      obj[i.to_s] = e
-    end
-    obj
-  end
-
-  def self.class(type : Type)
-    type = type.devirtualize
-
-    bug! "Trying to create a class or a module from a non metaclass type (#{type.class})" unless type.responds_to? :instance_type
-
-    obj = ICObject.new(type)
-    obj.as_int32 = IC.type_id(type.instance_type, instance: false)
-    obj
-  end
-
-  def self.enum(type : Crystal::EnumType, value)
-    obj = ICObject.new(type)
-    case k = type.base_type.kind
-    when :i8   then obj.as_int8 = value.to_i8
-    when :u8   then obj.as_uint8 = value.to_u8
-    when :i16  then obj.as_int16 = value.to_i16
-    when :u16  then obj.as_uint16 = value.to_u16
-    when :i32  then obj.as_int32 = value.to_i32
-    when :u32  then obj.as_uint32 = value.to_u32
-    when :i64  then obj.as_int64 = value.to_i64
-    when :u64  then obj.as_uint64 = value.to_u64
-    when :i128 then todo "Enum from #{k}"
-    when :u128 then todo "Enum from #{k}"
-    end
-    obj
-  end
-
-  def self.enum_from_symbol(type : Crystal::EnumType, symbol : ICObject)
-    name = IC.symbol_from_value(symbol.as_int32)
-    const = type.find_member(name)
-    bug! "Cannot create a enum #{type} from the symbol #{name}" unless const
-
-    value = const.value.as(Crystal::NumberLiteral).integer_value
-    IC.enum(type, value)
-  end
-
-  def self.uninitialized(type : Type)
-    ICObject.new(type, uninitialized?: true)
-  end
-
-  def self.proc(type : Type, & : -> Proc(Array(ICObject), ICObject))
-    obj = ICObject.new(type)
-    obj.as_proc = yield obj.object_id
-    obj
-  end
-end
-
-class String
-  # Add underscores to this number string
-  #
-  # "10000000"    => "10_000_000"
-  # "-1000"       => "-1_000"
-  # "-1000.12345" => "-1_000.123_45"
-  def underscored
-    return self if self.in? "Infinity", "-Infinity"
-
-    String.build do |io|
-      parts = self.split('.')
-      parts.each_with_index do |str, part|
-        str.each_char_with_index do |c, i|
-          i = (part == 0) ? (str.size - 1 - i) : i + 1
-
-          io << c
-          if i % 3 == 0 && (0 != i != str.size) && c != '-'
-            io << '_'
-          end
-        end
-        io << '.' unless part == parts.size - 1
-      end
+      end || self
     end
   end
 end

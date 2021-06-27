@@ -7,6 +7,7 @@ require "compiler/crystal/syntax"
 require "./nodes"
 require "./types"
 require "./objects"
+require "./literals"
 require "./primitives"
 require "./execution"
 require "./fun"
@@ -43,6 +44,7 @@ module IC
     ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
+    IC.update_vars
     ast_node
   end
 
