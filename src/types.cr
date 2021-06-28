@@ -88,14 +88,6 @@ class Crystal::Type
     !!self_type.implements?(other_type)
   end
 
-  def string?
-    self.is_a? NamedType && self.name == "String"
-  end
-
-  def array?
-    self.is_a? NamedType && self.name == "Array"
-  end
-
   def union?
     self.is_a? UnionType
   end
@@ -106,6 +98,18 @@ class Crystal::Type
 
   def reference?
     nil_type? ? false : reference_like?
+  end
+
+  def string?
+    self.is_a? NamedType && self.name == "String"
+  end
+
+  def array?
+    self.to_s.match /^Array\(.+\)$/
+  end
+
+  def range?
+    self.to_s.match /^Range\(.+\)$/
   end
 
   def pointer_type_var

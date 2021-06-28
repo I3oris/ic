@@ -93,6 +93,13 @@ module IC
       end
     end
 
+    def as_range
+      begin_ = (b = self["@begin"]).runtime_type.nil_type? ? nil : b.as_number
+      end_ = (e = self["@end"]).runtime_type.nil_type? ? nil : e.as_number
+      exclu_ = self["@exclusive"].as_bool
+      Range.new(begin_, end_, exclu_)
+    end
+
     def as_proc
       @address.as(Proc(Array(ICObject), ICObject)*).value
     end
@@ -149,9 +156,21 @@ module IC
         when Crystal::NamedTupleInstanceType
           entries = value.type.map_ivars { |name| "#{t.entries[name.to_i].name}: #{value[name].result}" }
           "{#{entries.join(", ")}}"
-          # when .array?
+        when .array?
+          buf_obj = value["@buffer"]
+          buf = Pointer(Byte).new(buf_obj.as_uint64)
+
+          size = value["@size"].as_int32
+          elem_size = buf_obj.type.pointer_element_size
+
+          entries = Array.new(size) do |i|
+            ICObject.sub(buf_obj.type.pointer_type_var, from: buf + i*elem_size).result
+          end
+          of_type = " of #{buf_obj.type.pointer_type_var}" if size == 0
+          "[#{entries.join(", ")}]#{of_type}"
+        when .range?     then value.as_range.to_s
         when .string?    then value.as_string.inspect
-        when .metaclass? then t.to_s.chomp(".class").chomp(":Module")
+        when .metaclass? then IC.type_from_id(value.as_int32).to_s.chomp(".class").chomp(":Module")
         when .reference? then "#<#{t}:0x#{value.as_uint64.to_s(16)}>"
         when .struct?    then "#<#{t}>"
         end
@@ -267,10 +286,6 @@ module IC
     value = const.value.as(Crystal::NumberLiteral).integer_value
     IC.enum(type, value)
   end
-
-  # def self.uninitialized(type : Type) : ObjectView
-  #   Literal.new(type, initialized: false).view
-  # end
 
   def self.proc(type : Type, & : -> Proc(Array(ICObject), ICObject)) : ICObject
     obj = ICObject.create(type)
