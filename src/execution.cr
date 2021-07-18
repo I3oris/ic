@@ -143,6 +143,9 @@ module IC
   end
 
   # This Set permit to associate an unique id for each type, works like the `Program::symbol` set.
+  #
+  # /!\ can't work: because:
+  # Set assumes that the identity of each element does not change while it is stored. Modifying an element of a set will render the set to an unreliable state.
   @@crystal_types = Set(Type).new
 
   def self.type_id(type : Type, instance = true)

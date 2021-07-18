@@ -1,8 +1,7 @@
 require "./unions_helper"
 
 describe :Unions do
-  # got UnionClass+ instead of UnionClass
-  pending "gives a good union virtual type" do
+  it "gives a good union virtual type" do
     IC.run_spec(<<-'CODE').should eq %({UnionClass, true, false})
       foobar = UnionSubClass1|UnionSubClass2
       {foobar, foobar.is_a?(UnionClass.class), foobar == UnionClass}
@@ -29,7 +28,7 @@ describe :Unions do
       CODE
   end
 
-  pending "dispatch primitives int" do
+  it "dispatch primitives int" do
     IC.run_spec(%((1 || 2u8 || 3i64 ).class)).should eq %(Int32)
   end
 

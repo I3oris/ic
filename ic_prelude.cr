@@ -151,6 +151,7 @@ class String
 
   def self.new(size : Int32)
     str = Pointer(UInt8).malloc(12u64 + size + 1u64)
+    str.as(Int32*).value = "".crystal_type_id
     str.as(String).length = size
     str.as(String).bytesize = size
     str.as(String)

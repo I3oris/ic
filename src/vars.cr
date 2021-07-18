@@ -130,6 +130,7 @@ module IC
   end
 
   def self.underscore=(value : ICObject)
+    value = value.unboxed
     meta_var = Crystal::MetaVar.new "__", value.type
 
     @@program.@vars["__"] = meta_var
