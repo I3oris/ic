@@ -1,75 +1,63 @@
 # File retake and modified from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
 # Thanks!
-module IC::Highlighter
-  record Highlight,
-    color : Symbol,
-    bold : Bool = false,
-    underline : Bool = false do
-    def to_s(io)
-      case color
-      when :black   then io << 30
-      when :red     then io << 31
-      when :green   then io << 32
-      when :yellow  then io << 33
-      when :blue    then io << 34
-      when :magenta then io << 35
-      when :cyan    then io << 36
-      when :white   then io << 37
-      end
-      io << ";1" if bold
-      io << ";4" if underline
-    end
-  end
+class IC::Highlighter
+  COMMENT_COLOR           = {:dark_gray, :bold}
+  NUMBER_COLOR            = :magenta
+  CHAR_COLOR              = :magenta
+  SYMBOL_COLOR            = :magenta
+  STRING_COLOR            = :light_yellow
+  HEREDOC_DELIMITER_COLOR = {:light_yellow, :underline}
+  INTERPOLATION_COLOR     = :light_red
+  CONST_COLOR             = {:blue, :underline}
+  OPERATOR_COLOR          = :light_red
+  IDENT_COLOR             = :default
+  KEYWORD_COLOR           = :light_red
+  TRUE_FALSE_NIL_COLOR    = {:cyan, :bold}
+  SELF_COLOR              = {:cyan, :bold}
+  SPECIAL_VALUES_COLOR    = :cyan
+  METHOD_COLOR            = {:green, :bold}
 
-  class_getter highlight_stack = [] of Highlight
-
-  class_getter? is_str = false
-  class_getter line_number = 0
-  class_setter invitation : Proc(String) = ->{ "" }
-  @@no_invitation = false
-
-  def self.invitation
-    invit = @@no_invitation ? "" : @@invitation.call
-    @@line_number += 1
-    invit
-  end
-
-  KEYWORDS = Set{
-    "new",
-    :abstract, :alias, :as, :as?, :asm, :begin, :break, :case, :class,
+  KEYWORDS = {
+    :abstract, :alias, :annotation, :as, :as?, :asm, :begin, :break, :case, :class,
     :def, :do, :else, :elsif, :end, :ensure, :enum, :extend, :for, :fun,
     :if, :in, :include, :instance_sizeof, :is_a?, :lib, :macro, :module,
-    :next, :nil?, :of, :out, :pointerof, :private, :protected, :require,
+    :next, :nil?, :of, :offsetof, :out, :pointerof, :private, :protected, :require,
     :rescue, :responds_to?, :return, :select, :sizeof, :struct, :super,
     :then, :type, :typeof, :undef, :union, :uninitialized, :unless, :until,
-    :verbatim, :when, :while, :with, :yield, :annotation,
+    :verbatim, :when, :while, :with, :yield,
   }
 
-  SPECIAL_VALUES = Set{
-    :true, :false, :nil, :self,
-    :__FILE__, :__DIR__, :__LINE__, :__END_LINE__,
-  }
+  SPECIAL_VALUES = {:__FILE__, :__DIR__, :__LINE__, :__END_LINE__}
+  TRUE_FALSE_NIL = {:true, :false, :nil}
+  SPECIAL_WORDS  = /^(new|loop|raise|record|spawn|(class_)?(getter|property|setter)(\?|!)?)$/
 
-  SPECIAL_WORDS = /^(new|(class_)?(getter|property|setter)(\?|!)?|loop|raise|record|spawn)$/
-
-  OPERATORS = Set{
-    :"+", :"-", :"*", :"/", :"//",
-    :"=", :"==", :"<", :"<=", :">", :">=", :"!", :"!=", :"=~", :"!~",
-    :"&", :"|", :"^", :"~", :"**", :">>", :"<<", :"%",
-    :"&-", :"&+", :"&*", :"&**",
-    :"[]", :"[]?", :"[]=", :"<=>", :"===",
-    :"+=", :"-=", :"*=", :"/=", :"//=", :"|=", :"&=", :"%=",
+  OPERATORS = {
+    :+, :-, :*, :/, ://,
+    :"=", :==, :<, :<=, :>, :>=, :!, :!=, :=~, :!~,
+    :[], :[]?, :[]=, :<=>, :===,
+    :&, :|, :^, :~, :**, :>>, :<<, :%,
+    :&+, :&-, :&*, :&**,
+    :"+=", :"-=", :"*=", :"/=", :"//=",
+    :"&=", :"|=", :"^=", :"**=", :">>=", :"<<=", :"%=",
     :"&+=", :"&-=", :"&*=",
+    :"&&", :"||", :"&&=", :"||=",
   }
 
-  def self.highlight(code, *, @@no_invitation = false)
-    @@is_str = false
-    @@line_number = 0
-    highlight_stack.clear
+  def initialize
+    @colorized = ""
+    @pos = 0
+  end
+
+  def self.highlight(code)
+    self.new.highlight(code)
+  end
+
+  def highlight(code : String)
+    @pos = 0
     error = false
 
     if code == "∅"
-      return "∅".colorize.bold.red
+      return "∅".colorize.bold.red.to_s
     end
 
     lexer = Crystal::Lexer.new(code)
@@ -78,12 +66,11 @@ module IC::Highlighter
     lexer.wants_raw = true
 
     # Colorize the *code* following the `Lexer`:
-    colorized = String.build do |io|
-      io.print self.invitation
+    @colorized = String.build(64 + code.bytesize*2) do |io|
       begin
         highlight_normal_state lexer, io
-        io.puts "\e[m"
-      rescue Crystal::SyntaxException
+        io.print "\e[m"
+      rescue
         error = true
       end
     end
@@ -96,91 +83,76 @@ module IC::Highlighter
     #
     # In the case of "def initialize(@[\^|-**/{" we want also retrieve the "@[\^|-**/{" because the user want
     # see what he write even it have no sense.
-    #
-    # So we compare what it have been written(colorized) and the original code, and add the difference,
-    # but we must remove colors and invitation before comparing.
     if error
-      # uncolorize:
-      colorless = colorized.gsub(/\e\[[0-9;]*m/, "")
-
-      # remove ic invitation:
-      colorless = colorless.gsub(/ic\([0-9\.]+(-dev)?\):[0-9]{2,}[>\*"] /, "")
-
-      # remove the \b\b\b and remove the erased char from colorless.size:
-      backchar_size = 0
-      colorless = colorless.gsub(/#{'\b'}+/) do |backs|
-        backchar_size += backs.size
-        ""
-      end
-
-      # The point where the exception have been raised, we want retrieve the lost characters after this:
-      error_point = colorless.size - backchar_size
-
-      # re-add missing characters and invitation:
-      colorized += (code[error_point...].gsub "\n" { "\n#{self.invitation}" })
+      @colorized += String.new(code.to_slice[@pos..])
     end
 
-    @@line_number = 0
-    return colorized.chomp("\n")
+    return @colorized
   end
 
-  private def self.highlight_normal_state(lexer, io, break_on_rcurly = false)
+  private def highlight_normal_state(lexer, io, break_on_rcurly = false)
     last_is_def = false
+    heredoc_stack = [] of Crystal::Token
     last_token = {type: nil, value: ""}
 
     while true
+      @pos = lexer.current_pos
       token = lexer.next_token
 
       case token.type
       when :NEWLINE
         io.puts
-        io.print "#{self.invitation}"
+        heredoc_stack.each_with_index do |token, i|
+          highlight_delimiter_state lexer, token, io, heredoc: true
+          unless i == heredoc_stack.size - 1
+            # Next token to heredoc's end is either NEWLINE or EOF.
+            @pos = lexer.current_pos
+            if lexer.next_token.type == :EOF
+              raise "Unterminated heredoc"
+            end
+            io.puts
+          end
+        end
+        heredoc_stack.clear
       when :SPACE
         io << token.value
-        if token.passed_backslash_newline
-          io.print "#{self.invitation}"
-        end
       when :COMMENT
-        highlight token.value.to_s, :comment, io
+        highlight token.value.to_s, COMMENT_COLOR, io
       when :NUMBER
-        highlight token.raw, :number, io
+        highlight token.raw, NUMBER_COLOR, io
       when :CHAR
-        highlight token.raw, :char, io
+        highlight token.raw, CHAR_COLOR, io
       when :SYMBOL
-        highlight token.raw, :symbol, io
+        highlight token.raw, SYMBOL_COLOR, io
       when :CONST, :"::"
-        highlight token, :const, io
+        highlight token, CONST_COLOR, io
       when :DELIMITER_START
         if token.raw == "/" && last_token[:type].in?(:NUMBER, :CONST, :INSTANCE_VAR, :CLASS_VAR, :IDENT)
-          highlight "/", :operator, io
+          highlight "/", OPERATOR_COLOR, io
+        elsif token.delimiter_state.kind == :heredoc
+          highlight token.raw, HEREDOC_DELIMITER_COLOR, io
+          heredoc_stack << token.dup
         else
-          @@is_str = true
           highlight_delimiter_state lexer, token, io
         end
       when :STRING_ARRAY_START, :SYMBOL_ARRAY_START
-        @@is_str = true
         highlight_string_array lexer, token, io
       when :EOF
         break
       when :IDENT
         if last_is_def
           last_is_def = false
-          highlight token, :method, io
+          highlight token, METHOD_COLOR, io
+        elsif SPECIAL_WORDS.matches? token.to_s
+          highlight token, KEYWORD_COLOR, io
         else
-          case
-          when KEYWORDS.includes? token.value
-            highlight token, :keyword, io
-          when SPECIAL_VALUES.includes? token.value
-            highlight token, :literal, io
-          when SPECIAL_WORDS.matches? token.to_s
-            highlight token, :keyword, io
-          else
-            io << token
-          end
+          highlight token, ident_color(token), io
         end
+      when .in? SPECIAL_VALUES
+        highlight token, SPECIAL_VALUES_COLOR, io
       when :"}"
         if break_on_rcurly
-          highlight token, :interpolation, io
+          highlight "}", INTERPOLATION_COLOR, io
           break
         else
           io << token
@@ -192,20 +164,17 @@ module IC::Highlighter
       when :":"
         if last_token[:type] == :IDENT
           last_token[:value].size.times { io << '\b' }
-          highlight last_token[:value] + ':', :symbol, io
+          highlight last_token[:value] + ':', SYMBOL_COLOR, io
         else
           io << ':'
         end
+      when :UNDERSCORE
+        io << "_"
       else
         if OPERATORS.includes? token.type
-          highlight token, :operator, io
+          highlight token, OPERATOR_COLOR, io
         else
-          case token.type
-          when :UNDERSCORE
-            io << "_"
-          else
-            io << token.type
-          end
+          io << token
         end
       end
 
@@ -217,106 +186,97 @@ module IC::Highlighter
     end
   end
 
-  private def self.highlight_delimiter_state(lexer, token, io)
-    start_highlight :string, io
+  private def ident_color(token)
+    case token.value
+    when .in? KEYWORDS       then KEYWORD_COLOR
+    when .in? TRUE_FALSE_NIL then TRUE_FALSE_NIL_COLOR
+    when :self               then SELF_COLOR
+    else                          IDENT_COLOR
+    end
+  end
 
-    print_raw io, token.raw
+  private def highlight_delimiter_state(lexer, token, io, heredoc = false)
+    highlight token.raw, STRING_COLOR, io unless heredoc
 
     while true
+      @pos = lexer.current_pos
       token = lexer.next_string_token(token.delimiter_state)
       case token.type
       when :DELIMITER_END
-        print_raw io, token.raw
-        end_highlight io
-        @@is_str = false
+        if heredoc
+          highlight_multiline token.raw, HEREDOC_DELIMITER_COLOR, io
+        else
+          highlight token.raw, STRING_COLOR, io
+        end
         break
       when :INTERPOLATION_START
-        end_highlight io
-        highlight "\#{", :interpolation, io
-        @@is_str = false
+        highlight "\#{", INTERPOLATION_COLOR, io
         highlight_normal_state lexer, io, break_on_rcurly: true
-        @@is_str = true
-        start_highlight :string, io
       when :EOF
         break
       else
-        io.print(token.raw.to_s.gsub("\n") do
-          invit = self.invitation
-          "\n#{invit}\e[0;#{highlight_type(:string)}m"
-        end)
+        highlight_multiline token.raw, STRING_COLOR, io
       end
     end
   end
 
-  private def self.highlight_string_array(lexer, token, io)
-    start_highlight :string, io
-    print_raw io, token.raw
-    first = true
+  private def highlight_string_array(lexer, token, io)
+    highlight token.raw, STRING_COLOR, io
     while true
-      lexer.next_string_array_token
+      consume_space_or_newline(lexer, io)
+      @pos = lexer.current_pos
+      token = lexer.next_string_array_token
       case token.type
       when :STRING
-        io << " " unless first
-        print_raw io, token.value
-        first = false
+        highlight token.raw, STRING_COLOR, io
       when :STRING_ARRAY_END
-        @@is_str = false
-        print_raw io, token.raw
-        end_highlight io
+        highlight token.raw, STRING_COLOR, io
         break
       when :EOF
-        end_highlight io
+        if token.delimiter_state.kind == :string_array
+          raise "Unterminated string array literal"
+        else # == :symbol_array
+          raise "Unterminated symbol array literal"
+        end
+      else
+        raise "Bug: shouldn't happen"
+      end
+    end
+  end
+
+  private def consume_space_or_newline(lexer, io)
+    while true
+      char = lexer.current_char
+      case char
+      when '\n'
+        lexer.next_char
+        lexer.incr_line_number 1
+        io.puts
+      when .ascii_whitespace?
+        lexer.next_char
+        io << char
+      else
         break
       end
     end
   end
 
-  private def self.print_raw(io, raw)
-    io << raw.to_s
+  private def highlight(token : Crystal::Token | String, color : Symbol, io)
+    io << token.colorize(color)
   end
 
-  private def self.highlight(token, type, io)
-    start_highlight type, io
-    io << token
-    end_highlight io
+  private def highlight(token : Crystal::Token | String, color : Tuple(Symbol, Symbol), io)
+    io << token.colorize(color[0]).mode(color[1])
   end
 
-  private def self.start_highlight(type, io)
-    @@highlight_stack << highlight_type(type)
-    io << "\e[0;#{@@highlight_stack.last}m"
-  end
-
-  private def self.end_highlight(io)
-    @@highlight_stack.pop
-    io << "\e[0;#{@@highlight_stack.last?}m"
-  end
-
-  private def self.highlight_type(type)
-    case type
-    when :comment
-      Highlight.new(:black, bold: true)
-    when :number
-      Highlight.new(:magenta)
-    when :char
-      Highlight.new(:magenta)
-    when :symbol
-      Highlight.new(:magenta)
-    when :const
-      Highlight.new(:blue, underline: true)
-    when :string
-      Highlight.new(:yellow)
-    when :interpolation
-      Highlight.new(:red, bold: true)
-    when :keyword
-      Highlight.new(:red)
-    when :operator
-      Highlight.new(:red)
-    when :method
-      Highlight.new(:green, bold: true)
-    when :literal
-      Highlight.new(:cyan, bold: true)
+  # When the token starts with '\n', start colorizing only after the '\n',
+  # so a prompt can be inserted without color conflict.
+  private def highlight_multiline(token : String, color, io)
+    if token.starts_with? '\n'
+      io.puts
+      highlight token[1..], color, io
     else
-      Highlight.new(:default)
+      highlight token, color, io
     end
   end
 end

@@ -13,11 +13,11 @@ require "./execution"
 require "./fun"
 require "./vars"
 require "./highlighter"
-require "./shell"
+# require "./shell"
+require "./crystal_multiline_input"
 require "./commands"
 require "./errors"
 require "colorize"
-
 # IC.program.stdout = stdout
 IC.run_file IC::PRELUDE_PATH
 
@@ -55,13 +55,11 @@ module IC
     e.display
   end
 
-  @@result : ICObject = IC.nop
-
-  def self.display_result
-    if @@result.nop?
+  def self.display_result(result)
+    if result.nop?
       puts " => #{"✔".colorize.green}"
     else
-      puts " => #{Highlighter.highlight(@@result.result, no_invitation: true)}"
+      puts " => #{Highlighter.highlight(result.result)}"
     end
   end
 
@@ -69,32 +67,19 @@ module IC
     IC.underscore = IC.nil
     @@code_lines.clear
     @@program.filename = nil
-    # TODO redirect @@program.stdout
 
-    Shell.new.run do |expr|
-      @@busy = true
-      @@result = IC.parse(expr).run
-      @@busy = false
+    input = CrystalMultilineInput.new
+    input.run do |expr|
+      result = IC.parse(expr).run
 
-      IC.underscore = @@result unless @@result.nop?
+      IC.underscore = result unless result.nop?
 
-      :line
-    rescue Cancel
-      @@busy = false
-      :line
-    rescue e : CompileTimeError
-      if e.unterminated?
-        @@code_lines.pop(expr.lines.size)
-        # let a change to the user to finish his text on the next line
-        :multiline
-      else
-        on_error(e, expr)
-        :error
-      end
+      display_result(result)
     rescue e
       on_error(e, expr)
-      :error
     end
+
+    puts
   end
 
   def self.on_error(e, expr)

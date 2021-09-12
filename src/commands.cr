@@ -33,18 +33,18 @@ module IC
 
   def self.cmd_vars
     VarStack.top_level_vars.each do |name, value|
-      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}", no_invitation: true)
+      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}")
     end
     puts unless @@consts.empty?
     @@consts.each do |name, value|
-      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}", no_invitation: true)
+      puts Highlighter.highlight(" #{name} : #{value.type} = #{value.result}")
     end
   end
 
   def self.cmd_defs
     @@program.defs.try &.each do |key, defs|
       defs.each do |d|
-        puts Highlighter.highlight(d.def.to_s, no_invitation: true)
+        puts Highlighter.highlight(d.def.to_s)
         puts
       end
     end
