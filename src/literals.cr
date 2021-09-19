@@ -156,18 +156,7 @@ module IC
         when Crystal::NamedTupleInstanceType
           entries = value.type.map_ivars { |name| "#{t.entries[name.to_i].name}: #{value[name].result}" }
           "{#{entries.join(", ")}}"
-        when .array?
-          buf_obj = value["@buffer"]
-          buf = Pointer(Byte).new(buf_obj.as_uint64)
-
-          size = value["@size"].as_int32
-          elem_size = buf_obj.type.pointer_element_size
-
-          entries = Array.new(size) do |i|
-            ICObject.sub(buf_obj.type.pointer_type_var, from: buf + i*elem_size).result
-          end
-          of_type = " of #{buf_obj.type.pointer_type_var}" if size == 0
-          "[#{entries.join(", ")}]#{of_type}"
+        when .array?     then array_result(value)
         when .range?     then value.as_range.to_s
         when .string?    then value.as_string.inspect
         when .metaclass? then IC.type_from_id(value.as_int32).to_s.chomp(".class").chomp(":Module")
@@ -175,6 +164,20 @@ module IC
         when .struct?    then "#<#{t}>"
         end
       result || "??? #{t}"
+    end
+
+    def self.array_result(value)
+      buf_obj = value["@buffer"]
+      buf = Pointer(Byte).new(buf_obj.as_uint64)
+
+      size = value["@size"].as_int32
+      elem_size = buf_obj.type.pointer_element_size
+
+      entries = Array.new(size) do |i|
+        ICObject.sub(buf_obj.type.pointer_type_var, from: buf + i*elem_size).result
+      end
+      of_type = " of #{buf_obj.type.pointer_type_var}" if size == 0
+      "[#{entries.join(", ")}]#{of_type}"
     end
   end
 end

@@ -312,7 +312,6 @@ module IC::REPLInterface
     end
 
     # if real cursor is at end of lines, set the real cursor at the @cursor position
-    # private
     private def replace_real_cursor_from_end
       x_save, y_save = @cursor.x, @cursor.y
       @cursor.y = @lines.size - 1
@@ -328,7 +327,7 @@ module IC::REPLInterface
 
     @[Deprecated]
     private def size_on_screen(line)
-      line_size = (@prompt_size + line.size) # + 1)
+      line_size = (@prompt_size + line.size)
 
       line_size_on_screen = line_size // Term::Size.width
       {x: line_size % Term::Size.width, y: line_size_on_screen + 1}

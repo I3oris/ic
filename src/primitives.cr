@@ -49,11 +49,11 @@ module IC
 
       case type
       when Crystal::InstanceVarInitializerContainer
-        type.all_instance_vars.each do |name, ivar|
+        type.all_instance_vars.each_key do |name|
           obj[name] = type.get_instance_var_initializer(name).try &.value.run || IC.nil
         end
       when Crystal::InstanceVarContainer
-        type.all_instance_vars.each do |name, ivar|
+        type.all_instance_vars.each_key do |name|
           obj[name] = IC.nil
         end
       end

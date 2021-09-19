@@ -42,7 +42,7 @@ module IC
   end
 
   def self.cmd_defs
-    @@program.defs.try &.each do |key, defs|
+    @@program.defs.try &.each_value do |defs|
       defs.each do |d|
         puts Highlighter.highlight(d.def.to_s)
         puts

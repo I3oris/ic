@@ -95,15 +95,15 @@ class IC::Highlighter
     heredoc_stack = [] of Crystal::Token
     last_token = {type: nil, value: ""}
 
-    while true
+    loop do
       @pos = lexer.current_pos
       token = lexer.next_token
 
       case token.type
       when :NEWLINE
         io.puts
-        heredoc_stack.each_with_index do |token, i|
-          highlight_delimiter_state lexer, token, io, heredoc: true
+        heredoc_stack.each_with_index do |t, i|
+          highlight_delimiter_state lexer, t, io, heredoc: true
           unless i == heredoc_stack.size - 1
             # Next token to heredoc's end is either NEWLINE or EOF.
             @pos = lexer.current_pos
@@ -198,7 +198,7 @@ class IC::Highlighter
   private def highlight_delimiter_state(lexer, token, io, heredoc = false)
     highlight token.raw, STRING_COLOR, io unless heredoc
 
-    while true
+    loop do
       @pos = lexer.current_pos
       token = lexer.next_string_token(token.delimiter_state)
       case token.type
@@ -222,7 +222,7 @@ class IC::Highlighter
 
   private def highlight_string_array(lexer, token, io)
     highlight token.raw, STRING_COLOR, io
-    while true
+    loop do
       consume_space_or_newline(lexer, io)
       @pos = lexer.current_pos
       token = lexer.next_string_array_token
@@ -245,7 +245,7 @@ class IC::Highlighter
   end
 
   private def consume_space_or_newline(lexer, io)
-    while true
+    loop do
       char = lexer.current_char
       case char
       when '\n'

@@ -1,0 +1,25 @@
+Style/WhileTrue:
+  Description: Disallows while statements with a true literal as condition
+  Excluded:
+  - ic_prelude.cr
+  Enabled: true
+  Severity: Warning
+
+Lint/UselessAssign:
+  Description: Disallows useless variable assignments
+  Excluded:
+  - tests/bugs/linked-list.cr
+  - tests/test-random.cr
+  Enabled: true
+  Severity: Warning
+
+Metrics/CyclomaticComplexity:
+  Description: Disallows methods with a cyclomatic complexity higher than `MaxComplexity`
+  MaxComplexity: 30
+  Enabled: true
+  Severity: Warning
+
+Style/RedundantReturn:
+  Description: Reports redundant return expressions
+  Enabled: false
+  Severity: Warning
