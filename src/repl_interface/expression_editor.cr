@@ -8,6 +8,18 @@ module IC::REPLInterface
     getter lines : Lines = [""]
     getter expression : String? { lines.join('\n') }
 
+    # Tracks the cursor position relatively to the expressions lines, (y=0 corresponds to the first line and x=0 the first char)
+    # This position is independent of text wrapping so its position will not match to real cursor on screen.
+    #
+    # `|` : @cursor position
+    #
+    # ```
+    # prompt> def very_looo
+    # ooo|ng_name            <= wrapping
+    # prompt>   bar
+    # prompt> end
+    # ```
+    # For example here the cursor position is x=16, y=0, but real cursor is at x=3,y=1 from the beginning of expression.
     private struct Cursor
       property x = 0, y = 0
 
@@ -26,7 +38,16 @@ module IC::REPLInterface
       end
     end
 
+    # Structure allowing to move real cursor in a same way that (virtual) cursor.
+    private struct RealCursor
+      def move(x, y)
+        print Term::Cursor.move(x, -y)
+      end
+    end
+
     @cursor = Cursor.new
+    @real_cursor = RealCursor.new
+
     @highlight : Proc(String, String) = ->(expression : String) { expression }
     @prompt : Proc(Int32, String) = ->(line_number : Int32) { sprintf("%03d> ", line_number) }
     @prompt_size = 5
@@ -61,6 +82,9 @@ module IC::REPLInterface
     def expression_before_cursor
       @lines[...@cursor.y].join('\n') + '\n' + current_line[..@cursor.x]
     end
+
+    # Following functions modify the expression, so it's generally better to call them inside
+    # an `update` block to see the change in the screen : #
 
     def previous_line=(line)
       @lines[@cursor.y - 1] = line
@@ -134,6 +158,20 @@ module IC::REPLInterface
       end
     end
 
+    # End modifying functions. #
+
+    # Give the size of the last part of the line when it's wrapped
+    #
+    # prompt> def very_looo|
+    # ooong_name              <= last part
+    # prompt>   bar
+    # prompt> end
+    #
+    # e.g. here "ooong_name".size = 10
+    private def remainding_size(line_size)
+      (@prompt_size + line_size) % Term::Size.width
+    end
+
     def move_cursor_left
       case @cursor.x
       when 0
@@ -151,7 +189,7 @@ module IC::REPLInterface
         if prev_line = previous_line?
           # Wrap real cursor:
           end_of_previous_line = remainding_size(prev_line.size) - @prompt_size
-          print Term::Cursor.move(x: end_of_previous_line, y: +1)
+          @real_cursor.move(x: end_of_previous_line, y: -1)
 
           # Wrap @cursor:
           @cursor.move(x: prev_line.size, y: -1)
@@ -169,9 +207,9 @@ module IC::REPLInterface
         # prompt> end
         # ```
         if remainding_size(@cursor.x) == 0
-          print Term::Cursor.move(x: Term::Size.width + 1, y: +1)
+          @real_cursor.move(x: Term::Size.width + 1, y: -1)
         else
-          print Term::Cursor.move(x: -1, y: 0)
+          @real_cursor.move(x: -1, y: 0)
         end
 
         # move @cursor left
@@ -196,7 +234,7 @@ module IC::REPLInterface
         if next_line?
           # Wrap real cursor:
           end_of_current_line = remainding_size(current_line.size)
-          print Term::Cursor.move(x: -end_of_current_line + @prompt_size, y: -1)
+          @real_cursor.move(x: -end_of_current_line + @prompt_size, y: +1)
 
           # Wrap @cursor:
           @cursor.move(x: -current_line.size, y: +1)
@@ -214,26 +252,14 @@ module IC::REPLInterface
         # prompt> end
         # ```
         if remainding_size(@cursor.x) == (Term::Size.width - 1)
-          print Term::Cursor.move(x: -(Term::Size.width + 1), y: -1)
+          @real_cursor.move(x: -(Term::Size.width + 1), y: +1)
         else
-          print Term::Cursor.move(x: +1, y: 0)
+          @real_cursor.move(x: +1, y: 0)
         end
 
         # move @cursor right
         @cursor.move(x: +1, y: 0)
       end
-    end
-
-    # Give the size of the last part of the line when it's wrapped
-    #
-    # prompt> def very_looo|
-    # ooong_name
-    # prompt>   bar
-    # prompt> end
-    #
-    # e.g. here "ooong_name".size = 10
-    def remainding_size(line_size)
-      (@prompt_size + line_size) % Term::Size.width
     end
 
     def move_cursor_up
@@ -250,7 +276,7 @@ module IC::REPLInterface
           # So we need only to move real cursor up
           # and move back @cursor.x by term-width.
           #
-          print Term::Cursor.move(x: 0, y: +1)
+          @real_cursor.move(x: 0, y: -1)
           @cursor.move(x: -Term::Size.width, y: 0)
         else
           # Here, we are:
@@ -262,7 +288,7 @@ module IC::REPLInterface
           # prompt> end
           # ```
           #
-          print Term::Cursor.move(x: Term::Size.width - @cursor.x, y: +1)
+          @real_cursor.move(x: Term::Size.width - @cursor.x, y: -1)
           @cursor.move(x: 0 - @cursor.x, y: 0)
         end
 
@@ -286,7 +312,7 @@ module IC::REPLInterface
           size = prev_line.size
         end
         x_real = @cursor.x.clamp(0, size)
-        print Term::Cursor.move(x: x_real - @cursor.x, y: +1)
+        @real_cursor.move(x: x_real - @cursor.x, y: -1)
 
         # Move @cursor up:
         x = @cursor.x + (@prompt_size + prev_line.size) - size_of_last_part
@@ -329,7 +355,7 @@ module IC::REPLInterface
 
     # TODO: handle real cursor wrapping:
     def move_cursor_to_end_of_first_line
-      @cursor.abs_move @lines[0].size, 0
+      @cursor.abs_move(x: @lines[0].size, y: 0)
     end
 
     # Clean the screen, `@cursor` stay unchanged but real cursor is set to the beginning of expression
@@ -355,7 +381,7 @@ module IC::REPLInterface
     #
     # @cursor = {x: 5, y: 1}
     # real cursor: x: 0, y: ?+0
-    private def clear_screen # private
+    private def clear_screen
       x_save, y_save = @cursor.x, @cursor.y
       move_cursor_to_begin
       @cursor.x, @cursor.y = x_save, y_save
@@ -388,18 +414,12 @@ module IC::REPLInterface
         if @cursor.x < 0 || @cursor.y < 0
           raise "Bug: replacing real cursor never hit the @cursor"
         end
-        move_cursor_left
+        move_cursor_left # TODO use move_cursor down
       end
     end
 
-    @[Deprecated]
-    private def size_on_screen(line)
-      line_size = (@prompt_size + line.size)
-
-      line_size_on_screen = line_size // Term::Size.width
-      {x: line_size % Term::Size.width, y: line_size_on_screen + 1}
-    end
-
+    # Clear the screen, yields for modifications, and displays the new expression.
+    # @cursor is adjusted to not overflow if the new expression is smaller.
     def update(&)
       clear_screen
 
