@@ -162,8 +162,8 @@ module IC::REPLInterface
 
     # Give the size of the last part of the line when it's wrapped
     #
-    # prompt> def very_looo|
-    # ooong_name              <= last part
+    # prompt> def very_looo
+    # ooooooooong              <= last part
     # prompt>   bar
     # prompt> end
     #
@@ -177,19 +177,19 @@ module IC::REPLInterface
       when 0
         # Wrap the @cursor at the end of the previous line:
         #
-        # `|`: @cursor pos
+        # `|`: cursor pos
         # `*`: wanted pos
         #
         # ```
         # prompt> def very_looo
-        # oooong_name*
+        # ooooooooong*
         # prompt> | bar
         # prompt> end
         # ```
         if prev_line = previous_line?
           # Wrap real cursor:
-          end_of_previous_line = remainding_size(prev_line.size) - @prompt_size
-          @real_cursor.move(x: end_of_previous_line, y: -1)
+          size_of_last_part = remainding_size(prev_line.size)
+          @real_cursor.move(x: -@prompt_size + size_of_last_part, y: -1)
 
           # Wrap @cursor:
           @cursor.move(x: prev_line.size, y: -1)
@@ -197,12 +197,12 @@ module IC::REPLInterface
       when .> 0
         # Move the cursor left, wrap the real cursor if needed:
         #
-        # `|`: @cursor pos
+        # `|`: cursor pos
         # `*`: wanted pos
         #
         # ```
         # prompt> def very_looo*
-        # |ooong_name
+        # |oooooooong
         # prompt>   bar
         # prompt> end
         # ```
@@ -222,19 +222,19 @@ module IC::REPLInterface
       when current_line.size
         # Wrap the @cursor at the beginning of the next line:
         #
-        # `|`: @cursor pos
+        # `|`: cursor pos
         # `*`: wanted pos
         #
         # ```
         # prompt> def very_looo
-        # oooong_name|
+        # ooooooooong|
         # prompt> * bar
         # prompt> end
         # ```
         if next_line?
           # Wrap real cursor:
-          end_of_current_line = remainding_size(current_line.size)
-          @real_cursor.move(x: -end_of_current_line + @prompt_size, y: +1)
+          size_of_last_part = remainding_size(current_line.size)
+          @real_cursor.move(x: -size_of_last_part + @prompt_size, y: +1)
 
           # Wrap @cursor:
           @cursor.move(x: -current_line.size, y: +1)
@@ -242,17 +242,17 @@ module IC::REPLInterface
       when .< current_line.size
         # Move the cursor right, wrap the real cursor if needed:
         #
-        # `|`: @cursor pos
+        # `|`: cursor pos
         # `*`: wanted pos
         #
         # ```
         # prompt> def very_looo|
-        # *ooong_name
+        # *oooooooong
         # prompt>   bar
         # prompt> end
         # ```
         if remainding_size(@cursor.x) == (Term::Size.width - 1)
-          @real_cursor.move(x: -(Term::Size.width + 1), y: +1)
+          @real_cursor.move(x: -Term::Size.width, y: +1)
         else
           @real_cursor.move(x: +1, y: 0)
         end
@@ -269,7 +269,7 @@ module IC::REPLInterface
           # ```
           # prompt> def *very_loo
           # oooooooooooo|oooooooo
-          # ong_name
+          # ooooooooong
           # prompt>   bar
           # prompt> end
           # ```
@@ -283,7 +283,7 @@ module IC::REPLInterface
           # ```
           # prompt> *def very_loo
           # ooo|ooooooooooooooooo
-          # ong_name
+          # ooooooooong
           # prompt>   bar
           # prompt> end
           # ```
@@ -296,29 +296,30 @@ module IC::REPLInterface
       elsif prev_line = previous_line?
         # Here, there are a previous line in witch we can move up, we want to
         # move on the last part of the previous line
-        # ```
-        # prompt> def very_loo
-        # oooooooooooooooooooo
-        # ong_name*             <= last part
-        # prompt>   ba|aar
-        # prompt> end
-        # ```
         size_of_last_part = remainding_size(prev_line.size)
 
-        # Move real cursor:
-        if (@prompt_size + prev_line.size) >= Term::Size.width
-          size = size_of_last_part - @prompt_size
+        if size_of_last_part < @prompt_size + @cursor.x
+          # ```
+          # prompt> def very_loo
+          # oooooooooooooooooooo
+          # ong*                  <= last part
+          # prompt>   ba|aar
+          # prompt> end
+          # ```
+          @real_cursor.move(x: - @cursor.x - @prompt_size  + size_of_last_part, y: -1)
+          @cursor.abs_move(x: prev_line.size, y: @cursor.y-1)
         else
-          size = prev_line.size
+          # ```
+          # prompt> def very_loo
+          # oooooooooooooooooooo
+          # oooooooooooo*oong    <= last part
+          # prompt>   ba|aar
+          # prompt> end
+          # ```
+          @real_cursor.move(x: 0, y: -1)
+          x = prev_line.size - size_of_last_part + @prompt_size + @cursor.x
+          @cursor.abs_move(x: x, y: @cursor.y-1)
         end
-        x_real = @cursor.x.clamp(0, size)
-        @real_cursor.move(x: x_real - @cursor.x, y: -1)
-
-        # Move @cursor up:
-        x = @cursor.x + (@prompt_size + prev_line.size) - size_of_last_part
-        x = x.clamp(0, prev_line.size)
-        @cursor.move(x: x - @cursor.x, y: -1)
-
         true
       else
         false
@@ -327,12 +328,82 @@ module IC::REPLInterface
 
     # TODO: handle real cursor wrapping:
     def move_cursor_down
-      true
-      # if next_line = next_line?
-      #   x = @cursor.x.clamp(0, next_line.size)
-      #   @cursor.abs_move(x: x, y: @cursor.y + 1)
-      #   true
-      # end
+      # many lines:
+      size_of_last_part = remainding_size(current_line.size)
+      real_x = remainding_size(@cursor.x)
+
+      remainding = current_line.size - @cursor.x
+
+      if remainding > size_of_last_part
+        # on middle
+        if remainding > Term::Size.width
+          # Here, there are enough remainding to just move down
+          # ```
+          # prompt>  def ve|ry_loo
+          # ooooooooooooooo*oooooo
+          # ong
+          # prompt>   bar
+          # prompt> end
+          # ```
+          #
+          @real_cursor.move(x: 0, y: +1)
+          @cursor.move(x: Term::Size.width, y: 0)
+        else
+          # Here, we goes to end of current line:
+          # ```
+          # prompt>  def very_loo
+          # ooooooooooooooo|ooooo
+          # ong*
+          # prompt>   bar
+          # prompt> end
+          # ```
+          @real_cursor.move(x: -real_x + size_of_last_part, y: +1)
+          @cursor.abs_move(x: current_line.size, y: @cursor.y)
+        end
+        true
+      elsif next_line = next_line?
+        case real_x
+        when .< @prompt_size
+          # Here, we are behind the prompt so we want goes to the begining of the next line:
+          # ```
+          # prompt>  def very_loo
+          # ooooooooooooooooooooo
+          # ong|
+          # prompt> * bar
+          # prompt> end
+          # ```
+          @real_cursor.move(x: - real_x + @prompt_size, y: +1)
+          @cursor.abs_move(x: 0, y: @cursor.y + 1)
+
+        when .< @prompt_size + next_line.size
+          # Here, we can just move down on the next line:
+          # ```
+          # prompt>  def very_loo
+          # ooooooooooooooooooooo
+          # ooooooooong|
+          # prompt>   b*ar
+          # prompt> end
+          # ```
+          @real_cursor.move(x: 0, y: +1)
+          @cursor.abs_move(x: real_x - @prompt_size, y: @cursor.y + 1)
+
+        else
+          # Finally, here, want to move at end of the next line:
+          # ```
+          # prompt>  def very_loo
+          # ooooooooooooooooooooo
+          # ooooooooooooooong|
+          # prompt>   bar*
+          # prompt> end
+          # ```
+          x = real_x - (@prompt_size + next_line.size)
+          @real_cursor.move(x: -x, y: +1)
+          @cursor.abs_move(x: next_line.size, y: @cursor.y + 1)
+        end
+        true
+      else
+        false
+      end
     end
 
     def move_cursor_to_begin
