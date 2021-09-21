@@ -11,7 +11,6 @@ module IC::REPLInterface
     @multiline : Proc(String, Bool) = ->(expression : String) { false }
     @formate : Proc(String, String) = ->(expression : String) { expression }
     @indentation : Proc(String, Int32) = ->(expression : String) { 0 }
-    @reindent : Proc(String, String?) = ->(line : String) { nil.as(String?) }
     setter closing_keyword = [] of String
     setter unindent_keyword = [] of String
 
@@ -44,9 +43,6 @@ module IC::REPLInterface
 
     def indentation_level
       @indentation.call(@editor.expression_before_cursor)
-    end
-
-    def reindent?(&@reindent : String -> String?)
     end
 
     private def formate
