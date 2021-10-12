@@ -129,7 +129,7 @@ module IC::REPLInterface
           has_moved = @editor.move_cursor_up
 
           if !has_moved
-            @history.up do |expression|
+            @history.up(@editor.lines) do |expression|
               @editor.replace(expression)
               @editor.move_cursor_to_end
             end
@@ -138,7 +138,7 @@ module IC::REPLInterface
           has_moved = @editor.move_cursor_down
 
           if !has_moved
-            @history.down do |expression|
+            @history.down(@editor.lines) do |expression|
               @editor.replace(expression)
               @editor.move_cursor_to_end_of_first_line
             end

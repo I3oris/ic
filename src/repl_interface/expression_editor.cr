@@ -293,8 +293,8 @@ module IC::REPLInterface
           # prompt>   ba|aar
           # prompt> end
           # ```
-          move_real_cursor(x: - @x - @prompt_size  + size_of_last_part, y: -1)
-          move_abs_cursor(x: prev_line.size, y: @y-1)
+          move_real_cursor(x: -@x - @prompt_size + size_of_last_part, y: -1)
+          move_abs_cursor(x: prev_line.size, y: @y - 1)
         else
           # ```
           # prompt> def very_loo
@@ -305,7 +305,7 @@ module IC::REPLInterface
           # ```
           move_real_cursor(x: 0, y: -1)
           x = prev_line.size - size_of_last_part + @prompt_size + @x
-          move_abs_cursor(x: x, y: @y-1)
+          move_abs_cursor(x: x, y: @y - 1)
         end
         true
       else
@@ -359,9 +359,8 @@ module IC::REPLInterface
           # prompt> * bar
           # prompt> end
           # ```
-          move_real_cursor(x: - real_x + @prompt_size, y: +1)
+          move_real_cursor(x: -real_x + @prompt_size, y: +1)
           move_abs_cursor(x: 0, y: @y + 1)
-
         when .< @prompt_size + next_line.size
           # Here, we can just move down on the next line:
           # ```
@@ -373,7 +372,6 @@ module IC::REPLInterface
           # ```
           move_real_cursor(x: 0, y: +1)
           move_abs_cursor(x: real_x - @prompt_size, y: @y + 1)
-
         else
           # Finally, here, want to move at end of the next line:
           # ```
@@ -493,7 +491,7 @@ module IC::REPLInterface
     end
 
     def replace(lines : Array(String))
-      update { @lines = lines }
+      update { @lines = lines.dup }
     end
 
     def prompt_next
