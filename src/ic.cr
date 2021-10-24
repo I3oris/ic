@@ -12,9 +12,7 @@ require "./primitives"
 require "./execution"
 require "./fun"
 require "./vars"
-require "./highlighter"
-# require "./shell"
-require "./crystal_multiline_input"
+require "./repl_interface/repl_interface"
 require "./commands"
 require "./errors"
 require "colorize"
@@ -68,7 +66,7 @@ module IC
     @@code_lines.clear
     @@program.filename = nil
 
-    input = CrystalMultilineInput.new
+    input = REPLInterface::ReplInterface.new
     input.run do |expr|
       result = IC.parse(expr).run
 

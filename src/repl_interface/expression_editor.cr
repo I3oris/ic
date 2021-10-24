@@ -1,22 +1,19 @@
 require "./term_cursor"
 require "./term_size"
+require "../highlighter"
 
 module IC::REPLInterface
   class ExpressionEditor
     getter lines : Array(String) = [""]
     getter expression : String? { lines.join('\n') }
 
-    @highlight : Proc(String, String) = ->(expression : String) { expression }
+    @highlighter = Highlighter.new
     @prompt : Proc(Int32, String) = ->(line_number : Int32) { sprintf("%03d> ", line_number) }
     @prompt_size = 5
 
     # Prompt size must stay constant.
     def prompt(&@prompt : Int32 -> String)
       @prompt_size = @prompt.call(0).gsub(/\e\[.*?m/, "").size # uncolorize
-    end
-
-    def highlight(&block : String -> String)
-      @highlight = block
     end
 
     # Tracks the cursor position relatively to the expressions lines, (y=0 corresponds to the first line and x=0 the first char)
@@ -454,7 +451,7 @@ module IC::REPLInterface
 
     # Displays the colorized expression with a prompt, real cursor is so at the end of the expression
     private def print_expression
-      colorized_lines = @highlight.call(self.expression).split('\n')
+      colorized_lines = @highlighter.highlight(self.expression).split('\n')
 
       colorized_lines.each_with_index do |line, i|
         print @prompt.call(i)
