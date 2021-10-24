@@ -41,7 +41,7 @@ module IC
     text = "\n"*@@code_lines.size + expr
     expr.each_line { |l| @@code_lines << l }
 
-    ast_node = Crystal::Parser.parse text, def_vars: IC.declared_vars_syntax
+    ast_node = Crystal::Parser.parse text, var_scopes: IC.declared_vars_syntax
     ast_node = @@program.normalize(ast_node)
     ast_node = @@program.semantic(ast_node)
     IC.update_vars
