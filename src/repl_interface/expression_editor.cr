@@ -313,7 +313,6 @@ module IC::REPLInterface
       end
     end
 
-    # TODO: handle real cursor wrapping:
     def move_cursor_down
       # many lines:
       size_of_last_part = remainding_size(current_line.size)
@@ -391,27 +390,34 @@ module IC::REPLInterface
       end
     end
 
-    def move_cursor_to_begin
-      until {@x, @y} == {0, 0}
-        move_cursor_left # TODO: use move_cursor_up instead
-        raise "Bug: moving cursor to begin never hit the beginning" if @x < 0 || @y < 0
+    def move_cursor_to(x, y)
+      if y > @y || (y == @y && x > @x)
+        # destination is after, move cursor forward:
+        until {@x, @y} == {x, y}
+          move_cursor_right
+          raise "Bug: position (#{x}, #{y}) missed when moving cursor forward" if @y > y
+        end
+      else
+        # destination is before, move cursor backward:
+        until {@x, @y} == {x, y}
+          move_cursor_left
+          raise "Bug: position (#{x}, #{y}) missed when moving cursor backward" if @y < y
+        end
       end
+    end
+
+    def move_cursor_to_begin
+      move_cursor_to(0, 0)
     end
 
     def move_cursor_to_end
-      y_end = @lines.size - 1
-      x_end = @lines[y_end].size
+      y = @lines.size - 1
 
-      until {@x, @y} == {x_end, y_end}
-        move_cursor_right # TODO: use move_cursor_down instead
-
-        raise "Bug: moving cursor to end never hit the end" if @y > y_end
-      end
+      move_cursor_to(@lines[y].size, y)
     end
 
-    # TODO: handle real cursor wrapping:
     def move_cursor_to_end_of_first_line
-      move_abs_cursor(x: @lines[0].size, y: 0)
+      move_cursor_to(@lines[0].size, 0)
     end
 
     # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression
