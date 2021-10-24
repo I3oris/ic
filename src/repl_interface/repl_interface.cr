@@ -3,7 +3,7 @@ require "./expression_editor"
 require "./char_reader"
 require "./crystal_parser_nest"
 
-module IC::REPLInterface
+module IC::ReplInterface
   class ReplInterface
     @editor = ExpressionEditor.new
     @history = History.new

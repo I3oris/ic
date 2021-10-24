@@ -1,4 +1,4 @@
-module IC::REPLInterface
+module IC::ReplInterface
   class History
     @history = [] of Array(String)
     @index = 0

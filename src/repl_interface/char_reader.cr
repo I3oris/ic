@@ -1,4 +1,4 @@
-module IC::REPLInterface
+module IC::ReplInterface
   module CharReader
     def self.read_chars(io = STDIN, &)
       c = nil

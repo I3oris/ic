@@ -66,7 +66,7 @@ module IC
     @@code_lines.clear
     @@program.filename = nil
 
-    input = REPLInterface::ReplInterface.new
+    input = ReplInterface::ReplInterface.new
     input.run do |expr|
       result = IC.parse(expr).run
 

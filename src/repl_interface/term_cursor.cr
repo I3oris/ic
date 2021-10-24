@@ -1,5 +1,5 @@
 # from https://github.com/crystal-term/cursor
-module IC::REPLInterface::Term
+module IC::ReplInterface::Term
   module Cursor
     extend self
 

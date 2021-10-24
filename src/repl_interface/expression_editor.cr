@@ -2,7 +2,7 @@ require "./term_cursor"
 require "./term_size"
 require "../highlighter"
 
-module IC::REPLInterface
+module IC::ReplInterface
   class ExpressionEditor
     getter lines : Array(String) = [""]
     getter expression : String? { lines.join('\n') }
