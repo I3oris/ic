@@ -3,18 +3,53 @@ require "./term_size"
 require "../highlighter"
 
 module IC::ReplInterface
+  # ExpressionEditor allows to edit and display an expression:
+  #
+  # Usage example:
+  # ```
+  # # new editor:
+  # @editor = ExpressionEditor.new(
+  #   prompt: ->(expr_line_number : Int32) { "prompt> " }
+  # )
+  #
+  # # edit some code:
+  # @editor.update do
+  #   @editor << %(puts "World")
+  #
+  #   insert_new_line(indent: 1)
+  #   @editor << %(puts "!")
+  # end
+  #
+  # # move cursor:
+  # @editor.move_cursor_up
+  # 4.times { @editor.move_cursor_left }
+  #
+  # # edit:
+  # @editor.update do
+  #   @editor << "Hello "
+  # end
+  #
+  # @editor.expression # => %(puts "Hello World"\n  puts "!")
+  # puts "=> ok"
+  #
+  # # clear and restart edition:
+  # @editor.prompt_next
+  # ```
+  #
+  # The above has displayed:
+  #
+  # prompt> puts "Hello World"
+  # prompt>   puts "!"
+  # => ok
+  # prompt>
+  #
   class ExpressionEditor
     getter lines : Array(String) = [""]
     getter expression : String? { lines.join('\n') }
 
     @highlighter = Highlighter.new
-    @prompt : Proc(Int32, String) = ->(line_number : Int32) { sprintf("%03d> ", line_number) }
-    @prompt_size = 5
-
-    # Prompt size must stay constant.
-    def prompt(&@prompt : Int32 -> String)
-      @prompt_size = @prompt.call(0).gsub(/\e\[.*?m/, "").size # uncolorize
-    end
+    @prompt : Int32 -> String
+    @prompt_size : Int32
 
     # Tracks the cursor position relatively to the expressions lines, (y=0 corresponds to the first line and x=0 the first char)
     # This position is independent of text wrapping so its position will not match to real cursor on screen.
@@ -31,19 +66,24 @@ module IC::ReplInterface
     @x = 0
     @y = 0
 
-    def move_cursor(x, y)
+    # Prompt size must stay constant.
+    def initialize(@prompt : Int32 -> String)
+      @prompt_size = @prompt.call(0).gsub(/\e\[.*?m/, "").size # uncolorized size
+    end
+
+    private def move_cursor(x, y)
       @x += x
       @y += y
     end
 
-    def move_real_cursor(x, y)
+    private def move_real_cursor(x, y)
       print Term::Cursor.move(x, -y)
     end
 
-    def move_abs_cursor(@x, @y)
+    private def move_abs_cursor(@x, @y)
     end
 
-    def reset_cursor
+    private def reset_cursor
       @x = @y = 0
     end
 
@@ -69,8 +109,8 @@ module IC::ReplInterface
       @lines[...@y].join('\n') + '\n' + current_line[..@x]
     end
 
-    # Following functions modify the expression, so it's generally better to call them inside
-    # an `update` block to see the change in the screen : #
+    # Following functions modify the expression, they should be called inside
+    # an `update` block to see the changes in the screen : #
 
     def previous_line=(line)
       @lines[@y - 1] = line
@@ -101,6 +141,12 @@ module IC::ReplInterface
 
       move_cursor(x: +1, y: 0)
       self
+    end
+
+    def <<(str : String)
+      str.each_char do |ch|
+        self << ch
+      end
     end
 
     def insert_new_line(indent)
@@ -153,7 +199,7 @@ module IC::ReplInterface
     # prompt>   bar
     # prompt> end
     #
-    # e.g. here "ooong_name".size = 10
+    # e.g. here "ooooooooong".size = 10
     private def remainding_size(line_size)
       (@prompt_size + line_size) % Term::Size.width
     end
@@ -468,13 +514,7 @@ module IC::ReplInterface
       x_save, y_save = @x, @y
       @y = @lines.size - 1
       @x = @lines[@y].size
-      loop do
-        break if @x == x_save && @y == y_save
-        if @x < 0 || @y < 0
-          raise "Bug: replacing real cursor never hit the cursor"
-        end
-        move_cursor_left # TODO use move_cursor down
-      end
+      move_cursor_to(x_save, y_save)
     end
 
     # Clear the screen, yields for modifications, and displays the new expression.

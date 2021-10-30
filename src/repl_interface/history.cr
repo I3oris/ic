@@ -8,6 +8,8 @@ module IC::ReplInterface
     @edited_history = [nil] of Array(String)?
 
     def <<(lines)
+      lines = lines.dup # make history elements independent.
+
       if l = @history.delete(lines)
         # re-insert duplicate elements at the end:
         @history.push(l)

@@ -5,7 +5,7 @@ require "./crystal_parser_nest"
 
 module IC::ReplInterface
   class ReplInterface
-    @editor = ExpressionEditor.new
+    @editor : ExpressionEditor
     @history = History.new
     @line_number = 1
 
@@ -14,19 +14,21 @@ module IC::ReplInterface
 
     def initialize
       status = :default
-      @editor.prompt do |expr_line_number|
-        String.build do |io|
-          io << "ic(#{Crystal::VERSION}):"
-          io << sprintf("%03d", @line_number + expr_line_number).colorize.magenta
-          case status
-          when :multiline then io << "* "
-          else                 io << "> "
+      @editor = ExpressionEditor.new(
+        prompt: ->(expr_line_number : Int32) do
+          String.build do |io|
+            io << "ic(#{Crystal::VERSION}):"
+            io << sprintf("%03d", @line_number + expr_line_number).colorize.magenta
+            case status
+            when :multiline then io << "* "
+            else                 io << "> "
+            end
           end
         end
-      end
+      )
     end
 
-    def run(&block : String -> _)
+    def run(& : String -> _)
       @editor.prompt_next
 
       CharReader.read_chars(STDIN) do |char|
@@ -62,7 +64,7 @@ module IC::ReplInterface
         when :back
           @editor.update { back }
         when '\t'
-          @editor.update { @editor << ' ' << ' ' }
+          @editor.update { @editor << "  " }
         when :insert_new_line
           @editor.update { insert_new_line(indent: self.indentation_level) }
         when Char
@@ -82,13 +84,11 @@ module IC::ReplInterface
           puts " => #{"✔".colorize.green}"
         end
         return
-
       when /^# ?(#{Commands.commands_regex_names})(( [a-z\-]+)*)/
         submit_expr do
           Commands.run_cmd($1?, $2.split(" ", remove_empty: true))
         end
         return
-
       when .blank?, .starts_with? '#'
         submit_expr(history: false)
         return
@@ -150,7 +150,7 @@ module IC::ReplInterface
       submit_expr(history: history) { }
     end
 
-    private def submit_expr(*, history = true)
+    private def submit_expr(*, history = true, &)
       formate
       @line_number += @editor.lines.size
       @history << @editor.lines if history
