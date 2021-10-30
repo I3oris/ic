@@ -103,7 +103,7 @@ module IC::ReplInterface
       self
     end
 
-    def new_line(indent)
+    def insert_new_line(indent)
       case @x
       when current_line.size
         @lines.insert(@y + 1, "  "*indent)

@@ -36,15 +36,20 @@ module IC::ReplInterface
           end
         end
       when '\r'
-        :new_line
-      when '\u0003', '\u0004', '\u0018'
-        # ctrl-c, ctrl-d, ctrl-x
+        :enter
+      when ctrl('c'), ctrl('d'), ctrl('x')
         :exit
+      when ctrl('o')
+        :insert_new_line
       when '\u007f'
         :back
       else
         c
       end
+    end
+
+    private def self.ctrl(k)
+      (k.ord & 0x1f).chr
     end
   end
 end

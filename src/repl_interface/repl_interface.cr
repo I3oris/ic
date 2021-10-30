@@ -9,7 +9,7 @@ module IC::ReplInterface
     @history = History.new
     @line_number = 1
 
-    private CLOSING_KEYWORD = %w(end \) ] })
+    private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
     def initialize
@@ -31,12 +31,8 @@ module IC::ReplInterface
 
       CharReader.read_chars(STDIN) do |char|
         case char
-        when :new_line
-          if @editor.cursor_on_last_line?
-            on_newline { |line| yield line }
-          else
-            @editor.update { new_line(indent: self.indentation_level) }
-          end
+        when :enter
+          on_enter { |line| yield line }
         when :up
           has_moved = @editor.move_cursor_up
 
@@ -67,6 +63,8 @@ module IC::ReplInterface
           @editor.update { back }
         when '\t'
           @editor.update { @editor << ' ' << ' ' }
+        when :insert_new_line
+          @editor.update { insert_new_line(indent: self.indentation_level) }
         when Char
           @editor.update do
             @editor << char
@@ -76,7 +74,7 @@ module IC::ReplInterface
       end
     end
 
-    private def on_newline(&)
+    private def on_enter(&)
       case @editor.expression
       when "# clear_history", "#clear_history"
         @history.clear
@@ -101,8 +99,8 @@ module IC::ReplInterface
         @editor.replace("__#{@editor.expression}".split('\n'))
       end
 
-      if multiline?
-        @editor.update { new_line(indent: self.indentation_level) }
+      if @editor.cursor_on_last_line? && multiline?
+        @editor.update { insert_new_line(indent: self.indentation_level) }
       else
         submit_expr do
           yield @editor.expression
