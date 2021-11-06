@@ -587,7 +587,7 @@ module IC::ReplInterface
     # Lines that takes more than one line (if wrapped) are cut in consequence.
     private def print_expression(force_full_view = false)
       if force_full_view
-        start, end_ = 0, @lines.size-1
+        start, end_ = 0, Int32::MAX
       else
         start, end_ = view_bounds()
       end
