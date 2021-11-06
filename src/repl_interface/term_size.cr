@@ -16,7 +16,7 @@ module IC::ReplInterface::Term
     # Gets the terminals width
     def self.size : {Int32, Int32}
       C.ioctl(0, C::TIOCGWINSZ, out screen_size)
-      {screen_size.col.to_i32, screen_size.col.to_i32}
+      {screen_size.col.to_i32, screen_size.row.to_i32}
     end
 
     def self.width

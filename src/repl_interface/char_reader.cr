@@ -35,7 +35,7 @@ module IC::ReplInterface
             end
           end
         end
-      when '\r'
+      when '\r', '\n'
         :enter
       when ctrl('c'), ctrl('d'), ctrl('x')
         :exit

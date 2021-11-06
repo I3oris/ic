@@ -29,6 +29,9 @@ module IC::ReplInterface
   #   @editor << "Hello "
   # end
   #
+  #
+  # @editor.end_editing
+  #
   # @editor.expression # => %(puts "Hello World"\n  puts "!")
   # puts "=> ok"
   #
@@ -65,6 +68,8 @@ module IC::ReplInterface
     # For example here the cursor position is x=16, y=0, but real cursor is at x=3,y=1 from the beginning of expression.
     @x = 0
     @y = 0
+
+    @scroll_offset = 0
 
     # Prompt size must stay constant.
     def initialize(@prompt : Int32 -> String)
@@ -202,6 +207,25 @@ module IC::ReplInterface
     # e.g. here "ooooooooong".size = 10
     private def remainding_size(line_size)
       (@prompt_size + line_size) % Term::Size.width
+    end
+
+    # Returns the part number *p* of this line:
+    private def part(line, p)
+      first_part_size = (Term::Size.width - @prompt_size)
+      if p == 0
+        line[0...first_part_size]
+      else
+        line[(first_part_size + (p - 1)*Term::Size.width)...(first_part_size + p*Term::Size.width)]
+      end
+    end
+
+    # Returns the height of this line, (1 on common lines, more on wrapped lines):
+    private def line_height(line)
+      1 + (@prompt_size + line.size) // Term::Size.width
+    end
+
+    private def expression_height
+      @lines.sum { |l| line_height(l) }
     end
 
     def move_cursor_left
@@ -463,29 +487,73 @@ module IC::ReplInterface
       move_cursor_to(@lines[0].size, 0)
     end
 
-    # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression
-    # Handles the lines wrapping
-    #
-    # before:
-    #
-    # ```
-    # prompt> def very_looo
-    # oooong_name
-    # prompt>   bar|
-    # prompt> end
-    # ```
-    #
-    # @x: 5, @y: 1
-    # real cursor: x: 13, y: ?+2
-    #
-    # after:
-    #
-    # ```
-    # |
-    # ```
-    #
-    # @x: 5, @y: 1
-    # real cursor: x: 0, y: ?+0
+    # Clear the screen, yields for modifications, and displays the new expression.
+    # cursor is adjusted to not overflow if the new expression is smaller.
+    def update(force_full_view = false, &)
+      clear_screen
+
+      with self yield
+
+      @expression = nil
+
+      # Updated expression can be smaller and we might need to adjust the cursor:
+      @y = @y.clamp(0, @lines.size - 1)
+      @x = @x.clamp(0, @lines[@y].size)
+
+      print_expression(force_full_view)
+    end
+
+    def replace(lines : Array(String))
+      update { @lines = lines.dup }
+    end
+
+    def end_editing(replace : Array(String)? = nil)
+      if replace
+        update(force_full_view: true) { @lines = replace }
+      elsif expression_height >= Term::Size.height
+        update(force_full_view: true) {}
+      end
+
+      move_cursor_to_end
+      puts
+    end
+
+    def prompt_next
+      @scroll_offset = 0
+      @lines = [""]
+      @expression = nil
+      reset_cursor
+      print @prompt.call(0)
+    end
+
+    def scroll_up
+      if @scroll_offset < expression_height() - Term::Size.height
+        @scroll_offset += 1
+        update { }
+      end
+    end
+
+    def scroll_down
+      if @scroll_offset > 0
+        @scroll_offset -= 1
+        update { }
+      end
+    end
+
+    private def view_bounds
+      h = Term::Size.height
+      end_ = expression_height() - 1
+
+      start = {0, end_ + 1 - h}.max
+
+      @scroll_offset = @scroll_offset.clamp(0, start)
+
+      start -= @scroll_offset
+      end_ -= @scroll_offset
+      {start, end_}
+    end
+
+    # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression:
     private def clear_screen
       x_save, y_save = @x, @y
       move_cursor_to_begin
@@ -495,53 +563,84 @@ module IC::ReplInterface
       print Term::Cursor.clear_screen_down
     end
 
-    # Displays the colorized expression with a prompt, real cursor is so at the end of the expression
-    private def print_expression
+    private def print_line(colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
+      if prompt?
+        puts unless first?
+        print @prompt.call(line_index)
+      end
+      print colorized_line
+
+
+      # ```
+      # prompt> begin                  |
+      # prompt>   foooooooooooooooooooo|
+      #                                | <- If the line size match exactly the screen width, we need to add a
+      # prompt>   bar                  |    extra line feed, so computes based on `%` or `//` stay exact.
+      # prompt> end                    |
+      # ```
+      puts if is_last_part? && remainding_size(line_size) == 0
+    end
+
+    # Prints the colorized expression, this last is clipped if it's higher than screen.
+    # The only displayed part of the expression is delimited by `view_bounds` and depend of the value of
+    # `@scroll_offset`.
+    # Lines that takes more than one line (if wrapped) are cut in consequence.
+    private def print_expression(force_full_view = false)
+      if force_full_view
+        start, end_ = 0, @lines.size-1
+      else
+        start, end_ = view_bounds()
+      end
+
       colorized_lines = @highlighter.highlight(self.expression).split('\n')
 
-      colorized_lines.each_with_index do |line, i|
-        print @prompt.call(i)
-        print line
+      first = true
 
-        puts if remainding_size(@lines[i].size) == 0
+      y = 0
 
-        puts unless i == colorized_lines.size - 1
+      # Track the real cursor position so we are able to correctly retrieve it to its original position (before clearing screen):
+      real_cursor_x = real_cursor_y = 0
+
+      # Iterate over the uncolored lines because we need to know the true size of each line:
+      @lines.each_with_index do |line, line_index|
+        line_height = line_height(line)
+
+        if start <= y && y + line_height - 1 <= end_
+          # The line can hold entirely between the view bound, print it:
+          print_line(colorized_lines[line_index], line_index, line.size, prompt?: true, first?: first, is_last_part?: true)
+          first = false
+
+          real_cursor_x = line.size
+          real_cursor_y = line_index
+
+          y += line_height
+        else
+          # The line cannot holds entirely between the view bound, we need to check each part individually:
+          line_height.times do |part_number|
+            if start <= y <= end_
+              # The part holds on the view, we can print it.
+              # FIXME:
+              # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
+              # recolor the part individually.
+              # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
+              colorized_line = @highlighter.highlight(part(line, part_number))
+
+              print_line(colorized_line, line_index, line.size, prompt?: part_number==0, first?: first, is_last_part?: part_number == line_height-1)
+              first = false
+
+              real_cursor_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
+              real_cursor_y = line_index
+            end
+            y += 1
+          end
+        end
       end
-    end
 
-    # if real cursor is at end of the expression, set the real cursor at the cursor position (`@x`, `@y`)
-    private def replace_real_cursor_from_end
+      # Retrieve the real cursor at its corresponding cursor position (`@x`, `@y`)
       x_save, y_save = @x, @y
-      @y = @lines.size - 1
-      @x = @lines[@y].size
+      @y = real_cursor_y
+      @x = real_cursor_x
       move_cursor_to(x_save, y_save)
-    end
-
-    # Clear the screen, yields for modifications, and displays the new expression.
-    # cursor is adjusted to not overflow if the new expression is smaller.
-    def update(&)
-      clear_screen
-
-      with self yield
-
-      @expression = nil
-      print_expression
-
-      y = @y.clamp(0, @lines.size - 1)
-      x = @x.clamp(0, @lines[y].size)
-      move_abs_cursor(x, y)
-      replace_real_cursor_from_end
-    end
-
-    def replace(lines : Array(String))
-      update { @lines = lines.dup }
-    end
-
-    def prompt_next
-      @lines = [""]
-      @expression = nil
-      reset_cursor
-      print @prompt.call(0)
     end
   end
 end

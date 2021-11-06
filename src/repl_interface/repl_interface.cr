@@ -54,7 +54,9 @@ module IC::ReplInterface
             end
           end
         when :ctrl_up
+          @editor.scroll_down
         when :ctrl_down
+          @editor.scroll_up
         when :left, :ctrl_left
           @editor.move_cursor_left
         when :right, :ctrl_right
@@ -125,13 +127,8 @@ module IC::ReplInterface
       parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest
     end
 
-    private def formate
-      begin
-        formated_lines = Crystal.format(@editor.expression).chomp.split('\n')
-        @editor.replace(formated_lines)
-      rescue
-      end
-      @editor.move_cursor_to_end
+    private def formated
+      Crystal.format(@editor.expression).chomp.split('\n') rescue nil
     end
 
     private def auto_unindent
@@ -151,10 +148,10 @@ module IC::ReplInterface
     end
 
     private def submit_expr(*, history = true, &)
-      formate
+      @editor.end_editing(replace: formated)
+
       @line_number += @editor.lines.size
       @history << @editor.lines if history
-      puts
 
       yield
 
