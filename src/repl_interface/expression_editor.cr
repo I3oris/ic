@@ -53,7 +53,7 @@ module IC::ReplInterface
     @prompt : Int32 -> String
     @prompt_size : Int32
 
-    # Tracks the cursor position relatively to the expressions lines, (y=0 corresponds to the first line and x=0 the first char)
+    # Tracks the cursor position relatively to the expression's lines, (y=0 corresponds to the first line and x=0 the first char)
     # This position is independent of text wrapping so its position will not match to real cursor on screen.
     #
     # `|` : cursor position
@@ -113,7 +113,7 @@ module IC::ReplInterface
       @lines[...@y].join('\n') + '\n' + current_line[..@x]
     end
 
-    # Following functions modify the expression, they should be called inside
+    # Following functions modifies the expression, they should be called inside
     # an `update` block to see the changes in the screen : #
 
     def previous_line=(line)
@@ -198,7 +198,7 @@ module IC::ReplInterface
 
     # End modifying functions. #
 
-    # Give the size of the last part of the line when it's wrapped
+    # Gives the size of the last part of the line when it's wrapped
     #
     # prompt> def very_looo
     # ooooooooong              <= last part
@@ -206,7 +206,7 @@ module IC::ReplInterface
     # prompt> end
     #
     # e.g. here "ooooooooong".size = 10
-    private def remainding_size(line_size)
+    private def remaining_size(line_size)
       (@prompt_size + line_size) % Term::Size.width
     end
 
@@ -245,7 +245,7 @@ module IC::ReplInterface
         # ```
         if prev_line = previous_line?
           # Wrap real cursor:
-          size_of_last_part = remainding_size(prev_line.size)
+          size_of_last_part = remaining_size(prev_line.size)
           move_real_cursor(x: -@prompt_size + size_of_last_part, y: -1)
 
           # Wrap cursor:
@@ -263,7 +263,7 @@ module IC::ReplInterface
         # prompt>   bar
         # prompt> end
         # ```
-        if remainding_size(@x) == 0
+        if remaining_size(@x) == 0
           move_real_cursor(x: Term::Size.width + 1, y: -1)
         else
           move_real_cursor(x: -1, y: 0)
@@ -288,7 +288,7 @@ module IC::ReplInterface
         # ```
         if next_line?
           # Wrap real cursor:
-          size_of_last_part = remainding_size(current_line.size)
+          size_of_last_part = remaining_size(current_line.size)
           move_real_cursor(x: -size_of_last_part + @prompt_size, y: +1)
 
           # Wrap cursor:
@@ -306,7 +306,7 @@ module IC::ReplInterface
         # prompt>   bar
         # prompt> end
         # ```
-        if remainding_size(@x) == (Term::Size.width - 1)
+        if remaining_size(@x) == (Term::Size.width - 1)
           move_real_cursor(x: -Term::Size.width, y: +1)
         else
           move_real_cursor(x: +1, y: 0)
@@ -320,7 +320,7 @@ module IC::ReplInterface
     def move_cursor_up
       if (@prompt_size + @x) >= Term::Size.width
         if @x >= Term::Size.width
-          # Here, we are:
+          # Here, we have:
           # ```
           # prompt> def *very_loo
           # oooooooooooo|oooooooo
@@ -334,7 +334,7 @@ module IC::ReplInterface
           move_real_cursor(x: 0, y: -1)
           move_cursor(x: -Term::Size.width, y: 0)
         else
-          # Here, we are:
+          # Here, we have:
           # ```
           # prompt> *def very_loo
           # ooo|ooooooooooooooooo
@@ -350,8 +350,8 @@ module IC::ReplInterface
         true
       elsif prev_line = previous_line?
         # Here, there are a previous line in witch we can move up, we want to
-        # move on the last part of the previous line
-        size_of_last_part = remainding_size(prev_line.size)
+        # move on the last part of the previous line:
+        size_of_last_part = remaining_size(prev_line.size)
 
         if size_of_last_part < @prompt_size + @x
           # ```
@@ -382,16 +382,15 @@ module IC::ReplInterface
     end
 
     def move_cursor_down
-      # many lines:
-      size_of_last_part = remainding_size(current_line.size)
-      real_x = remainding_size(@x)
+      size_of_last_part = remaining_size(current_line.size)
+      real_x = remaining_size(@x)
 
-      remainding = current_line.size - @x
+      remaining = current_line.size - @x
 
-      if remainding > size_of_last_part
+      if remaining > size_of_last_part
         # on middle
-        if remainding > Term::Size.width
-          # Here, there are enough remainding to just move down
+        if remaining > Term::Size.width
+          # Here, there are enough remaining to just move down
           # ```
           # prompt>  def ve|ry_loo
           # ooooooooooooooo*oooooo
@@ -418,7 +417,7 @@ module IC::ReplInterface
       elsif next_line = next_line?
         case real_x
         when .< @prompt_size
-          # Here, we are behind the prompt so we want goes to the begining of the next line:
+          # Here, we are behind the prompt so we want goes to the beginning of the next line:
           # ```
           # prompt>  def very_loo
           # ooooooooooooooooooooo
@@ -440,7 +439,7 @@ module IC::ReplInterface
           move_real_cursor(x: 0, y: +1)
           move_abs_cursor(x: real_x - @prompt_size, y: @y + 1)
         else
-          # Finally, here, want to move at end of the next line:
+          # Finally, here, we want to move at end of the next line:
           # ```
           # prompt>  def very_loo
           # ooooooooooooooooooooo
@@ -460,13 +459,13 @@ module IC::ReplInterface
 
     def move_cursor_to(x, y)
       if y > @y || (y == @y && x > @x)
-        # destination is after, move cursor forward:
+        # Destination is after, move cursor forward:
         until {@x, @y} == {x, y}
           move_cursor_right
           raise "Bug: position (#{x}, #{y}) missed when moving cursor forward" if @y > y
         end
       else
-        # destination is before, move cursor backward:
+        # Destination is before, move cursor backward:
         until {@x, @y} == {x, y}
           move_cursor_left
           raise "Bug: position (#{x}, #{y}) missed when moving cursor backward" if @y < y
@@ -584,7 +583,7 @@ module IC::ReplInterface
       # prompt>   bar                  |    extra line feed, so computes based on `%` or `//` stay exact.
       # prompt> end                    |
       # ```
-      puts if is_last_part? && remainding_size(line_size) == 0
+      puts if is_last_part? && remaining_size(line_size) == 0
     end
 
     # Prints the colorized expression, this last is clipped if it's higher than screen.
