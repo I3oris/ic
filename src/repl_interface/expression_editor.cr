@@ -29,7 +29,6 @@ module IC::ReplInterface
   #   @editor << "Hello "
   # end
   #
-  #
   # @editor.end_editing
   #
   # @editor.expression # => %(puts "Hello World"\n  puts "!")
@@ -138,6 +137,8 @@ module IC::ReplInterface
     end
 
     def <<(char : Char)
+      return insert_new_line(0) if char.in? '\n', '\r'
+
       if @x >= current_line.size
         self.current_line = current_line + char
       else
@@ -490,6 +491,7 @@ module IC::ReplInterface
     # Clear the screen, yields for modifications, and displays the new expression.
     # cursor is adjusted to not overflow if the new expression is smaller.
     def update(force_full_view = false, &)
+      print Term::Cursor.hide
       clear_screen
 
       with self yield
@@ -501,6 +503,7 @@ module IC::ReplInterface
       @x = @x.clamp(0, @lines[@y].size)
 
       print_expression(force_full_view)
+      print Term::Cursor.show
     end
 
     def replace(lines : Array(String))
@@ -511,7 +514,7 @@ module IC::ReplInterface
       if replace
         update(force_full_view: true) { @lines = replace }
       elsif expression_height >= Term::Size.height
-        update(force_full_view: true) {}
+        update(force_full_view: true) { }
       end
 
       move_cursor_to_end
@@ -555,9 +558,13 @@ module IC::ReplInterface
 
     # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression:
     private def clear_screen
-      x_save, y_save = @x, @y
-      move_cursor_to_begin
-      @x, @y = x_save, y_save
+      if expression_height >= Term::Size.height
+        print Term::Cursor.row(1)
+      else
+        x_save, y_save = @x, @y
+        move_cursor_to_begin
+        @x, @y = x_save, y_save
+      end
 
       print Term::Cursor.column(1)
       print Term::Cursor.clear_screen_down
@@ -569,7 +576,6 @@ module IC::ReplInterface
         print @prompt.call(line_index)
       end
       print colorized_line
-
 
       # ```
       # prompt> begin                  |
@@ -625,7 +631,7 @@ module IC::ReplInterface
               # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
               colorized_line = @highlighter.highlight(part(line, part_number))
 
-              print_line(colorized_line, line_index, line.size, prompt?: part_number==0, first?: first, is_last_part?: part_number == line_height-1)
+              print_line(colorized_line, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
               first = false
 
               real_cursor_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
