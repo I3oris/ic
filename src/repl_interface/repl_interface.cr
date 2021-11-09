@@ -2,6 +2,7 @@ require "./history"
 require "./expression_editor"
 require "./char_reader"
 require "./crystal_parser_nest"
+require "colorize"
 
 module IC::ReplInterface
   class ReplInterface
@@ -31,8 +32,8 @@ module IC::ReplInterface
     def run(& : String -> _)
       @editor.prompt_next
 
-      CharReader.read_chars(STDIN) do |char|
-        case char
+      CharReader.read_chars(STDIN) do |read|
+        case read
         when :enter
           on_enter { |line| yield line }
         when :up
@@ -71,7 +72,14 @@ module IC::ReplInterface
           @editor.update { insert_new_line(indent: self.indentation_level) }
         when Char
           @editor.update do
-            @editor << char
+            @editor << read
+            self.auto_unindent
+          end
+        when String
+          @editor.update do
+            read.each_char do |char|
+              @editor << char
+            end
             self.auto_unindent
           end
         end

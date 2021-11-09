@@ -1,55 +1,65 @@
 module IC::ReplInterface
   module CharReader
     def self.read_chars(io = STDIN, &)
-      c = nil
-      loop do
-        io.raw { c = self.next_char(io) }
-        break if c == :exit
+      slice_buffer = Bytes.new(1024)
 
+      loop do
+        nb_read = io.raw { io.read(slice_buffer) }
+
+        c = parse_escape_sequence(slice_buffer[0...nb_read])
         yield c if c
+
+        break if c == :exit
       end
     end
 
-    private def self.next_char(io)
-      c = io.read_char
-      case c
-      when '\e'
-        if io.read_char == '['
-          case io.read_char
-          when 'A' then :up
-          when 'B' then :down
-          when 'C' then :right
-          when 'D' then :left
-          when '3'
-            if io.read_char == '~'
+    private def self.parse_escape_sequence(chars : Bytes) : Char | Symbol | String?
+      if chars.size > 6
+        return String.new(chars)
+      end
+
+      case chars[0]?
+      when '\e'.ord
+        if chars[1]? == '['.ord
+          case chars[2]?
+          when 'A'.ord then :up
+          when 'B'.ord then :down
+          when 'C'.ord then :right
+          when 'D'.ord then :left
+          when '3'.ord
+            if chars[3]? == '~'.ord
               :delete
             end
-          when '1'
-            if io.read_char == ';' && io.read_char == '5'
-              case io.read_char
-              when 'A' then :ctrl_up
-              when 'B' then :ctrl_down
-              when 'C' then :ctrl_right
-              when 'D' then :ctrl_left
+          when '1'.ord
+            if {chars[3]?, chars[4]?} == {';'.ord, '5'.ord}
+              case chars[5]?
+              when 'A'.ord then :ctrl_up
+              when 'B'.ord then :ctrl_down
+              when 'C'.ord then :ctrl_right
+              when 'D'.ord then :ctrl_left
               end
             end
           end
         end
-      when '\r', '\n'
+      when '\r'.ord, '\n'.ord
         :enter
       when ctrl('c'), ctrl('d'), ctrl('x')
         :exit
       when ctrl('o')
         :insert_new_line
-      when '\u007f'
+      when 0x7f
         :back
       else
-        c
+        if chars.size == 1
+          chars[0].chr
+        else
+          String.new chars
+        end
       end
     end
 
     private def self.ctrl(k)
-      (k.ord & 0x1f).chr
+      (k.ord & 0x1f)
     end
   end
 end
