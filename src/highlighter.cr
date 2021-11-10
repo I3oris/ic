@@ -127,7 +127,7 @@ class IC::Highlighter
       when :CONST, :"::"
         highlight token, CONST_COLOR, io
       when :DELIMITER_START
-        if token.raw == "/" && last_token[:type].in?(:NUMBER, :CONST, :INSTANCE_VAR, :CLASS_VAR, :IDENT)
+        if token.raw == "/" && last_token[:type].in?(:NUMBER, :CONST, :INSTANCE_VAR, :CLASS_VAR, :IDENT, :")", :"}", :"]")
           highlight "/", OPERATOR_COLOR, io
         elsif token.delimiter_state.kind == :heredoc
           highlight token.raw, HEREDOC_DELIMITER_COLOR, io
