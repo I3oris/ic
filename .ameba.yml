@@ -23,3 +23,6 @@ Style/RedundantReturn:
   Description: Reports redundant return expressions
   Enabled: false
   Severity: Warning
+
+Excluded:
+  - crystal-i

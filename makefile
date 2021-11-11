@@ -1,21 +1,22 @@
-DEBUG ?= false
+CRYSTAL_PATH ?= $(shell pwd)/crystal-i/src
+CRYSTAL_CONFIG_PATH ?= $(CRYSTAL_PATH)
 COMPILER ?= crystal
-ENV := \
-CRYSTAL_CONFIG_LIBRARY_PATH=$(shell $(COMPILER) env CRYSTAL_LIBRARY_PATH)\
-CRYSTAL_CONFIG_PATH=$(shell $(COMPILER) env CRYSTAL_PATH)
+FLAGS ?= -p
+
+ENV := CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 
 all: ic
 
-ic: src/*
-ifeq "$(DEBUG)" "true"
-	@$(ENV) $(COMPILER) build -p src/ic.cr -D_debug
-else
-	@$(ENV) $(COMPILER) build -p src/ic.cr # --release
-endif
+ic: crystal-i-llvm
+	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr
+
+.PHONY: crystal-i-llvm
+crystal-i-llvm:
+	cd ./crystal-i && make src/llvm/ext/llvm_ext.o
 
 .PHONY: spec
 spec:
-	@$(ENV) $(COMPILER) spec -p --order random
+	$(ENV) $(COMPILER) spec $(FLAGS) --order random
 
 .PHONY: clean
 clean:

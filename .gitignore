@@ -5,3 +5,4 @@
 *.dwarf
 /ic
 /tests/
+shard.lock

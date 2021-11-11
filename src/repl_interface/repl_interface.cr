@@ -18,7 +18,7 @@ module IC::ReplInterface
       @editor = ExpressionEditor.new(
         prompt: ->(expr_line_number : Int32) do
           String.build do |io|
-            io << "ic(#{Crystal::VERSION}):"
+            io << "ic(#{Crystal::Config.version}):"
             io << sprintf("%03d", @line_number + expr_line_number).colorize.magenta
             case status
             when :multiline then io << "* "

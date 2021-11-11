@@ -8,7 +8,7 @@ targets:
   icr:
     main: src/ic.cr
 
-crystal: 1.0.0
+crystal: 1.1.1
 
 license: MIT
 

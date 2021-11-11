@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <%= HeadTemplate.new(project_info, type) %>
+  <meta name="repository-name" content="<%= project_info.name %>">
+  <title><%= type.full_name %> - <%= project_info.name %> <%= project_info.version %></title>
+  <script type="text/javascript">
+    CrystalDocs.base_path = "<%= type.path_to "" %>";
+  </script>
+</head>
+<body>
+
+<%= Crystal::Doc::SVG_DEFS %>
+<%= SidebarTemplate.new(project_info, types, type) %>
+
+<div class="main-content">
+<h1 class="type-name">
+<% if type.program? %>
+  <%= type.full_name %>
+<% else %>
+  <span class="kind"><%= type.abstract? ? "abstract " : ""%><%= type.kind %></span> <%= type.full_name %>
+<% end %>
+</h1>
+
+<% if type.superclass %>
+  <%= type.superclass_hierarchy %>
+<% end %>
+
+
+<% if doc = type.formatted_doc %>
+  <h2>
+    <%= Crystal::Doc.anchor_link("overview") %>
+    Overview
+  </h2>
+
+  <%= doc %>
+<% end %>
+
+<% if type.alias? %>
+  <h2>
+    <%= Crystal::Doc.anchor_link("alias-definition") %>
+    Alias Definition
+  </h2>
+  <code><%= type.formatted_alias_definition %></code>
+<% end %>
+
+<%= OtherTypesTemplate.new("Included Modules", type, type.included_modules) %>
+<%= OtherTypesTemplate.new("Extended Modules", type, type.extended_modules) %>
+<%= OtherTypesTemplate.new("Direct Known Subclasses", type, type.subclasses) %>
+<%= OtherTypesTemplate.new("Direct including types", type, type.including_types) %>
+
+<% if locations = type.locations %>
+  <h2>
+    <%= Crystal::Doc.anchor_link("defined-in") %>
+    Defined in:
+  </h2>
+  <% locations.each do |location| %>
+    <% if url = project_info.source_url(location) %>
+      <a href="<%= url %>" target="_blank">
+        <%= location.filename_in_project %><% if location.show_line_number %>:<%= location.line_number %><% end %>
+      </a>
+    <% else %>
+      <%= location.filename_in_project %><% if location.show_line_number %>:<%= location.line_number %><% end %>
+    <% end %>
+    <br/>
+  <% end %>
+<% end %>
+
+<% unless type.constants.empty? %>
+  <% if type.enum? %>
+    <h2>
+      <%= Crystal::Doc.anchor_link("enum-members") %>
+      Enum Members
+    </h2>
+  <% else %>
+    <h2>
+      <%= Crystal::Doc.anchor_link("constant-summary") %>
+      Constant Summary
+    </h2>
+  <% end %>
+  <dl>
+    <% type.constants.each do |const| %>
+      <dt class="entry-const" id="<%= const.id %>">
+        <strong><%= const.name %></strong> = <code><%= const.formatted_value %></code>
+      </dt>
+      <% if doc = const.formatted_doc %>
+      <dd class="entry-const-doc">
+        <%= doc %>
+      </dd>
+      <% end %>
+    <% end %>
+  </dl>
+<% end %>
+
+<%= MethodSummaryTemplate.new("Constructors", type.constructors) %>
+<%= MethodSummaryTemplate.new(type.program? ? "Method Summary" : "Class Method Summary", type.class_methods) %>
+<%= MethodSummaryTemplate.new("Instance Method Summary", type.instance_methods) %>
+<%= MethodSummaryTemplate.new("Macro Summary", type.macros) %>
+
+<div class="methods-inherited">
+  <% type.ancestors.each do |ancestor| %>
+    <%= MethodsInheritedTemplate.new(type, ancestor, ancestor.instance_methods, "Instance") %>
+    <%= MethodsInheritedTemplate.new(type, ancestor, ancestor.constructors, "Constructor") %>
+    <%= MethodsInheritedTemplate.new(type, ancestor, ancestor.class_methods, "Class") %>
+  <% end %>
+</div>
+
+<%= MethodDetailTemplate.new("Constructor Detail", type.constructors) %>
+<%= MethodDetailTemplate.new(type.program? ? "Method Detail" : "Class Method Detail", type.class_methods) %>
+<%= MethodDetailTemplate.new("Instance Method Detail", type.instance_methods) %>
+<%= MethodDetailTemplate.new("Macro Detail", type.macros) %>
+</div>
+
+</body>
+</html>
