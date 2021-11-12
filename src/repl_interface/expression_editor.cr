@@ -65,8 +65,8 @@ module IC::ReplInterface
     # prompt> end
     # ```
     # For example here the cursor position is x=16, y=0, but real cursor is at x=3,y=1 from the beginning of expression.
-    @x = 0
-    @y = 0
+    getter x = 0
+    getter y = 0
 
     @scroll_offset = 0
 

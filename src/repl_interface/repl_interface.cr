@@ -140,14 +140,18 @@ module IC::ReplInterface
     end
 
     private def auto_unindent
-      last_word = @editor.current_line.split.last?
+      current_line = @editor.current_line.rstrip(' ')
+      return if @editor.x != current_line.size
+
+      last_word = current_line.split.last?
+
       case last_word
       when Nil
       when .in? CLOSING_KEYWORD
-        @editor.current_line = "  "*self.indentation_level + @editor.current_line.lstrip(' ')
+        @editor.current_line = "  "*self.indentation_level + current_line.lstrip(' ')
       when .in? UNINDENT_KEYWORD
         indent = {self.indentation_level - 1, 0}.max
-        @editor.current_line = "  "*indent + @editor.current_line.lstrip(' ')
+        @editor.current_line = "  "*indent + current_line.lstrip(' ')
       end
     end
 
