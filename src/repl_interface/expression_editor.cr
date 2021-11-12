@@ -468,7 +468,7 @@ module IC::ReplInterface
       end
     end
 
-    def move_cursor_to(x, y)
+    def move_cursor_to(x, y, allow_scrolling = true)
       if y > @y || (y == @y && x > @x)
         # Destination is after, move cursor forward:
         until {@x, @y} == {x, y}
@@ -482,20 +482,24 @@ module IC::ReplInterface
           raise "Bug: position (#{x}, #{y}) missed when moving cursor backward" if @y < y
         end
       end
+
+      if allow_scrolling && update_scroll_offset
+        update { }
+      end
     end
 
-    def move_cursor_to_begin
-      move_cursor_to(0, 0)
+    def move_cursor_to_begin(allow_scrolling = true)
+      move_cursor_to(0, 0, allow_scrolling: allow_scrolling)
     end
 
-    def move_cursor_to_end
+    def move_cursor_to_end(allow_scrolling = true)
       y = @lines.size - 1
 
-      move_cursor_to(@lines[y].size, y)
+      move_cursor_to(@lines[y].size, y, allow_scrolling: allow_scrolling)
     end
 
-    def move_cursor_to_end_of_first_line
-      move_cursor_to(@lines[0].size, 0)
+    def move_cursor_to_end_of_first_line(allow_scrolling = true)
+      move_cursor_to(@lines[0].size, 0, allow_scrolling: allow_scrolling)
     end
 
     # Clear the screen, yields for modifications, and displays the new expression.
@@ -527,7 +531,7 @@ module IC::ReplInterface
         update(force_full_view: true) { }
       end
 
-      move_cursor_to_end
+      move_cursor_to_end(allow_scrolling: false)
       puts
     end
 
@@ -606,7 +610,7 @@ module IC::ReplInterface
         print Term::Cursor.row(1)
       else
         x_save, y_save = @x, @y
-        move_cursor_to_begin
+        move_cursor_to_begin(allow_scrolling: false)
         @x, @y = x_save, y_save
       end
 
@@ -692,7 +696,7 @@ module IC::ReplInterface
       x_save, y_save = @x, @y
       @y = real_cursor_y
       @x = real_cursor_x
-      move_cursor_to(x_save, y_save)
+      move_cursor_to(x_save, y_save, allow_scrolling: false)
     end
   end
 end
