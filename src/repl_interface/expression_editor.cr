@@ -229,7 +229,7 @@ module IC::ReplInterface
       @lines.sum { |l| line_height(l) }
     end
 
-    def move_cursor_left
+    def move_cursor_left(allow_scrolling = true)
       case @x
       when 0
         # Wrap the cursor at the end of the previous line:
@@ -244,6 +244,8 @@ module IC::ReplInterface
         # prompt> end
         # ```
         if prev_line = previous_line?
+          scroll_up_if_needed if allow_scrolling
+
           # Wrap real cursor:
           size_of_last_part = remaining_size(prev_line.size)
           move_real_cursor(x: -@prompt_size + size_of_last_part, y: -1)
@@ -264,6 +266,7 @@ module IC::ReplInterface
         # prompt> end
         # ```
         if remaining_size(@x) == 0
+          scroll_up_if_needed if allow_scrolling
           move_real_cursor(x: Term::Size.width + 1, y: -1)
         else
           move_real_cursor(x: -1, y: 0)
@@ -272,7 +275,7 @@ module IC::ReplInterface
       end
     end
 
-    def move_cursor_right
+    def move_cursor_right(allow_scrolling = true)
       case @x
       when current_line.size
         # Wrap the cursor at the beginning of the next line:
@@ -287,6 +290,8 @@ module IC::ReplInterface
         # prompt> end
         # ```
         if next_line?
+          scroll_down_if_needed if allow_scrolling
+
           # Wrap real cursor:
           size_of_last_part = remaining_size(current_line.size)
           move_real_cursor(x: -size_of_last_part + @prompt_size, y: +1)
@@ -307,6 +312,8 @@ module IC::ReplInterface
         # prompt> end
         # ```
         if remaining_size(@x) == (Term::Size.width - 1)
+          scroll_down_if_needed if allow_scrolling
+
           move_real_cursor(x: -Term::Size.width, y: +1)
         else
           move_real_cursor(x: +1, y: 0)
@@ -318,6 +325,8 @@ module IC::ReplInterface
     end
 
     def move_cursor_up
+      scroll_up_if_needed
+
       if (@prompt_size + @x) >= Term::Size.width
         if @x >= Term::Size.width
           # Here, we have:
@@ -382,6 +391,8 @@ module IC::ReplInterface
     end
 
     def move_cursor_down
+      scroll_down_if_needed
+
       size_of_last_part = remaining_size(current_line.size)
       real_x = remaining_size(@x)
 
@@ -461,13 +472,13 @@ module IC::ReplInterface
       if y > @y || (y == @y && x > @x)
         # Destination is after, move cursor forward:
         until {@x, @y} == {x, y}
-          move_cursor_right
+          move_cursor_right(allow_scrolling: false)
           raise "Bug: position (#{x}, #{y}) missed when moving cursor forward" if @y > y
         end
       else
         # Destination is before, move cursor backward:
         until {@x, @y} == {x, y}
-          move_cursor_left
+          move_cursor_left(allow_scrolling: false)
           raise "Bug: position (#{x}, #{y}) missed when moving cursor backward" if @y < y
         end
       end
@@ -542,6 +553,40 @@ module IC::ReplInterface
       end
     end
 
+    private def scroll_up_if_needed
+      if update_scroll_offset(y_shift: -1)
+        update { }
+      end
+    end
+
+    private def scroll_down_if_needed
+      if update_scroll_offset(y_shift: +1)
+        update { }
+      end
+    end
+
+    # Updates the scroll offset in a way that (cursor + y_shift) is still between the view bounds
+    # Returns true if the offset has been effectively modified.
+    private def update_scroll_offset(y_shift = 0)
+      start, end_ = view_bounds
+      real_y = @lines[...@y].sum { |l| line_height(l) }
+      real_y += line_height(current_line[..@x]) - 1
+      real_y += y_shift
+
+      # case 1: cursor is before view start, we need to increase the scroll by the difference.
+      if real_y < start
+        @scroll_offset += start - real_y
+        true
+
+        # case 2: cursor is after view end, we need to decrease the scroll by the difference.
+      elsif real_y > end_
+        @scroll_offset -= real_y - end_
+        true
+      else
+        false
+      end
+    end
+
     private def view_bounds
       h = Term::Size.height
       end_ = expression_height() - 1
@@ -594,6 +639,8 @@ module IC::ReplInterface
       if force_full_view
         start, end_ = 0, Int32::MAX
       else
+        update_scroll_offset()
+
         start, end_ = view_bounds()
       end
 

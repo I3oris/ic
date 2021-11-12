@@ -44,6 +44,7 @@ Run file with arguments:
 ### Shortcuts
 
 * `ctrl-o` : On multiline input: insert a new line instead of submit edition.
+* `ctrl-up`/`down` : On long multiline input: scroll up/down the view.
 * ... : more up-coming.
 
 ## Contributing
