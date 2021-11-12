@@ -48,6 +48,10 @@ module IC::ReplInterface
   class ExpressionEditor
     getter lines : Array(String) = [""]
     getter expression : String? { lines.join('\n') }
+    getter expression_height : Int32? { lines.sum { |l| line_height(l) } }
+    getter colorized_lines : Array(String)? do
+      @highlighter.highlight(self.expression).split('\n')
+    end
 
     @highlighter = Highlighter.new
     @prompt : Int32 -> String
@@ -118,22 +122,22 @@ module IC::ReplInterface
 
     def previous_line=(line)
       @lines[@y - 1] = line
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
     end
 
     def current_line=(line)
       @lines[@y] = line
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
     end
 
     def next_line=(line)
       @lines[@y + 1] = line
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
     end
 
     def delete_line(y)
       @lines.delete_at(y)
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
     end
 
     def <<(char : Char)
@@ -164,7 +168,7 @@ module IC::ReplInterface
         self.current_line = current_line[...@x]
       end
 
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
       move_abs_cursor(x: indent*2, y: @y + 1)
     end
 
@@ -223,10 +227,6 @@ module IC::ReplInterface
     # Returns the height of this line, (1 on common lines, more on wrapped lines):
     private def line_height(line)
       1 + (@prompt_size + line.size) // Term::Size.width
-    end
-
-    private def expression_height
-      @lines.sum { |l| line_height(l) }
     end
 
     def move_cursor_left(allow_scrolling = true)
@@ -484,7 +484,7 @@ module IC::ReplInterface
       end
 
       if allow_scrolling && update_scroll_offset
-        update { }
+        update
       end
     end
 
@@ -510,11 +510,19 @@ module IC::ReplInterface
 
       with self yield
 
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
 
       # Updated expression can be smaller and we might need to adjust the cursor:
       @y = @y.clamp(0, @lines.size - 1)
       @x = @x.clamp(0, @lines[@y].size)
+
+      print_expression(force_full_view)
+      print Term::Cursor.show
+    end
+
+    def update(force_full_view = false)
+      print Term::Cursor.hide
+      clear_screen
 
       print_expression(force_full_view)
       print Term::Cursor.show
@@ -528,7 +536,7 @@ module IC::ReplInterface
       if replace
         update(force_full_view: true) { @lines = replace }
       elsif expression_height >= Term::Size.height
-        update(force_full_view: true) { }
+        update(force_full_view: true)
       end
 
       move_cursor_to_end(allow_scrolling: false)
@@ -538,7 +546,7 @@ module IC::ReplInterface
     def prompt_next
       @scroll_offset = 0
       @lines = [""]
-      @expression = nil
+      @expression = @expression_height = @colorized_lines = nil
       reset_cursor
       print @prompt.call(0)
     end
@@ -546,26 +554,26 @@ module IC::ReplInterface
     def scroll_up
       if @scroll_offset < expression_height() - Term::Size.height
         @scroll_offset += 1
-        update { }
+        update
       end
     end
 
     def scroll_down
       if @scroll_offset > 0
         @scroll_offset -= 1
-        update { }
+        update
       end
     end
 
     private def scroll_up_if_needed
       if update_scroll_offset(y_shift: -1)
-        update { }
+        update
       end
     end
 
     private def scroll_down_if_needed
       if update_scroll_offset(y_shift: +1)
-        update { }
+        update
       end
     end
 
@@ -573,7 +581,7 @@ module IC::ReplInterface
     # Returns true if the offset has been effectively modified.
     private def update_scroll_offset(y_shift = 0)
       start, end_ = view_bounds
-      real_y = @lines[...@y].sum { |l| line_height(l) }
+      real_y = @lines.each.first(@y).sum { |l| line_height(l) }
       real_y += line_height(current_line[..@x]) - 1
       real_y += y_shift
 
@@ -648,8 +656,6 @@ module IC::ReplInterface
         start, end_ = view_bounds()
       end
 
-      colorized_lines = @highlighter.highlight(self.expression).split('\n')
-
       first = true
 
       y = 0
@@ -660,6 +666,8 @@ module IC::ReplInterface
       # Iterate over the uncolored lines because we need to know the true size of each line:
       @lines.each_with_index do |line, line_index|
         line_height = line_height(line)
+
+        break if y > end_
 
         if start <= y && y + line_height - 1 <= end_
           # The line can hold entirely between the view bound, print it:
