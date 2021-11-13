@@ -47,6 +47,10 @@ module IC::ReplInterface
         :exit
       when ctrl('o')
         :insert_new_line
+      when ctrl('a')
+        :move_cursor_to_begin
+      when ctrl('e')
+        :move_cursor_to_end
       when 0x7f
         :back
       else

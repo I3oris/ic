@@ -70,6 +70,10 @@ module IC::ReplInterface
           @editor.update { @editor << "  " }
         when :insert_new_line
           @editor.update { insert_new_line(indent: self.indentation_level) }
+        when :move_cursor_to_begin
+          @editor.move_cursor_to_begin
+        when :move_cursor_to_end
+          @editor.move_cursor_to_end
         when Char
           @editor.update do
             @editor << read
