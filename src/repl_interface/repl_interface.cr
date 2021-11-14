@@ -17,6 +17,8 @@ module IC::ReplInterface
       return {"", [] of String}
     end
 
+    @previous_completion_entries_height : Int32? = nil
+
     def initialize
       status = :default
       @editor = ExpressionEditor.new(
@@ -199,11 +201,47 @@ module IC::ReplInterface
 
     private def print_auto_completion_entries(context_name, entries)
       unless entries.size == 1
+        clear_completion_entries
+
         print context_name.colorize(:blue).underline
         puts ":"
-        entries.each do |entry|
-          puts entry
+
+        col_size = entries.max_of &.size + 1
+
+        nb_cols = Term::Size.width // col_size
+        nb_rows = {entries.size, Term::Size.height - 1 - @editor.expression_height}.min
+        nb_rows = {nb_rows, 0}.max
+
+        array = [] of Array(String)
+        entries.each_slice(nb_rows) do |row|
+          array << row
         end
+
+        nb_rows.times do |r|
+          nb_cols.times do |c|
+            entry = array[c]?.try &.[r]?
+
+            if entry && r == nb_rows - 1 && c == nb_cols - 1
+              print "...".ljust(col_size)
+            else
+              entry ||= ""
+              print Highlighter.highlight(entry.ljust(col_size))
+            end
+            # print "|"
+          end
+          puts
+        end
+
+        @previous_completion_entries_height = nb_rows + 1
+      end
+    end
+
+    private def clear_completion_entries
+      if height = @previous_completion_entries_height
+        print Term::Cursor.up(height)
+        print Term::Cursor.clear_screen_down
+        # print Term::Cursor.down(height)
+        @previous_completion_entries_height = nil
       end
     end
 
@@ -232,7 +270,9 @@ module IC::ReplInterface
     end
 
     private def submit_expr(*, history = true, &)
-      @editor.end_editing(replace: formated)
+      @editor.end_editing(replace: formated) do
+        clear_completion_entries
+      end
 
       @line_number += @editor.lines.size
       @history << @editor.lines if history

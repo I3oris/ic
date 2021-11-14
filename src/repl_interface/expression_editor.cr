@@ -517,7 +517,7 @@ module IC::ReplInterface
     # cursor is adjusted to not overflow if the new expression is smaller.
     def update(force_full_view = false, &)
       print Term::Cursor.hide
-      clear_screen
+      clear_expression_on_screen
 
       with self yield
 
@@ -533,7 +533,7 @@ module IC::ReplInterface
 
     def update(force_full_view = false)
       print Term::Cursor.hide
-      clear_screen
+      clear_expression_on_screen
 
       print_expression(force_full_view)
       print Term::Cursor.show
@@ -544,10 +544,20 @@ module IC::ReplInterface
     end
 
     def end_editing(replace : Array(String)? = nil)
+      end_editing(replace) { }
+    end
+
+    # Yields a callback called after clearing the expression and before reprint the replacement.
+    def end_editing(replace : Array(String)? = nil, &)
       if replace
-        update(force_full_view: true) { @lines = replace }
+        update(force_full_view: true) do
+          yield
+          @lines = replace
+        end
       elsif expression_height >= Term::Size.height
-        update(force_full_view: true)
+        update(force_full_view: true) do
+          yield
+        end
       end
 
       move_cursor_to_end(allow_scrolling: false)
@@ -624,7 +634,7 @@ module IC::ReplInterface
     end
 
     # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression:
-    private def clear_screen
+    private def clear_expression_on_screen
       if expression_height >= Term::Size.height
         print Term::Cursor.row(1)
       else

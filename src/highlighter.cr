@@ -23,7 +23,7 @@ class IC::Highlighter
     :if, :in, :include, :instance_sizeof, :lib, :macro, :module,
     :next, :of, :offsetof, :out, :pointerof, :private, :protected, :require,
     :rescue, :return, :select, :sizeof, :struct, :super,
-    :then, :type, :typeof, :undef, :union, :uninitialized, :unless, :until,
+    :then, :type, :typeof, :union, :uninitialized, :unless, :until,
     :verbatim, :when, :while, :with, :yield,
   }
 

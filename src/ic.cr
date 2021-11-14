@@ -61,59 +61,59 @@ module IC
         return {"", results}
       end
 
+      # Add defs from context_type:
+      results += add_completion_defs(context_type, name).sort
+
       # Add keyword methods (.is_a?, .nil?, ...):
-      Highlighter::KEYWORD_METHODS.each do |keyword|
-        add_completion_result(results, keyword.to_s, name)
-      end
+      results += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
     else
       context_type = repl.program
 
-      # Add keywords:
-      keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
-      keywords.each do |keyword|
-        add_completion_result(results, keyword.to_s, name)
-      end
-
       # Add top-level vars:
       vars = repl.@interpreter.local_vars.names_at_block_level_zero
-      vars.each do |var_name|
-        add_completion_result(results, var_name, name)
-      end
+      results += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
+
+      # Add defs from context_type:
+      results += add_completion_defs(context_type, name).sort
+
+      # Add keywords:
+      keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
+      results += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
 
       # Add types:
-      repl.program.types.each do |type_name, _|
-        add_completion_result(results, type_name, name)
-      end
+      results += repl.program.types.each_key.select(&.starts_with? name).to_a.sort
     end
 
-    # Add defs from context_type:
-    add_completion_defs(results, context_type, name)
+    results.uniq!
 
     repl.clean
     {context_type.to_s, results}
   end
 
-  private def self.add_completion_result(results, candidate, name)
-    if candidate.starts_with? name
-      results << candidate
-    end
-  end
+  private def self.add_completion_defs(type, name)
+    results = [] of String
 
-  private def self.add_completion_defs(results, type, name)
     # Add def names from type:
     type.defs.try &.each do |def_name, def_|
       if def_.any? &.def.visibility.public?
         # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
-        if !def_name.starts_with?('_') && def_name.starts_with? name
-          results << def_name
+        unless def_name.starts_with?('_')
+          if def_name.starts_with? name
+            # Avoid operators methods:
+            if Highlighter::OPERATORS.none? { |operator| operator.to_s == def_name }
+              results << def_name
+            end
+          end
         end
       end
     end
 
     # Recursively add def names from parents:
     type.parents.try &.each do |parent|
-      add_completion_defs(results, parent, name)
+      results += add_completion_defs(parent, name)
     end
+
+    results
   end
 end
 
