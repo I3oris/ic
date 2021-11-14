@@ -3,7 +3,7 @@
 class IC::Highlighter
   COMMENT_COLOR           = {:dark_gray, :bold}
   NUMBER_COLOR            = :magenta
-  CHAR_COLOR              = :magenta
+  CHAR_COLOR              = :light_yellow
   SYMBOL_COLOR            = :magenta
   STRING_COLOR            = :light_yellow
   HEREDOC_DELIMITER_COLOR = {:light_yellow, :underline}
@@ -12,6 +12,7 @@ class IC::Highlighter
   OPERATOR_COLOR          = :light_red
   IDENT_COLOR             = :default
   KEYWORD_COLOR           = :light_red
+  KEYWORD_METHODS_COLOR   = :default
   TRUE_FALSE_NIL_COLOR    = {:cyan, :bold}
   SELF_COLOR              = {:cyan, :bold}
   SPECIAL_VALUES_COLOR    = :cyan
@@ -193,7 +194,7 @@ class IC::Highlighter
   private def ident_color(token)
     case token.value
     when .in? KEYWORDS        then KEYWORD_COLOR
-    when .in? KEYWORD_METHODS then KEYWORD_COLOR
+    when .in? KEYWORD_METHODS then KEYWORD_METHODS_COLOR
     when .in? TRUE_FALSE_NIL  then TRUE_FALSE_NIL_COLOR
     when :self                then SELF_COLOR
     else                           IDENT_COLOR
