@@ -135,6 +135,17 @@ module IC::ReplInterface
       @expression = @expression_height = @colorized_lines = nil
     end
 
+    # `"`, `:`, `'`, are not a delimiter because symbols and strings should be treated as one word.
+    WORD_DELIMITERS = /[ \n\t\+\-,@&\!\?%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
+
+    def word_bound(x = @x, y = @y)
+      line = @lines[y]
+      word_begin = line.rindex(WORD_DELIMITERS, offset: {x - 1, 0}.max) || -1
+      word_end = line.index(WORD_DELIMITERS, offset: x) || line.size
+
+      {word_begin + 1, word_end - 1}
+    end
+
     def delete_line(y)
       @lines.delete_at(y)
       @expression = @expression_height = @colorized_lines = nil

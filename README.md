@@ -9,6 +9,7 @@ IC is an user-friendly interface for Interactive [Crystal](https://crystal-lang.
 * Multiline input
 * Auto formating
 * Auto indentation
+* Auto completion (Experimental)
 * History
 
 ## Warning

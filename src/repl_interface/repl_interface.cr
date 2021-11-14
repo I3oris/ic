@@ -13,6 +13,10 @@ module IC::ReplInterface
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
+    property auto_complete : Proc(String?, String, {String, Array(String)}) = ->(receiver : String?, name : String) do
+      return {"", [] of String}
+    end
+
     def initialize
       status = :default
       @editor = ExpressionEditor.new(
@@ -67,7 +71,7 @@ module IC::ReplInterface
         when :back
           @editor.update { back }
         when '\t'
-          @editor.update { @editor << "  " }
+          on_tab
         when :insert_new_line
           @editor.update { insert_new_line(indent: self.indentation_level) }
         when :move_cursor_to_begin
@@ -81,10 +85,7 @@ module IC::ReplInterface
           end
         when String
           @editor.update do
-            read.each_char do |char|
-              @editor << char
-            end
-            self.auto_unindent
+            @editor << read
           end
         end
       end
@@ -122,6 +123,45 @@ module IC::ReplInterface
       end
     end
 
+    private def on_tab
+      line = @editor.current_line
+
+      receiver = nil
+
+      # Get current word on cursor:
+      word_begin, word_end = @editor.word_bound
+      word_on_cursor = line[word_begin..word_end]
+
+      # Get previous words while they are chained by '.'
+      receiver_begin = word_begin
+      while line[{receiver_begin - 1, 0}.max]? == '.'
+        receiver_begin, _ = @editor.word_bound(x: receiver_begin - 2)
+      end
+      if receiver_begin != word_begin
+        receiver = line[receiver_begin..(word_begin - 2)]?
+      end
+
+      # Get auto completion entries:
+      context_name, entries = @auto_complete.call(receiver, word_on_cursor)
+
+      unless entries.empty?
+        # Replace word on cursor by the common_root of completion entries:
+        replacement = common_root(entries)
+        @editor.update do
+          print_auto_completion_entries(context_name, entries)
+
+          @editor.current_line = line.sub(word_begin..word_end, replacement)
+        end
+
+        # Then move cursor at end of inserted text:
+        added_size = replacement.size - (@editor.x - word_begin)
+
+        added_size.times do
+          @editor.move_cursor_right
+        end
+      end
+    end
+
     private def multiline?
       Crystal::Parser.parse(@editor.expression)
       false
@@ -137,6 +177,34 @@ module IC::ReplInterface
       end
 
       parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest
+    end
+
+    private def common_root(entries)
+      return "" if entries.empty?
+      return entries[0] if entries.size == 1
+
+      i = 0
+      entries_iterator = entries.map &.each_char
+
+      loop do
+        char_on_first_entry = entries[0][i]?
+        same = entries_iterator.all? do |entry|
+          entry.next == char_on_first_entry
+        end
+        i += 1
+        break if !same
+      end
+      entries[0][...(i - 1)]
+    end
+
+    private def print_auto_completion_entries(context_name, entries)
+      unless entries.size == 1
+        print context_name.colorize(:blue).underline
+        puts ":"
+        entries.each do |entry|
+          puts entry
+        end
+      end
     end
 
     private def formated

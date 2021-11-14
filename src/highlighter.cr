@@ -18,13 +18,17 @@ class IC::Highlighter
   METHOD_COLOR            = {:green, :bold}
 
   KEYWORDS = {
-    :abstract, :alias, :annotation, :as, :as?, :asm, :begin, :break, :case, :class,
+    :abstract, :alias, :annotation, :asm, :begin, :break, :case, :class,
     :def, :do, :else, :elsif, :end, :ensure, :enum, :extend, :for, :fun,
-    :if, :in, :include, :instance_sizeof, :is_a?, :lib, :macro, :module,
-    :next, :nil?, :of, :offsetof, :out, :pointerof, :private, :protected, :require,
-    :rescue, :responds_to?, :return, :select, :sizeof, :struct, :super,
+    :if, :in, :include, :instance_sizeof, :lib, :macro, :module,
+    :next, :of, :offsetof, :out, :pointerof, :private, :protected, :require,
+    :rescue, :return, :select, :sizeof, :struct, :super,
     :then, :type, :typeof, :undef, :union, :uninitialized, :unless, :until,
     :verbatim, :when, :while, :with, :yield,
+  }
+
+  KEYWORD_METHODS = {
+    :as, :as?, :is_a?, :nil?, :responds_to?,
   }
 
   SPECIAL_VALUES = {:__FILE__, :__DIR__, :__LINE__, :__END_LINE__}
@@ -188,10 +192,11 @@ class IC::Highlighter
 
   private def ident_color(token)
     case token.value
-    when .in? KEYWORDS       then KEYWORD_COLOR
-    when .in? TRUE_FALSE_NIL then TRUE_FALSE_NIL_COLOR
-    when :self               then SELF_COLOR
-    else                          IDENT_COLOR
+    when .in? KEYWORDS        then KEYWORD_COLOR
+    when .in? KEYWORD_METHODS then KEYWORD_COLOR
+    when .in? TRUE_FALSE_NIL  then TRUE_FALSE_NIL_COLOR
+    when :self                then SELF_COLOR
+    else                           IDENT_COLOR
     end
   end
 
