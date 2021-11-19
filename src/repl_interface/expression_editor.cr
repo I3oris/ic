@@ -513,11 +513,12 @@ module IC::ReplInterface
       move_cursor_to(@lines[0].size, 0, allow_scrolling: allow_scrolling)
     end
 
-    # Clear the screen, yields for modifications, and displays the new expression.
+    # Rewinds the cursor to the beginning of the expression
+    # then yields for modifications, and displays the new expression.
     # cursor is adjusted to not overflow if the new expression is smaller.
     def update(force_full_view = false, &)
       print Term::Cursor.hide
-      clear_expression_on_screen
+      rewind_cursor
 
       with self yield
 
@@ -533,7 +534,7 @@ module IC::ReplInterface
 
     def update(force_full_view = false)
       print Term::Cursor.hide
-      clear_expression_on_screen
+      rewind_cursor
 
       print_expression(force_full_view)
       print Term::Cursor.show
@@ -547,7 +548,7 @@ module IC::ReplInterface
       end_editing(replace) { }
     end
 
-    # Yields a callback called after clearing the expression and before reprint the replacement.
+    # Yields a callback called after rewind the cursor and before reprint the replacement.
     def end_editing(replace : Array(String)? = nil, &)
       if replace
         update(force_full_view: true) do
@@ -633,8 +634,8 @@ module IC::ReplInterface
       {start, end_}
     end
 
-    # Clean the screen, cursor stay unchanged but real cursor is set to the beginning of expression:
-    private def clear_expression_on_screen
+    # Rewind the real cursor to the beginning of the expression without changing @x/@y cursor:
+    private def rewind_cursor
       if expression_height >= Term::Size.height
         print Term::Cursor.row(1)
       else
@@ -644,15 +645,14 @@ module IC::ReplInterface
       end
 
       print Term::Cursor.column(1)
-      print Term::Cursor.clear_screen_down
     end
 
-    private def print_line(colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
+    private def print_line(io, colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
       if prompt?
-        puts unless first?
-        print @prompt.call(line_index)
+        io.puts unless first?
+        io.print @prompt.call(line_index)
       end
-      print colorized_line
+      io.print colorized_line
 
       # ```
       # prompt> begin                  |
@@ -661,7 +661,7 @@ module IC::ReplInterface
       # prompt>   bar                  |    extra line feed, so computes based on `%` or `//` stay exact.
       # prompt> end                    |
       # ```
-      puts if is_last_part? && remaining_size(line_size) == 0
+      io.puts if is_last_part? && remaining_size(line_size) == 0
     end
 
     # Prints the colorized expression, this last is clipped if it's higher than screen.
@@ -684,42 +684,47 @@ module IC::ReplInterface
       # Track the real cursor position so we are able to correctly retrieve it to its original position (before clearing screen):
       real_cursor_x = real_cursor_y = 0
 
-      # Iterate over the uncolored lines because we need to know the true size of each line:
-      @lines.each_with_index do |line, line_index|
-        line_height = line_height(line)
+      display = String.build do |io|
+        # Iterate over the uncolored lines because we need to know the true size of each line:
+        @lines.each_with_index do |line, line_index|
+          line_height = line_height(line)
 
-        break if y > end_
+          break if y > end_
 
-        if start <= y && y + line_height - 1 <= end_
-          # The line can hold entirely between the view bound, print it:
-          print_line(colorized_lines[line_index], line_index, line.size, prompt?: true, first?: first, is_last_part?: true)
-          first = false
+          if start <= y && y + line_height - 1 <= end_
+            # The line can hold entirely between the view bound, print it:
+            print_line(io, colorized_lines[line_index], line_index, line.size, prompt?: true, first?: first, is_last_part?: true)
+            first = false
 
-          real_cursor_x = line.size
-          real_cursor_y = line_index
+            real_cursor_x = line.size
+            real_cursor_y = line_index
 
-          y += line_height
-        else
-          # The line cannot holds entirely between the view bound, we need to check each part individually:
-          line_height.times do |part_number|
-            if start <= y <= end_
-              # The part holds on the view, we can print it.
-              # FIXME:
-              # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
-              # recolor the part individually.
-              # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
-              colorized_line = @highlighter.highlight(part(line, part_number))
+            y += line_height
+          else
+            # The line cannot holds entirely between the view bound, we need to check each part individually:
+            line_height.times do |part_number|
+              if start <= y <= end_
+                # The part holds on the view, we can print it.
+                # FIXME:
+                # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
+                # recolor the part individually.
+                # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
+                colorized_line = @highlighter.highlight(part(line, part_number))
 
-              print_line(colorized_line, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
-              first = false
+                print_line(io, colorized_line, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
+                first = false
 
-              real_cursor_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
-              real_cursor_y = line_index
+                real_cursor_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
+                real_cursor_y = line_index
+              end
+              y += 1
             end
-            y += 1
           end
         end
       end
+
+      print Term::Cursor.clear_screen_down
+      print display
 
       # Retrieve the real cursor at its corresponding cursor position (`@x`, `@y`)
       x_save, y_save = @x, @y
