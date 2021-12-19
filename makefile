@@ -7,6 +7,7 @@ ENV := CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 
 all: ic
 
+.PHONY: ic
 ic: crystal-i-llvm
 	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr
 

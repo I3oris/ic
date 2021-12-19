@@ -69,7 +69,7 @@ module Crystal::FFI
 
       pointer = Pointer(LibFFI::Type).malloc(1)
       pointer.value = LibFFI::Type.new(
-        type: FFI::TypeEnum::STRUCT,
+        type: LibFFI::TypeEnum::STRUCT,
         elements: elements_ptr,
       )
       new(pointer, elements)

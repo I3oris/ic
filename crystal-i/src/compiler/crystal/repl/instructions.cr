@@ -629,12 +629,12 @@ require "./repl"
         pop_values: [a : Int128, b : Int128],
         push:       true,
         overflow:   true,
-        code:       a, # /!\
+        code:       a * b,
       },
       mul_wrap_i128: {
         pop_values: [a : Int128, b : Int128],
         push:       true,
-        code:       a, # /!\
+        code:       a &* b,
       },
       xor_i128: {
         pop_values: [a : Int128, b : Int128],
@@ -687,7 +687,7 @@ require "./repl"
         pop_values: [a : UInt128, b : UInt128],
         push:       true,
         overflow:   true,
-        code:       a, # /!\
+        code:       a * b,
       },
       unsafe_shr_u128: {
         pop_values: [a : UInt128, b : UInt128],
@@ -826,7 +826,7 @@ require "./repl"
         pop_values: [a : UInt128, b : Int128],
         push:       true,
         overflow:   true,
-        code:       a, # /!\
+        code:       a * b,
       },
       unsafe_shr_u128_i128: {
         pop_values: [a : UInt128, b : Int128],
@@ -859,7 +859,7 @@ require "./repl"
         pop_values: [a : Int128, b : UInt128],
         push:       true,
         overflow:   true,
-        code:       a, # /!\
+        code:       a * b,
       },
       unsafe_shr_i128_u128: {
         pop_values: [a : Int128, b : UInt128],
