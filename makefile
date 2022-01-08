@@ -5,15 +5,19 @@ FLAGS ?= -p
 
 ENV := CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 
+# LLVM:
+LLVM_EXT_DIR = $(CRYSTAL_PATH)/llvm/ext
+LLVM_EXT_OBJ = $(LLVM_EXT_DIR)/llvm_ext.o
+LLVM_CONFIG := $(shell $(CRYSTAL_PATH)/llvm/ext/find-llvm-config)
+
 all: ic
 
 .PHONY: ic
-ic: crystal-i-llvm
+ic: $(LLVM_EXT_OBJ)
 	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr
 
-.PHONY: crystal-i-llvm
-crystal-i-llvm:
-	cd ./crystal-i && make src/llvm/ext/llvm_ext.o
+$(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
+	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)
 
 .PHONY: spec
 spec:
