@@ -35,6 +35,10 @@ module IC::ReplInterface
       )
     end
 
+    def initialize(&prompt : Int32 -> String)
+      @editor = ExpressionEditor.new(prompt: prompt)
+    end
+
     def run(& : String -> _)
       @editor.prompt_next
 

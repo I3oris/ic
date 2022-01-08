@@ -1,5 +1,6 @@
 require "compiler/crystal/interpreter"
 require "./repl_interface/repl_interface"
+require "./pry"
 require "./commands"
 require "./errors"
 
