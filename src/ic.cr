@@ -6,8 +6,7 @@ require "./commands"
 require "./errors"
 require "./auto_completion"
 
-prelude = "prelude"
-color = true
+repl = Crystal::Repl.new
 
 OptionParser.parse do |parser|
   parser.banner = "Usage: ic [file] [--] [arguments]"
@@ -23,13 +22,17 @@ OptionParser.parse do |parser|
     exit
   end
 
+  parser.on("-D FLAG", "--define FLAG", "Define a compile-time flag") do |flag|
+    repl.program.flags << flag
+  end
+
   parser.on "--no-color", "Disable colored output (Don't prevent interpreted code to emit colors)" do
-    color = false
+    repl.program.color = false
   end
 
   # Doesn't work yet:
   # parser.on "--prelude FILE", "--prelude=FILE" "Use given file as prelude" do |file|
-  #   prelude = file
+  #   repl.prelude = prelude
   # end
 
   parser.missing_option do |option_flag|
@@ -46,25 +49,21 @@ OptionParser.parse do |parser|
 end
 
 if ARGV[0]?
-  IC.run_file ARGV[0], ARGV[1..], color: color, prelude: prelude
+  IC.run_file repl, ARGV[0], ARGV[1..]
 else
-  IC.run color: color, prelude: prelude
+  IC.run repl
 end
 
 module IC
   VERSION = "0.3.0"
 
-  def self.run_file(path, argv, color = true, prelude = "prelude")
-    repl = Crystal::Repl.new
-    repl.program.color = color
-    repl.prelude = prelude
+  def self.run_file(repl, path, argv)
     repl.run_file(path, argv)
   end
 
-  def self.run(color = true, prelude = "prelude")
-    repl = Crystal::Repl.new
-    repl.program.color = color
-    repl.prelude = prelude
+  def self.run(repl)
+    color = repl.program.color?
+
     repl.public_load_prelude
 
     input = ReplInterface::ReplInterface.new
