@@ -17,26 +17,26 @@ module IC::ReplInterface
       return {"", [] of String}
     end
 
+    delegate :color?, :color=, to: @editor
+
     @previous_completion_entries_height : Int32? = nil
 
     def initialize
       status = :default
-      @editor = ExpressionEditor.new(
-        prompt: ->(expr_line_number : Int32) do
-          String.build do |io|
-            io << "ic(#{Crystal::Config.version}):"
-            io << sprintf("%03d", @line_number + expr_line_number).colorize.magenta
-            case status
-            when :multiline then io << "* "
-            else                 io << "> "
-            end
+      @editor = ExpressionEditor.new do |expr_line_number, color?|
+        String.build do |io|
+          io << "ic(#{Crystal::Config.version}):"
+          io << sprintf("%03d", @line_number + expr_line_number).colorize(:magenta).toggle(color?)
+          case status
+          when :multiline then io << "* "
+          else                 io << "> "
           end
         end
-      )
+      end
     end
 
-    def initialize(&prompt : Int32 -> String)
-      @editor = ExpressionEditor.new(prompt: prompt)
+    def initialize(&prompt : Int32, Bool -> String)
+      @editor = ExpressionEditor.new(&prompt)
     end
 
     def run(& : String -> _)
@@ -125,7 +125,7 @@ module IC::ReplInterface
       when "# clear_history", "#clear_history"
         @history.clear
         submit_expr(history: false) do
-          puts " => #{"✔".colorize.green}"
+          puts " => #{"✔".colorize(:green).toggle(color?)}"
         end
         return
       when /^# ?(#{Commands.commands_regex_names})(( [a-z\-]+)*)/
@@ -230,7 +230,7 @@ module IC::ReplInterface
       unless entries.size == 1
         clear_completion_entries
 
-        print context_name.colorize(:blue).underline
+        print context_name.colorize(:blue).underline.toggle(color?)
         puts ":"
 
         col_size = entries.max_of &.size + 1

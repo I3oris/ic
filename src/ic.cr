@@ -1,28 +1,74 @@
 require "compiler/crystal/interpreter"
+require "option_parser"
 require "./repl_interface/repl_interface"
 require "./pry"
 require "./commands"
 require "./errors"
 require "./auto_completion"
 
+prelude = "prelude"
+color = true
+
+OptionParser.parse do |parser|
+  parser.banner = "Usage: ic [file] [--] [arguments]"
+
+  parser.on "-v", "--version", "Print the version" do
+    puts "version: #{IC::VERSION}"
+    puts "crystal version: #{Crystal::Config.version}"
+    exit
+  end
+
+  parser.on "-h", "--help", "Print this help" do
+    puts parser
+    exit
+  end
+
+  parser.on "--no-color", "Disable colored output (Don't prevent interpreted code to emit colors)" do
+    color = false
+  end
+
+  # Doesn't work yet:
+  # parser.on "--prelude FILE", "--prelude=FILE" "Use given file as prelude" do |file|
+  #   prelude = file
+  # end
+
+  parser.missing_option do |option_flag|
+    STDERR.puts "ERROR: Missing value for option '#{option_flag}'."
+    STDERR.puts parser
+    exit(1)
+  end
+
+  parser.invalid_option do |option_flag|
+    STDERR.puts "ERROR: Unkonwn option '#{option_flag}'."
+    STDERR.puts parser
+    exit(1)
+  end
+end
+
 if ARGV[0]?
-  IC.run_file ARGV[0], ARGV[1..]
+  IC.run_file ARGV[0], ARGV[1..], color: color, prelude: prelude
 else
-  IC.run
+  IC.run color: color, prelude: prelude
 end
 
 module IC
   VERSION = "0.3.0"
 
-  def self.run_file(path, argv)
-    Crystal::Repl.new.run_file(path, argv)
+  def self.run_file(path, argv, color = true, prelude = "prelude")
+    repl = Crystal::Repl.new
+    repl.program.color = color
+    repl.prelude = prelude
+    repl.run_file(path, argv)
   end
 
-  def self.run
+  def self.run(color = true, prelude = "prelude")
     repl = Crystal::Repl.new
+    repl.program.color = color
+    repl.prelude = prelude
     repl.public_load_prelude
 
     input = ReplInterface::ReplInterface.new
+    input.color = color
 
     input.auto_complete = ->(receiver : String?, name : String) do
       auto_complete(repl, receiver, name)
@@ -30,14 +76,14 @@ module IC
 
     input.run do |expr|
       result = repl.run_next_code(expr)
-      puts " => #{Highlighter.highlight(result.to_s)}"
+      puts " => #{Highlighter.highlight(result.to_s, toggle: color)}"
     rescue ex : Crystal::Repl::EscapingException
       print "Unhandled exception: "
       print ex
     rescue ex : Crystal::CodeError
       repl.clean
 
-      ex.color = true
+      ex.color = color
       ex.error_trace = true
       puts ex
     rescue ex : Exception

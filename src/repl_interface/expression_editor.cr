@@ -50,11 +50,13 @@ module IC::ReplInterface
     getter expression : String? { lines.join('\n') }
     getter expression_height : Int32? { lines.sum { |l| line_height(l) } }
     getter colorized_lines : Array(String)? do
-      @highlighter.highlight(self.expression).split('\n')
+      @highlighter.highlight(self.expression, toggle: color?).split('\n')
     end
 
+    property? color = true
+
     @highlighter = Highlighter.new
-    @prompt : Int32 -> String
+    @prompt : Int32, Bool -> String
     @prompt_size : Int32
 
     # Tracks the cursor position relatively to the expression's lines, (y=0 corresponds to the first line and x=0 the first char)
@@ -75,8 +77,8 @@ module IC::ReplInterface
     @scroll_offset = 0
 
     # Prompt size must stay constant.
-    def initialize(@prompt : Int32 -> String)
-      @prompt_size = @prompt.call(0).gsub(/\e\[.*?m/, "").size # uncolorized size
+    def initialize(&@prompt : Int32, Bool -> String)
+      @prompt_size = @prompt.call(0, false).size # uncolorized size
     end
 
     private def move_cursor(x, y)
@@ -570,7 +572,7 @@ module IC::ReplInterface
       @lines = [""]
       @expression = @expression_height = @colorized_lines = nil
       reset_cursor
-      print @prompt.call(0)
+      print @prompt.call(0, color?)
     end
 
     def scroll_up
@@ -650,7 +652,7 @@ module IC::ReplInterface
     private def print_line(io, colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
       if prompt?
         io.puts unless first?
-        io.print @prompt.call(line_index)
+        io.print @prompt.call(line_index, color?)
       end
       io.print colorized_line
 
@@ -709,7 +711,7 @@ module IC::ReplInterface
                 # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
                 # recolor the part individually.
                 # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
-                colorized_line = @highlighter.highlight(part(line, part_number))
+                colorized_line = @highlighter.highlight(part(line, part_number), toggle: color?)
 
                 print_line(io, colorized_line, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
                 first = false

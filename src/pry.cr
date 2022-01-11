@@ -2,8 +2,8 @@ require "./repl_interface/repl_interface"
 
 class IC::PryInterface < IC::ReplInterface::ReplInterface
   def self.new
-    new do
-      "ic(#{Crystal::Config.version}):#{"pry".colorize(:magenta)}> "
+    new do |_, color?|
+      "ic(#{Crystal::Config.version}):#{"pry".colorize(:magenta).toggle(color?)}> "
     end
   end
 
@@ -66,6 +66,7 @@ class Crystal::Repl::Interpreter
       interpreter = Interpreter.new(self, compiled_def, stack_bottom, block_level)
 
       # IC MODIFICATION:
+      @pry_interface.color = @context.program.color?
       @pry_interface.run do |line|
         # WAS:
         # while @pry
@@ -120,13 +121,17 @@ class Crystal::Repl::Interpreter
 
           value = interpreter.interpret(line_node, meta_vars)
           # IC MODIFICATION:
-          puts " => #{IC::Highlighter.highlight(value.to_s)}"
+          puts " => #{IC::Highlighter.highlight(value.to_s, toggle: @context.program.color?)}"
           # WAS:
           # puts value.to_s
           # END
 
         rescue ex : Crystal::CodeError
-          ex.color = true
+          # IC MODIFICATION:
+          ex.color = @context.program.color?
+          # WAS:
+          # ex.color = true
+          # END
           ex.error_trace = true
           puts ex
           next
@@ -146,8 +151,8 @@ class Crystal::Repl::Interpreter
     column_number = location.column_number
 
     # IC ADDING:
-    a_def_owner = a_def.owner.to_s.colorize(:blue).underline
-    hashtag = "#".colorize(:dark_gray).bold
+    a_def_owner = @context.program.colorize(a_def.owner.to_s).blue.underline
+    hashtag = @context.program.colorize("#").dark_gray.bold
     # END
 
     if filename.is_a?(String)
@@ -175,7 +180,7 @@ class Crystal::Repl::Interpreter
     return unless lines
 
     # IC ADDING:
-    lines = IC::Highlighter.highlight(lines.join('\n')).split('\n')
+    lines = IC::Highlighter.highlight(lines.join('\n'), toggle: @context.program.color?).split('\n')
     # END
 
     min_line_number = {location.line_number - 5, 1}.max
@@ -197,7 +202,11 @@ class Crystal::Repl::Interpreter
         print ' '
       end
 
-      print line_number.colorize.blue
+      # IC MODIFICATION:
+      print @context.program.colorize(line_number).blue
+      # WAS:
+      # print line_number.colorize.blue
+      # END
       print ": "
       puts line
     end

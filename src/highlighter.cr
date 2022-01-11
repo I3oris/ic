@@ -53,11 +53,13 @@ class IC::Highlighter
     @pos = 0
   end
 
-  def self.highlight(code)
-    self.new.highlight(code)
+  def self.highlight(code, toggle = true)
+    self.new.highlight(code, toggle: toggle)
   end
 
-  def highlight(code : String)
+  def highlight(code : String, toggle = true)
+    return code unless toggle
+
     @pos = 0
     error = false
 
