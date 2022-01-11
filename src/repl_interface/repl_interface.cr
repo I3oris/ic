@@ -64,14 +64,18 @@ module IC::ReplInterface
               @editor.move_cursor_to_end_of_first_line
             end
           end
-        when :ctrl_up
-          @editor.scroll_down
-        when :ctrl_down
-          @editor.scroll_up
-        when :left, :ctrl_left
+        when :left
           @editor.move_cursor_left
-        when :right, :ctrl_right
+        when :right
           @editor.move_cursor_right
+        when :ctrl_up
+          on_ctrl_up
+        when :ctrl_down
+          on_ctrl_down
+        when :ctrl_left
+          on_ctrl_left
+        when :ctrl_right
+          on_ctrl_right
         when :delete
           @editor.update { delete }
         when :back
@@ -95,6 +99,25 @@ module IC::ReplInterface
           end
         end
       end
+    end
+
+    # These macros are here to allow using `yield` when they are overridden on a child class.
+    private macro on_ctrl_up
+      @editor.scroll_down
+    end
+
+    private macro on_ctrl_down
+      @editor.scroll_up
+    end
+
+    private macro on_ctrl_left
+      # TODO: move one word backward
+      @editor.move_cursor_left
+    end
+
+    private macro on_ctrl_right
+      # TODO: move one word forward
+      @editor.move_cursor_right
     end
 
     private def on_enter(&)

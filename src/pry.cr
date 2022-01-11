@@ -1,14 +1,26 @@
 require "./repl_interface/repl_interface"
 
-class IC::PryInterface
-  @interface = ReplInterface::ReplInterface.new do
-    "ic(#{Crystal::Config.version}):#{"pry".colorize(:magenta)}> "
+class IC::PryInterface < IC::ReplInterface::ReplInterface
+  def self.new
+    new do
+      "ic(#{Crystal::Config.version}):#{"pry".colorize(:magenta)}> "
+    end
   end
 
-  def run
-    @interface.run do |expr|
-      yield expr
-    end
+  private macro on_ctrl_up
+    yield "whereami"
+  end
+
+  private macro on_ctrl_down
+    yield "next"
+  end
+
+  private macro on_ctrl_left
+    yield "finish"
+  end
+
+  private macro on_ctrl_right
+    yield "step"
   end
 end
 
