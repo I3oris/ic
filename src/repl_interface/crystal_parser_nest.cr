@@ -17,7 +17,7 @@ class Crystal::Parser
     ret
   end
 
-  def parse_var_or_call(global = false, force_call = false)
+  def parse_block(block, stop_on_do = false)
     @control_nest += 1
     ret = previous_def
     @control_nest -= 1
@@ -27,7 +27,7 @@ class Crystal::Parser
   # TODO: lib, macro, union
   {% for parse_method in %w(case begin unless while until select
                            parenthesized_expression empty_array_literal array_literal
-                           percent_macro_control annotation enum_def) %}
+                           percent_macro_control annotation enum_def fun_literal) %}
     def parse_{{parse_method.id}}
       @control_nest += 1
       ret = previous_def
