@@ -138,8 +138,9 @@ module IC::ReplInterface
         return
 
         # Replace lines starting by '.' by "__."
+        # unless begin-less range ("..x")
         # so ".foo" become "__.foo":
-      when /^\.(?!\.)/ # don't match begin-less range ("..x")
+      when is_chaining_call?(@editor.expression)
         @editor.replace("__#{@editor.expression}".split('\n'))
       end
 
@@ -152,6 +153,10 @@ module IC::ReplInterface
       end
     end
 
+    private def is_chaining_call?(expr)
+      expr && expr.starts_with?('.') && !expr.starts_with?("..")
+    end
+
     private def on_tab
       line = @editor.current_line
 
@@ -161,13 +166,23 @@ module IC::ReplInterface
       word_begin, word_end = @editor.word_bound
       word_on_cursor = line[word_begin..word_end]
 
-      # Get previous words while they are chained by '.'
-      receiver_begin = word_begin
-      while line[{receiver_begin - 1, 0}.max]? == '.'
-        receiver_begin, _ = @editor.word_bound(x: receiver_begin - 2)
-      end
-      if receiver_begin != word_begin
-        receiver = line[receiver_begin..(word_begin - 2)]?
+      if is_chaining_call?(@editor.lines[0]?)
+        # If expression starts with '.' we want auto-complete from the last result ('__').
+        receiver = "__"
+      else
+        # Get previous words while they are chained by '.'
+        receiver_begin = word_begin
+        pos = {receiver_begin - 1, 0}.max
+        while line[pos]? == '.'
+          receiver_begin, _ = @editor.word_bound(x: receiver_begin - 2)
+
+          pos = {receiver_begin - 1, 0}.max
+          break if pos == 0
+        end
+
+        if receiver_begin != word_begin
+          receiver = line[receiver_begin..(word_begin - 2)]?
+        end
       end
 
       # Get auto completion entries:
