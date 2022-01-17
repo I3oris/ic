@@ -1,5 +1,5 @@
 module IC
-  private def self.auto_complete(repl, receiver, name)
+  private def self.auto_complete(repl, receiver, name, context_code)
     results = [] of String
 
     if receiver && !receiver.empty?

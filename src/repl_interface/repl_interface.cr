@@ -13,9 +13,10 @@ module IC::ReplInterface
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
-    property auto_complete : Proc(String?, String, {String, Array(String)}) = ->(receiver : String?, name : String) do
-      return {"", [] of String}
-    end
+    property auto_complete : Proc(String?, String, String?, {String, Array(String)}) =
+      ->(receiver : String?, name : String, context_code : String?) do
+        return {"", [] of String}
+      end
 
     delegate :color?, :color=, to: @editor
 
@@ -186,7 +187,7 @@ module IC::ReplInterface
       end
 
       # Get auto completion entries:
-      context_name, entries = @auto_complete.call(receiver, word_on_cursor)
+      context_name, entries = @auto_complete.call(receiver, word_on_cursor, @editor.expression_before_cursor)
 
       unless entries.empty?
         # Replace word on cursor by the common_root of completion entries:
