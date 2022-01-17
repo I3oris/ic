@@ -1,28 +1,30 @@
 # IC
 
-IC is an user-friendly interface for Interactive [Crystal](https://crystal-lang.org).
+IC, meaning **Interactive Crystal**, is an interface wrapping the [Crystal Interpreter](https://crystal-lang.org/2021/12/29/crystal-i.html).
 
-## Features
+## Features:
 
-* All crystal-i capacities
-* Syntax hightlighting
+* [Crystal](https://crystal-lang.org) Interpretation (Indeed!)
+* Syntax highlighting
 * Multiline input
-* Auto formating
+* Auto formatting
 * Auto indentation
 * Auto completion (Experimental)
 * History
+* Pasting of expressions
+* Debugger
 
-## Warning
+## Warning:
 
-Crystal-i is experimental and not yet released, the imputed code is not guaranteed to work as expected. This repository is a preparation for this up-coming feature.
+Crystal-i is experimental and not yet released, the imputed code is not guaranteed to always work as expected. This repository is a preparation for this up-coming feature.
 
-## Installation
+## Installation:
 
-### Dependencies
+### Dependencies:
 
 You need to install the same dependencies as the crystal compiler, follow the instructions [here](https://github.com/crystal-lang/crystal/wiki/All-required-libraries). If you have already installed crystal from source, you can skip this step.
 
-### Build
+### Build:
 
 ```sh
 git clone https://github.com/I3oris/ic.git
@@ -30,27 +32,61 @@ git clone https://github.com/I3oris/ic.git
 cd ic && make
 ```
 
-## Usage
+## Usage:
 
-Interactive mode:
+### Interactive mode:
 ```sh
 ./ic
 ```
 
-Run file with arguments:
+### Run file with arguments:
 ```sh
 ./ic say_hello.cr World
 ```
 
-### Shortcuts
+### Debugger (pry):
 
-* `ctrl-o` : On multiline input: insert a new line instead of submit edition.
-* `ctrl-up`/`down` : On long multiline input: scroll up/down the view.
+On a file use the macro `debugger`:
+```cr
+# say_hello.cr
+
+debugger # <= will start the debugger at this point
+name = ARGV[0]?
+puts "Hello #{name}!"
+```
+Then, run as usually: `./ic say_hello.cr World`.
+
+You will see the current position on your code:
+```cr
+    1: # say_hello.cr
+    2:
+    3: debugger # <= will start the debugger at this point
+ => 4: name = ARGV[0]?
+    5: puts "Hello #{name}!"
+    6:
+```
+On the `pry` prompt on can tip:
+* `next`    : To jump to the next instruction (without entering into functions).
+* `step`    : To jump to the next instruction (entering into functions if possible).
+* `finish`  : To jump out the current function.
+* `whereami`: To re-display where the execution is.
+* Other     : To interpret code while debugger (e.g the name of a variable).
+
+### Shortcuts:
+
+* `ctrl-o`: On multiline input: insert a new line instead of submit edition.
+* `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
 * `ctrl-a`: Move cursor to begin of the expression.
 * `ctrl-e`: Move cursor to end of the expression.
 * ... : more up-coming.
 
-## Contributing
+only on debugger (pry):
+* `ctrl-up`: `whereami`
+* `ctrl-down`: `next`
+* `ctrl-left`: `finish`
+* `ctrl-right`: `step`
+
+## Contributing:
 
 1. Fork it (<https://github.com/I3oris/ic/fork>)
 2. Create your feature branch (`git checkout -b my-new-feature`)
@@ -58,6 +94,6 @@ Run file with arguments:
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create a new Pull Request
 
-## Contributors
+## Contributors:
 
 - [I3oris](https://github.com/I3oris) - creator and maintainer
