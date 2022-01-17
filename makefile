@@ -4,6 +4,7 @@ COMPILER ?= crystal
 FLAGS ?= -p
 
 ENV := CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
+SOURCES := $(shell find src -name '*.cr')
 
 # LLVM:
 LLVM_EXT_DIR = $(CRYSTAL_PATH)/llvm/ext
@@ -12,9 +13,8 @@ LLVM_CONFIG := $(shell $(CRYSTAL_PATH)/llvm/ext/find-llvm-config)
 
 all: ic
 
-.PHONY: ic
-ic: $(LLVM_EXT_OBJ)
-	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr
+ic: $(LLVM_EXT_OBJ) $(SOURCES)
+	$(ENV) $(COMPILER) build $(FLAGS) src/main.cr -o ic
 
 $(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
 	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)

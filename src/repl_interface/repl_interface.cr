@@ -13,10 +13,10 @@ module IC::ReplInterface
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
-    property auto_complete : Proc(String?, String, String?, {String, Array(String)}) =
-      ->(receiver : String?, name : String, context_code : String?) do
-        return {"", [] of String}
-      end
+    alias AutoCompleteProc = Proc(String?, String, String?, {String, Array(String)})
+    property auto_complete : AutoCompleteProc = ->(receiver : String?, name : String, context_code : String?) do
+      return {"", [] of String}
+    end
 
     delegate :color?, :color=, to: @editor
 
