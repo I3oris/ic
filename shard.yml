@@ -1,5 +1,5 @@
 name: ic
-version: 0.2.0
+version: 0.3.2
 description: Interpreter Crystal, working without compilation!
 authors:
   - I3oris

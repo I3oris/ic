@@ -7,7 +7,7 @@ require "./errors"
 require "./auto_completion"
 
 module IC
-  VERSION = "0.3.0"
+  VERSION = "0.3.2"
 
   def self.run_file(repl, path, argv)
     repl.run_file(path, argv)
