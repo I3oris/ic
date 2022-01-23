@@ -16,6 +16,10 @@ all: ic
 ic: $(LLVM_EXT_OBJ) $(SOURCES)
 	$(ENV) $(COMPILER) build $(FLAGS) src/main.cr -o ic
 
+.PHONY: release
+release: $(LLVM_EXT_OBJ)
+	$(ENV) $(COMPILER) build $(FLAGS) --release src/main.cr -o ic
+
 $(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
 	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)
 
