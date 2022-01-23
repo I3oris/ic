@@ -2,6 +2,8 @@
 
 IC, meaning **Interactive Crystal**, is an interface wrapping the [Crystal Interpreter](https://crystal-lang.org/2021/12/29/crystal-i.html).
 
+![](./hello_ic.gif)
+
 ## Features:
 
 * [Crystal](https://crystal-lang.org) Interpretation (Indeed!)
@@ -29,7 +31,7 @@ You need to install the same dependencies as the crystal compiler, follow the in
 ```sh
 git clone https://github.com/I3oris/ic.git
 
-cd ic && make
+cd ic && make release
 ```
 
 ## Usage:
