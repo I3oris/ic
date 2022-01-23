@@ -30,9 +30,16 @@ You need to install the same dependencies as the crystal compiler, follow the in
 
 ```sh
 git clone https://github.com/I3oris/ic.git
+cd ic
 
-cd ic && make release
+make
 ```
+
+### Optimized Build:
+```
+make release
+```
+> This is a bit long, and require at lest 4.5 GB of available RAM.
 
 ## Usage:
 
