@@ -2,7 +2,6 @@ require "compiler/crystal/interpreter"
 require "option_parser"
 require "./repl_interface/repl_interface"
 require "./pry"
-require "./commands"
 require "./errors"
 require "./auto_completion"
 

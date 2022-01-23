@@ -122,27 +122,35 @@ module IC::ReplInterface
     end
 
     private def on_enter(&)
-      case @editor.expression
-      when "# clear_history", "#clear_history"
-        @history.clear
-        submit_expr(history: false) do
-          puts " => #{"✔".colorize(:green).toggle(color?)}"
-        end
-        return
-      when /^# ?(#{Commands.commands_regex_names})(( [a-z\-]+)*)/
-        submit_expr do
-          Commands.run_cmd($1?, $2.split(" ", remove_empty: true))
-        end
-        return
-      when .blank?, .starts_with? '#'
-        submit_expr(history: false)
-        return
+      if @editor.lines.size == 1
+        expr = @editor.expression
 
-        # Replace lines starting by '.' by "__."
-        # unless begin-less range ("..x")
-        # so ".foo" become "__.foo":
-      when is_chaining_call?(@editor.expression)
-        @editor.replace("__#{@editor.expression}".split('\n'))
+        case expr
+        when "# clear_history", "#clear_history"
+          @history.clear
+          submit_expr(history: false) do
+            puts " => #{"✔".colorize(:green).toggle(color?)}"
+          end
+          return
+        when "# reset", "#reset"
+          # TODO reset interpreter
+          submit_expr do
+            puts " => #{"✔".colorize(:green).toggle(color?)}"
+          end
+          return
+        when .blank?, .starts_with? '#'
+          submit_expr(history: false)
+          return
+        end
+
+        if is_chaining_call?(expr)
+          # Replace lines starting by '.' by "__."
+          # unless begin-less range ("..x")
+          # so ".foo" become "__.foo":
+          # @editor.replace("__#{@editor.expression}".split('\n'))
+          @editor.current_line = "__#{@editor.current_line}"
+          @editor.move_cursor_to_end
+        end
       end
 
       if @editor.cursor_on_last_line? && multiline?
