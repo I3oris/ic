@@ -74,10 +74,10 @@ You will see the current position on your code:
     5: puts "Hello #{name}!"
     6:
 ```
-On the `pry` prompt on can tip:
+On the `pry` prompt you can tip:
 * `next`    : To jump to the next instruction (without entering into functions).
 * `step`    : To jump to the next instruction (entering into functions if possible).
-* `finish`  : To jump out the current function.
+* `finish`  : To jump out of the current function.
 * `whereami`: To re-display where the execution is.
 * Other     : To interpret code while debugger (e.g the name of a variable).
 
