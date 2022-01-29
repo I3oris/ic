@@ -251,47 +251,75 @@ module IC::ReplInterface
     end
 
     private def print_auto_completion_entries(context_name, entries)
-      unless entries.size == 1
-        clear_completion_entries
+      # clear previous entries if any:
+      clear_completion_entries
 
-        print context_name.colorize(:blue).underline.toggle(color?)
-        puts ":"
+      # Compute the max number of row in a way to never take more than 3/4 of the screen.
+      max_nb_row = (Term::Size.height - @editor.expression_height)*3//4 - 1
+      return if max_nb_row <= 1
+      return if entries.size <= 1
 
-        col_size = entries.max_of &.size + 1
+      # Print context type name:
+      print context_name.colorize(:blue).underline.toggle(color?)
+      puts ":"
 
-        nb_cols = Term::Size.width // col_size
-        nb_rows = {entries.size, Term::Size.height - 1 - @editor.expression_height}.min
-        nb_rows = {nb_rows, 0}.max
+      nb_rows = compute_nb_row(entries, max_nb_row)
 
-        array = [] of Array(String)
-        entries.each_slice(nb_rows) do |row|
-          array << row
-        end
+      columns = entries.in_groups_of(nb_rows, "")
+      column_widths = columns.map &.max_of &.size.+(2)
 
-        nb_rows.times do |r|
-          nb_cols.times do |c|
-            entry = array[c]?.try &.[r]?
+      nb_rows.times do |r|
+        width = 0
+        columns.each_with_index do |col, c|
+          entry = col[r]
+          col_width = column_widths[c]
 
-            if entry && r == nb_rows - 1 && c == nb_cols - 1
-              print "...".ljust(col_size)
-            else
-              entry ||= ""
-              print Highlighter.highlight(entry.ljust(col_size))
-            end
-            # print "|"
+          # As we doesn't known the nb of column to display, stop when column overflow the term width:
+          width += col_width
+          break if width > Term::Size.width
+
+          # Display `...` on the last column and row:
+          if r == nb_rows - 1 && (next_col_width = column_widths[c + 1]?) && width + next_col_width > Term::Size.width
+            entry = "..."
           end
-          puts
-        end
 
-        @previous_completion_entries_height = nb_rows + 1
+          # Display entry:
+          print Highlighter.highlight(entry.ljust(col_width))
+        end
+        puts
       end
+
+      @previous_completion_entries_height = nb_rows + 1
+    end
+
+    # Computes the min number of rows required to display entries:
+    # * if all entries cannot fit in `max_nb_row` rows, returns `max_nb_row`,
+    # * if there are less than 10 entries, returns `entries.size` because in this case, it's more convenient to display them in one column.
+    private def compute_nb_row(entries, max_nb_row)
+      if entries.size > 10
+        # test possible nb rows: (1 to max_nb_row)
+        1.to max_nb_row do |r|
+          width = 0
+          # Sum the width of each given column:
+          entries.each_slice(r, reuse: true) do |col|
+            width += col.max_of &.size + 2
+          end
+
+          # If width fit width terminal, we found min row required:
+          return r if width < Term::Size.width
+        end
+      end
+
+      {entries.size, max_nb_row}.min
     end
 
     private def clear_completion_entries
+      print Term::Cursor.clear_line_after
+
       if height = @previous_completion_entries_height
         print Term::Cursor.up(height)
         print Term::Cursor.clear_screen_down
-        # print Term::Cursor.down(height)
+
         @previous_completion_entries_height = nil
       end
     end
