@@ -39,13 +39,14 @@ class IC::Highlighter
   OPERATORS = {
     :+, :-, :*, :/, ://,
     :"=", :==, :<, :<=, :>, :>=, :!, :!=, :=~, :!~,
-    :[], :[]?, :[]=, :<=>, :===,
+    :<=>, :===,
     :&, :|, :^, :~, :**, :>>, :<<, :%,
     :&+, :&-, :&*, :&**,
     :"+=", :"-=", :"*=", :"/=", :"//=",
     :"&=", :"|=", :"^=", :"**=", :">>=", :"<<=", :"%=",
     :"&+=", :"&-=", :"&*=",
     :"&&", :"||", :"&&=", :"||=",
+    # NOTE: :[], :[]?, :[]=, doesn't need to be colored.
   }
 
   def initialize
@@ -62,10 +63,6 @@ class IC::Highlighter
 
     @pos = 0
     error = false
-
-    if code == "∅"
-      return "∅".colorize.bold.red.to_s
-    end
 
     lexer = Crystal::Lexer.new(code)
     lexer.comments_enabled = true

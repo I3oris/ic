@@ -142,8 +142,10 @@ module IC::ReplInterface
           unless def_name.starts_with?('_') || def_name == "`"
             if def_name.starts_with? name
               # Avoid operators methods:
-              if Highlighter::OPERATORS.none? { |operator| operator.to_s == def_name }
-                results << def_name
+              unless Highlighter::OPERATORS.any? { |operator| operator.to_s == def_name }
+                unless def_name.in? "[]", "[]=", "[]?"
+                  results << def_name
+                end
               end
             end
           end
