@@ -43,7 +43,7 @@ module IC::ReplInterface
         end
       when '\r'.ord, '\n'.ord
         :enter
-      when ctrl('c'), ctrl('d'), ctrl('x')
+      when ctrl('c'), ctrl('d'), ctrl('x'), '\0'.ord
         :exit
       when ctrl('o')
         :insert_new_line

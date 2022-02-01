@@ -79,6 +79,8 @@ module IC::ReplInterface
     # Prompt size must stay constant.
     def initialize(&@prompt : Int32, Bool -> String)
       @prompt_size = @prompt.call(0, false).size # uncolorized size
+
+      at_exit { print Term::Cursor.show }
     end
 
     private def move_cursor(x, y)

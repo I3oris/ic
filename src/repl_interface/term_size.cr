@@ -15,7 +15,9 @@ module IC::ReplInterface::Term
 
     # Gets the terminals width
     def self.size : {Int32, Int32}
-      C.ioctl(0, C::TIOCGWINSZ, out screen_size)
+      ret = C.ioctl(1, C::TIOCGWINSZ, out screen_size)
+      raise "Error retrieving terminal size: ioctl TIOCGWINSZ: #{Errno.value}" if ret < 0
+
       {screen_size.col.to_i32, screen_size.row.to_i32}
     end
 
