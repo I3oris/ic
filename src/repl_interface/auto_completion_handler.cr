@@ -9,7 +9,8 @@ module IC::ReplInterface
       local_vars : Crystal::Repl::LocalVars,
       program : Crystal::Program,
       main_visitor : Crystal::MainVisitor,
-      interpreter : Crystal::Repl::Interpreter
+      interpreter : Crystal::Repl::Interpreter,
+      special_commands : Array(String)
 
     @context : AutoCompletionContext? = nil
 
@@ -61,12 +62,13 @@ module IC::ReplInterface
         program: repl.program,
         main_visitor: repl.@main_visitor,
         interpreter: repl.@interpreter,
+        special_commands: [] of String
       )
     end
 
     # [2] Sets the context directly (used by pry):
-    def set_context(local_vars, program, main_visitor, interpreter)
-      @context = AutoCompletionContext.new(local_vars, program, main_visitor, interpreter)
+    def set_context(local_vars, program, main_visitor, interpreter, special_commands)
+      @context = AutoCompletionContext.new(local_vars, program, main_visitor, interpreter, special_commands.sort)
     end
 
     # [3] Finds completion entries from the word on cursor, `@context` must be set before.
@@ -105,6 +107,9 @@ module IC::ReplInterface
         results += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
       else
         receiver_type = context.program
+
+        # Add special command:
+        results += context.special_commands.select(&.starts_with? name)
 
         # Add top-level vars:
         vars = context.local_vars.names_at_block_level_zero

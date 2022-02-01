@@ -67,6 +67,14 @@ class Crystal::Repl::Interpreter
 
       # IC MODIFICATION:
       @pry_interface.color = @context.program.color?
+      @pry_interface.auto_completion.set_context(
+        local_vars: interpreter.local_vars,
+        program: @context.program,
+        main_visitor: main_visitor,
+        interpreter: interpreter,
+        special_commands: %w(continue step next finish whereami),
+      )
+
       @pry_interface.run do |line|
         # WAS:
         # while @pry
