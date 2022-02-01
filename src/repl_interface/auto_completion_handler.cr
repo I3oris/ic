@@ -139,7 +139,7 @@ module IC::ReplInterface
       type.defs.try &.each do |def_name, def_|
         if def_.any? &.def.visibility.public?
           # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`... :
-          unless def_name.starts_with?('_')
+          unless def_name.starts_with?('_') || def_name == "`"
             if def_name.starts_with? name
               # Avoid operators methods:
               if Highlighter::OPERATORS.none? { |operator| operator.to_s == def_name }
