@@ -1,26 +1,24 @@
 require "./history"
 require "./expression_editor"
 require "./char_reader"
+require "./auto_completion_handler"
 require "./crystal_parser_nest"
 require "colorize"
 
 module IC::ReplInterface
   class ReplInterface
     @editor : ExpressionEditor
+    @repl : Crystal::Repl? = nil
+    @auto_completion = AutoCompletionHandler.new
     @history = History.new
     @line_number = 1
 
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
-    alias AutoCompleteProc = Proc(String?, String, String?, {String, Array(String)})
-    property auto_complete : AutoCompleteProc = ->(receiver : String?, name : String, context_code : String?) do
-      return {"", [] of String}
-    end
-
     delegate :color?, :color=, to: @editor
-
-    @previous_completion_entries_height : Int32? = nil
+    property repl
+    getter auto_completion
 
     def initialize
       status = :default
@@ -147,7 +145,6 @@ module IC::ReplInterface
           # Replace lines starting by '.' by "__."
           # unless begin-less range ("..x")
           # so ".foo" become "__.foo":
-          # @editor.replace("__#{@editor.expression}".split('\n'))
           @editor.current_line = "__#{@editor.current_line}"
           @editor.move_cursor_to_end
         end
@@ -166,47 +163,52 @@ module IC::ReplInterface
       expr && expr.starts_with?('.') && !expr.starts_with?("..")
     end
 
+    # When `tab` is pressed for auto-completion, we does the followings things:
+    # 1) We retrieve the word under the cursor (corresponding to the method name being write)
+    # 2) Given the expression before the cursor, the auto-completion handler deduce the
+    #    context of auto-completion (which receiver, local vars, etc..)
+    # 3) We find entries corresponding to the context + the word_on_cursor. This will give us
+    #    the entries (`Array(String)` of method's names), the `receiver_type` name, and the
+    #    `replacement` name (`nil` if no entry, full name if only one entry, or partial name that match the most otherwise)
+    # 4) Then, during the @editor update, we display theses entries
+    # 5) At last, we replace the `word_on_cursor` by the `replacement` word, if any
+    # 6) Finally, we move cursor at the end of replaced text.
     private def on_tab
       line = @editor.current_line
 
-      receiver = nil
-
-      # Get current word on cursor:
+      # 1) Get current word on cursor:
       word_begin, word_end = @editor.word_bound
       word_on_cursor = line[word_begin..word_end]
 
-      if is_chaining_call?(@editor.lines[0]?)
-        # If expression starts with '.' we want auto-complete from the last result ('__').
-        receiver = "__"
-      else
-        # Get previous words while they are chained by '.'
-        receiver_begin = word_begin
-        pos = {receiver_begin - 1, 0}.max
-        while line[pos]? == '.'
-          receiver_begin, _ = @editor.word_bound(x: receiver_begin - 2)
+      # 2) Compute context:
+      expression_before_word_on_cursor = @editor.expression_before_cursor(x: word_begin - 1)
 
-          pos = {receiver_begin - 1, 0}.max
-          break if pos == 0
-        end
+      receiver_code = @auto_completion.parse_receiver_code(expression_before_word_on_cursor)
+      if repl = @repl
+        @auto_completion.set_context(
+          repl: repl,
+          expression_before_word_on_cursor: expression_before_word_on_cursor,
+        )
+      end
+      # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
 
-        if receiver_begin != word_begin
-          receiver = line[receiver_begin..(word_begin - 2)]?
-        end
+      # 3) Find entries:
+      entries, receiver_name, replacement = @auto_completion.find_entries(
+        receiver_code: receiver_code,
+        word_on_cursor: word_on_cursor,
+      )
+
+      @editor.update do
+        # 4) Display completion entries:
+        @auto_completion.clear_previous_display
+        @auto_completion.display_entries(entries, receiver_name, @editor.expression_height, color?)
+
+        # 5) Replace `word_on_cursor` by the replacement word:
+        @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
       end
 
-      # Get auto completion entries:
-      context_name, entries = @auto_complete.call(receiver, word_on_cursor, @editor.expression_before_cursor)
-
-      unless entries.empty?
-        # Replace word on cursor by the common_root of completion entries:
-        replacement = common_root(entries)
-        @editor.update do
-          print_auto_completion_entries(context_name, entries)
-
-          @editor.current_line = line.sub(word_begin..word_end, replacement)
-        end
-
-        # Then move cursor at end of inserted text:
+      # 6) Move cursor:
+      if replacement
         added_size = replacement.size - (@editor.x - word_begin)
 
         added_size.times do
@@ -230,98 +232,6 @@ module IC::ReplInterface
       end
 
       parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest
-    end
-
-    private def common_root(entries)
-      return "" if entries.empty?
-      return entries[0] if entries.size == 1
-
-      i = 0
-      entries_iterator = entries.map &.each_char
-
-      loop do
-        char_on_first_entry = entries[0][i]?
-        same = entries_iterator.all? do |entry|
-          entry.next == char_on_first_entry
-        end
-        i += 1
-        break if !same
-      end
-      entries[0][...(i - 1)]
-    end
-
-    private def print_auto_completion_entries(context_name, entries)
-      # clear previous entries if any:
-      clear_completion_entries
-
-      # Compute the max number of row in a way to never take more than 3/4 of the screen.
-      max_nb_row = (Term::Size.height - @editor.expression_height)*3//4 - 1
-      return if max_nb_row <= 1
-      return if entries.size <= 1
-
-      # Print context type name:
-      print context_name.colorize(:blue).underline.toggle(color?)
-      puts ":"
-
-      nb_rows = compute_nb_row(entries, max_nb_row)
-
-      columns = entries.in_groups_of(nb_rows, "")
-      column_widths = columns.map &.max_of &.size.+(2)
-
-      nb_rows.times do |r|
-        width = 0
-        columns.each_with_index do |col, c|
-          entry = col[r]
-          col_width = column_widths[c]
-
-          # As we doesn't known the nb of column to display, stop when column overflow the term width:
-          width += col_width
-          break if width > Term::Size.width
-
-          # Display `...` on the last column and row:
-          if r == nb_rows - 1 && (next_col_width = column_widths[c + 1]?) && width + next_col_width > Term::Size.width
-            entry = "..."
-          end
-
-          # Display entry:
-          print Highlighter.highlight(entry.ljust(col_width))
-        end
-        puts
-      end
-
-      @previous_completion_entries_height = nb_rows + 1
-    end
-
-    # Computes the min number of rows required to display entries:
-    # * if all entries cannot fit in `max_nb_row` rows, returns `max_nb_row`,
-    # * if there are less than 10 entries, returns `entries.size` because in this case, it's more convenient to display them in one column.
-    private def compute_nb_row(entries, max_nb_row)
-      if entries.size > 10
-        # test possible nb rows: (1 to max_nb_row)
-        1.to max_nb_row do |r|
-          width = 0
-          # Sum the width of each given column:
-          entries.each_slice(r, reuse: true) do |col|
-            width += col.max_of &.size + 2
-          end
-
-          # If width fit width terminal, we found min row required:
-          return r if width < Term::Size.width
-        end
-      end
-
-      {entries.size, max_nb_row}.min
-    end
-
-    private def clear_completion_entries
-      print Term::Cursor.clear_line_after
-
-      if height = @previous_completion_entries_height
-        print Term::Cursor.up(height)
-        print Term::Cursor.clear_screen_down
-
-        @previous_completion_entries_height = nil
-      end
     end
 
     private def formated
@@ -350,7 +260,7 @@ module IC::ReplInterface
 
     private def submit_expr(*, history = true, &)
       @editor.end_editing(replace: formated) do
-        clear_completion_entries
+        @auto_completion.clear_previous_display
       end
 
       @line_number += @editor.lines.size

@@ -115,8 +115,8 @@ module IC::ReplInterface
       (@y == @lines.size - 1)
     end
 
-    def expression_before_cursor
-      @lines[...@y].join('\n') + '\n' + current_line[..@x]
+    def expression_before_cursor(x = @x, y = @y)
+      @lines[...y].join('\n') + '\n' + current_line[..x]
     end
 
     # Following functions modifies the expression, they should be called inside
@@ -371,7 +371,7 @@ module IC::ReplInterface
 
         true
       elsif prev_line = previous_line?
-        # Here, there are a previous line in witch we can move up, we want to
+        # Here, there are a previous line in which we can move up, we want to
         # move on the last part of the previous line:
         size_of_last_part = remaining_size(prev_line.size)
 

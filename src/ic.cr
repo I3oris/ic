@@ -3,7 +3,6 @@ require "option_parser"
 require "./repl_interface/repl_interface"
 require "./pry"
 require "./errors"
-require "./auto_completion"
 
 module IC
   VERSION = "0.3.2"
@@ -19,10 +18,7 @@ module IC
 
     input = ReplInterface::ReplInterface.new
     input.color = color
-
-    input.auto_complete = ->(receiver : String?, name : String, context_code : String?) do
-      auto_complete(repl, receiver, name, context_code)
-    end
+    input.repl = repl
 
     input.run do |expr|
       result = repl.run_next_code(expr)
