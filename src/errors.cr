@@ -11,7 +11,6 @@ class Crystal::Error < Exception
       "expecting token ']', not 'EOF'",
       "expecting token '}', not 'EOF'",
       "expecting token '%}', not 'EOF'",
-      "expecting token ']', not ','",
       "expecting token '}', not ','",
       "expected '}' or named tuple name, not EOF",
       "unexpected token: NEWLINE",
