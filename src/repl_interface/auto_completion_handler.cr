@@ -136,21 +136,29 @@ module IC::ReplInterface
       results = [] of String
 
       # Add def names from type:
-      type.defs.try &.each do |def_name, def_|
-        if def_.any? &.def.visibility.public?
-          # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`... :
-          unless def_name.starts_with?('_') || def_name == "`"
-            if def_name.starts_with? name
-              # Avoid operators methods:
-              unless Highlighter::OPERATORS.any? { |operator| operator.to_s == def_name }
-                unless def_name.in? "[]", "[]=", "[]?"
-                  results << def_name
-                end
-              end
-            end
-          end
+      type.defs.try &.each
+        .select do |def_name, defs|
+          defs.any?(&.def.visibility.public?) &&
+            def_name.starts_with? name
         end
-      end
+        .reject do |def_name, _|
+          def_name.starts_with?('_') || def_name == "`" ||              # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
+            Highlighter::OPERATORS.any? { |op| op.to_s == def_name } || # Avoid operators methods
+            def_name.in? "[]", "[]=", "[]?"
+        end
+        .each do |def_name, _|
+          results << def_name
+        end
+
+      # Add macro names from type:
+      type.macros.try &.each
+        .select do |macro_name, macros|
+          macros.any?(&.visibility.public?) &&
+            macro_name.starts_with? name
+        end
+        .each do |macro_name, _|
+          results << macro_name
+        end
 
       # Recursively add def names from parents:
       type.parents.try &.each do |parent|
