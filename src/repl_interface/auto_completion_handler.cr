@@ -1,6 +1,8 @@
+require "./last_expression_transformer"
+
 module IC::ReplInterface
   # Handles the auto completion, this is done in four step:
-  # 1) Retrieve the receiver code by reverse parsing the code from cursor position
+  # 1) Retrieve the receiver code by parsing the code before cursor position
   # 2) Determine the context (local vars, main_visitor, etc..)
   # 3) Search the method's name entries given a context and a receiver
   # 4) Display of these entries.
@@ -14,43 +16,82 @@ module IC::ReplInterface
 
     @context : AutoCompletionContext? = nil
 
-    # Store the previous display height in order properly clear the screen:
+    # Store the previous display height in order to properly clear the screen:
     @previous_completion_display_height : Int32? = nil
 
     # [1] Parses the receiver code:
-    # TODO: currently we are only able to parse simple receiver e.g `foo.bar.bar`.
     def parse_receiver_code(expression_before_word_on_cursor) : String?
       expr = expression_before_word_on_cursor
 
-      if expr && expr.starts_with?('.') && !expr.starts_with?("..")
-        # If expression starts with '.' we want auto-complete from the last result ('__').
-        receiver = "__"
-      else
-        # Get previous words while they are chained by '.'
-        receiver_begin = expr.size
-        pos = {receiver_begin - 1, 0}.max
-        while expr[pos]? == '.'
-          receiver_begin, _ = word_bound(expr, x: receiver_begin - 2)
+      expr += "__method__" if expr.ends_with? '.'
+      expr = add_missing_ends(expr)
 
-          pos = {receiver_begin - 1, 0}.max
-          break if pos == 0
-        end
+      parser = Crystal::Parser.new(expr)
+      ast = parser.parse
 
-        if receiver_begin != expr.size
-          receiver = expr[receiver_begin..(expr.size - 2)]?
-        end
-      end
+      transformer = Crystal::LastExpressionTransformer.new
+      ast = ast.transform(transformer)
+
+      receiver = ast.as?(Crystal::Call).try &.obj.try &.to_s
       receiver
+    rescue
+      nil
     end
 
-    WORD_DELIMITERS = /[ \n\t\+\-,@&\!\?%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
+    # [1] Add missing ends to an expression in order to parse it.
+    def add_missing_ends(expr)
+      lexer = Crystal::Lexer.new(expr)
 
-    # [1]
-    private def word_bound(expr, x)
-      word_begin = expr.rindex(WORD_DELIMITERS, offset: {x - 1, 0}.max) || -1
-      word_end = expr.index(WORD_DELIMITERS, offset: x) || expr.size
+      delimiter_stack = [] of Symbol
+      state = :normal
 
-      {word_begin + 1, word_end - 1}
+      token = lexer.next_token
+      loop do
+        case token.type
+        when :EOF then break
+        when :"(", :"[", :"{"
+          delimiter_stack.push token.type
+        when :")", :"]", :"}"
+          delimiter = delimiter_stack.pop?
+          state = :string if delimiter == :interpolation
+        when :IDENT
+          if token.value.in? %i(begin module class struct def if unless while until case do annotation lib)
+            delimiter_stack.push :begin
+          elsif token.value == :end
+            delimiter_stack.pop?
+          end
+        when :DELIMITER_START
+          state = :string
+          delimiter_stack.push :string
+        when :DELIMITER_END
+          state = :normal
+          delimiter_stack.pop
+        when :INTERPOLATION_START
+          state = :interpolation
+          delimiter_stack.push :interpolation
+        end
+
+        if state == :string
+          token = lexer.next_string_token(token.delimiter_state)
+        else
+          token = lexer.next_token
+        end
+      end
+
+      missing_ends = String.build do |str|
+        while delemiter = delimiter_stack.pop?
+          case delemiter
+          when :"("           then str << ')'
+          when :"["           then str << ']'
+          when :"{"           then str << '}'
+          when :begin         then str << "; end"
+          when :interpolation then str << '}'
+          when :string        then str << '"'
+          end
+        end
+      end
+
+      expr + missing_ends
     end
 
     # [2] Determines the context from expression before word on cursor:
@@ -202,7 +243,7 @@ module IC::ReplInterface
       entries[0][...(i - 1)]
     end
 
-    # [4] Displays completion entries by columns, in a way that takes the less height possible:
+    # [4] Displays completion entries by columns, minimizing the height:
     def display_entries(entries, receiver_name, expression_height, color? = true)
       # Compute the max number of row in a way to never take more than 3/4 of the screen.
       max_nb_row = (Term::Size.height - expression_height)*3//4 - 1
