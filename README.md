@@ -18,7 +18,7 @@ IC, meaning **Interactive Crystal**, is an interface wrapping the [Crystal Inter
 
 ## Warning:
 
-Crystal-i is experimental and not yet released, the imputed code is not guaranteed to always work as expected. This repository is a preparation for this up-coming feature.
+Crystal-i is experimental and not yet released, the inputted code is not guaranteed to always work as expected. This repository is a preparation for this up-coming feature.
 
 ## Installation:
 
@@ -39,7 +39,7 @@ make
 ```
 make release
 ```
-> This is a bit long, and require at lest 4.5 GB of available RAM.
+> This is a bit long, and require at least 4.5 GB of available RAM.
 
 ## Usage:
 
@@ -74,7 +74,7 @@ You will see the current position on your code:
     5: puts "Hello #{name}!"
     6:
 ```
-On the `pry` prompt you can tip:
+On the `pry` prompt you can type:
 * `next`    : To jump to the next instruction (without entering into functions).
 * `step`    : To jump to the next instruction (entering into functions if possible).
 * `finish`  : To jump out of the current function.
