@@ -151,6 +151,8 @@ describe IC::ReplInterface::AutoCompletionHandler do
     end
 
     it "parse if" do
+      handler.parse_receiver_code(%(x = if true.)).should eq(%(true))
+
       handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
         x = if true
           42.
@@ -179,6 +181,56 @@ describe IC::ReplInterface::AutoCompletionHandler do
         else
           "foo"
         end
+        EXPECTED_RECEIVER
+    end
+
+    it "parse while" do
+      handler.parse_receiver_code(%(x = while true.)).should eq(%(true))
+
+      handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
+        x = while true
+          42.
+        CODE
+        42
+        EXPECTED_RECEIVER
+
+      handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
+        x = while true
+          42
+        end.
+        CODE
+        while true
+          42
+        end
+        EXPECTED_RECEIVER
+    end
+
+    it "parse case" do
+      handler.parse_receiver_code(%(x = case "foo".)).should eq(%("foo"))
+
+      handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
+        x = case "foo"
+          when 42.
+        CODE
+        42
+        EXPECTED_RECEIVER
+
+      handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
+        x = case "foo"
+          when 42
+            "bar".
+        CODE
+        "bar"
+        EXPECTED_RECEIVER
+
+      handler.parse_receiver_code(<<-'CODE').should eq(<<-'EXPECTED_RECEIVER')
+        x = case "foo"
+          when 42
+            "bar"
+          else
+            "baz".
+        CODE
+        "baz"
         EXPECTED_RECEIVER
     end
   end

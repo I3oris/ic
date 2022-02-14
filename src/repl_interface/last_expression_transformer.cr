@@ -4,8 +4,16 @@ module Crystal
       transform(node.expressions.last)
     end
 
-    def transform(node : ModuleDef | ClassDef | Def | While | Until | Macro)
+    def transform(node : ModuleDef | ClassDef | Macro)
       transform(node.body)
+    end
+
+    def transform(node : Def)
+      if last_default_value = node.args.last?.try &.default_value
+        transform(last_default_value)
+      else
+        transform(node.body)
+      end
     end
 
     def transform(node : FunDef)
@@ -36,11 +44,21 @@ module Crystal
       end
     end
 
-    def transform(node : If | Unless)
-      unless node.else.nop?
-        transform(node.else)
+    def transform(node : While | Until)
+      if !node.body.nop?
+        transform(node.body)
       else
+        transform(node.cond)
+      end
+    end
+
+    def transform(node : If | Unless)
+      if !node.else.nop?
+        transform(node.else)
+      elsif !node.then.nop?
         transform(node.then)
+      else
+        transform(node.cond)
       end
     end
 
@@ -61,7 +79,7 @@ module Crystal
         transform(else_)
       else
         if last_when = node.whens.try &.last?
-          unless last_when.body.nop?
+          if !last_when.body.nop?
             transform(last_when.body)
           else
             (last_cond = last_when.conds.last?) ? transform(last_cond) : node
