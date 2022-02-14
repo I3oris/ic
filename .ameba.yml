@@ -1,15 +1,10 @@
 Style/WhileTrue:
   Description: Disallows while statements with a true literal as condition
-  Excluded:
-  - ic_prelude.cr
   Enabled: true
   Severity: Warning
 
 Lint/UselessAssign:
   Description: Disallows useless variable assignments
-  Excluded:
-  - tests/bugs/linked-list.cr
-  - tests/test-random.cr
   Enabled: true
   Severity: Warning
 
@@ -26,3 +21,4 @@ Style/RedundantReturn:
 
 Excluded:
   - crystal-i
+  - tests/*
