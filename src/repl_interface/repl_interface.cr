@@ -180,21 +180,18 @@ module IC::ReplInterface
       word_begin, word_end = @editor.word_bound
       word_on_cursor = line[word_begin..word_end]
 
-      # 2) Compute context:
-      expression_before_word_on_cursor = @editor.expression_before_cursor(x: word_begin - 1)
-
-      receiver_code = @auto_completion.parse_receiver_code(expression_before_word_on_cursor)
+      # 2) Set context:
       if repl = @repl
-        @auto_completion.set_context(
-          repl: repl,
-          expression_before_word_on_cursor: expression_before_word_on_cursor,
-        )
+        @auto_completion.set_context(repl)
       end
       # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
 
+      expr = @editor.expression_before_cursor(x: word_begin - 1)
+      receiver = @auto_completion.parse_receiver_code(expr)
+
       # 3) Find entries:
       entries, receiver_name, replacement = @auto_completion.find_entries(
-        receiver_code: receiver_code,
+        receiver: receiver,
         word_on_cursor: word_on_cursor,
       )
 

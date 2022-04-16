@@ -71,7 +71,6 @@ class Crystal::Repl::Interpreter
         local_vars: interpreter.local_vars,
         program: @context.program,
         main_visitor: main_visitor,
-        interpreter: interpreter,
         special_commands: %w(continue step next finish whereami),
       )
 
