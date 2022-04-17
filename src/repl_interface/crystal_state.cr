@@ -6,7 +6,7 @@ class Crystal::Program
   # * As the semantic is triggered on auto-completion, we doesn't want keep definitions while the user
   #  doesn't have validate the input.
   def state
-    {@types.dup, @defs.dup, self.literal_expander.state}
+    {@types.dup, @defs.dup, @const_initializers.dup, @class_var_initializers.dup, self.literal_expander.state}
   end
 
   # Restore the state
@@ -15,7 +15,7 @@ class Crystal::Program
   def state=(state)
     return if state.nil?
 
-    @types, @defs, self.literal_expander.state = state
+    @types, @defs, @const_initializers, @class_var_initializers, self.literal_expander.state = state
   end
 end
 

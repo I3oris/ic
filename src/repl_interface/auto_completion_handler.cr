@@ -21,49 +21,77 @@ module IC::ReplInterface
 
     # [1+2] Parses the receiver code:
     def parse_receiver_code(expression_before_word_on_cursor)
-      context = @context || return nil
+      context = @context || return nil, nil
+      program = context.program
 
       # Add a fictitious call "__auto_completion_call__" in place of
       # auto-completed call, so we can easily found what is the receiver after the parsing
       expr = expression_before_word_on_cursor
-      expr += "__auto_completion_call__" if expr.ends_with? '.'
+      expr += "__auto_completion_call__"
 
       # Terminate incomplete expressions with missing 'end's
       expr += missing_ends(expr)
 
-      state = context.program.state
+      state = program.state
 
-      # Now the expression is complete, parse it within the context.
+      # Now the expression is complete, parse it within the context
       parser = Crystal::Parser.new(
         expr,
-        string_pool: context.program.string_pool,
+        string_pool: program.string_pool,
         var_scopes: [context.local_vars.names_at_block_level_zero.to_set],
       )
       ast = parser.parse
-      ast = context.program.normalize(ast)
+      ast = program.normalize(ast)
 
-      # transform the "__auto_completion_call__" AutoCompletionCall
-      ast = ast.transform(AutoCompletionCallTransformer.new)
+      # Copy the main visitor of the context
+      main_visitor = context.main_visitor
+      main_visitor = Crystal::MainVisitor.new(program, main_visitor.meta_vars, main_visitor.@typed_def, main_visitor.meta_vars)
+      main_visitor.scope = main_visitor.@scope
+      main_visitor.path_lookup = main_visitor.path_lookup
 
+      # Execute the semantics on the full ast node to compute all types.
       begin
-        ast = context.program.semantic(ast, main_visitor: context.main_visitor)
+        ast = program.semantic(ast, main_visitor: main_visitor)
       rescue
       end
 
+      # Retrieve the receiver node (now typed), and gets its scope.
       visitor = GetAutoCompletionReceiverVisitor.new
       ast.accept(visitor)
       receiver = visitor.receiver
 
-      # TODO: execute the semantic also on the body of the def surrounding the receiver
+      surrounding_def = visitor.surrounding_def
+      scope = visitor.scope || program
 
+      # Semantics step cannot compute the types inside a def, because the def is not instantiated.
+      # So, to have auto-completion inside a def though, we execute semantics on the body only,
+      # within the def scope.
+      if surrounding_def
+        gatherer = Crystal::Repl::LocalVarsGatherer.new(surrounding_def.location.not_nil!, surrounding_def)
+        gatherer.gather
+
+        main_visitor = Crystal::MainVisitor.new(
+          program,
+          vars: gatherer.meta_vars,
+          meta_vars: gatherer.meta_vars,
+          typed_def: context.main_visitor.@typed_def)
+        main_visitor.scope = scope
+        main_visitor.path_lookup = scope
+
+        begin
+          program.semantic(surrounding_def.body, main_visitor: main_visitor)
+        rescue
+        end
+      end
+
+      return receiver, scope
     rescue
-      nil
+      return nil, nil
     ensure
       if context
         context.main_visitor.clean
         context.program.state = state
       end
-      receiver
     end
 
     # [1] Returns missing 'end's of an expression in order to parse it.
@@ -136,19 +164,19 @@ module IC::ReplInterface
     end
 
     # [4] Finds completion entries from the word on cursor, `set_context` must be called before.
-    def find_entries(receiver, word_on_cursor)
-      entries, receiver_name = internal_find_entries(receiver, word_on_cursor)
+    def find_entries(receiver, scope, word_on_cursor)
+      entries, receiver_name = internal_find_entries(receiver, scope, word_on_cursor)
 
       replacement = entries.empty? ? nil : common_root(entries)
       {entries, receiver_name, replacement}
     end
 
     # [4]
-    private def internal_find_entries(receiver, name) : {Array(String), String}
+    private def internal_find_entries(receiver, scope, name) : {Array(String), String}
       results = [] of String
 
       if receiver
-        receiver_type = receiver.type rescue return {results, ""}
+        scope = receiver_type = receiver.type rescue return {results, ""}
 
         # Add defs from receiver_type:
         results += find_def_entries(receiver_type, name).sort
@@ -158,7 +186,7 @@ module IC::ReplInterface
       else
         context = @context || return {results, ""}
 
-        receiver_type = context.program
+        scope ||= context.program
 
         # Add special command:
         results += context.special_commands.select(&.starts_with? name)
@@ -168,19 +196,19 @@ module IC::ReplInterface
         results += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
 
         # Add defs from receiver_type:
-        results += find_def_entries(receiver_type, name).sort
+        results += find_def_entries(scope.metaclass, name).sort
 
         # Add keywords:
         keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
         results += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
 
         # Add types:
-        results += context.program.types.each_key.select(&.starts_with? name).to_a.sort
+        results += scope.types.each_key.select(&.starts_with? name).to_a.sort
       end
 
       results.uniq!
 
-      {results, receiver_type.to_s}
+      {results, scope.to_s}
     end
 
     # [4]
@@ -313,40 +341,42 @@ module IC::ReplInterface
     end
   end
 
-  class AutoCompletionCall < Crystal::Call
-    def initialize(obj : Crystal::ASTNode?)
-      super(obj, "__auto_completion_call__")
-    end
-  end
-
-  # Transformer that retrieve the ASTnode receiver of an auto-completion (receiver of the call "__auto_completion_call__")
-  # and mark it with a AutoCompletionCall node.
-  class AutoCompletionCallTransformer < Crystal::Transformer
-    def transform(node : Crystal::Call)
-      if node.name == "__auto_completion_call__"
-        # obj.location = Crystal::Location.new("__auto_completion_recevier_location__", 0, 0)
-        # obj
-        AutoCompletionCall.new(node.obj)
-      else
-        super node
-      end
-    end
-  end
-
+  # Search for the auto-completion call, in found its receiver, its surrounding def if any, and its scope.
   class GetAutoCompletionReceiverVisitor < Crystal::Visitor
+    @found = false
     getter receiver : Crystal::ASTNode? = nil
+    getter surrounding_def : Crystal::Def? = nil
+    @scopes = [] of Crystal::Type
 
-    # def visit(node)
-    #   if node.location.try &.filename == "__auto_completion_recevier_location__"
-    #     @receiver ||= node
-    #   end
-    #   true
-    # end
+    def scope
+      @scopes.last?
+    end
 
     def visit(node)
-      if node.is_a? AutoCompletionCall
+      if node.is_a?(Crystal::Call) && node.name == "__auto_completion_call__"
+        @found = true
         @receiver ||= node.obj
       end
+      true
+    end
+
+    def visit(node : Crystal::Def)
+      @surrounding_def = node unless @found
+      true
+    end
+
+    def end_visit(node : Crystal::Def)
+      @surrounding_def = nil unless @found
+      true
+    end
+
+    def visit(node : Crystal::ClassDef | Crystal::ModuleDef)
+      @scopes.push node.resolved_type unless @found
+      true
+    end
+
+    def end_visit(node : Crystal::ClassDef | Crystal::ModuleDef)
+      @scopes.pop? unless @found
       true
     end
   end

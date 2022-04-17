@@ -187,11 +187,12 @@ module IC::ReplInterface
       # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
 
       expr = @editor.expression_before_cursor(x: word_begin - 1)
-      receiver = @auto_completion.parse_receiver_code(expr)
+      receiver, scope = @auto_completion.parse_receiver_code(expr)
 
       # 3) Find entries:
       entries, receiver_name, replacement = @auto_completion.find_entries(
         receiver: receiver,
+        scope: scope,
         word_on_cursor: word_on_cursor,
       )
 
