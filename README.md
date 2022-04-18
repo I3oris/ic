@@ -83,7 +83,7 @@ On the `pry` prompt you can type:
 
 ### Shortcuts:
 
-* `ctrl-o`: On multiline input: insert a new line instead of submit edition.
+* `alt-enter`: On multiline input: insert a new line instead of submit edition.
 * `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
 * `ctrl-a`: Move cursor to begin of the expression.
 * `ctrl-e`: Move cursor to end of the expression.

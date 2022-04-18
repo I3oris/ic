@@ -41,6 +41,8 @@ module IC::ReplInterface
               end
             end
           end
+        elsif chars[1]? == '\r'.ord
+          :insert_new_line
         else
           :escape
         end
@@ -48,8 +50,6 @@ module IC::ReplInterface
         :enter
       when ctrl('c'), ctrl('d'), ctrl('x'), '\0'.ord
         :exit
-      when ctrl('o')
-        :insert_new_line
       when ctrl('a')
         :move_cursor_to_begin
       when ctrl('e')
