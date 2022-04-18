@@ -26,6 +26,7 @@ module IC::ReplInterface
           when 'B'.ord then :down
           when 'C'.ord then :right
           when 'D'.ord then :left
+          when 'Z'.ord then :shift_tab
           when '3'.ord
             if chars[3]? == '~'.ord
               :delete
@@ -40,6 +41,8 @@ module IC::ReplInterface
               end
             end
           end
+        else
+          :escape
         end
       when '\r'.ord, '\n'.ord
         :enter

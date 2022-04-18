@@ -140,7 +140,8 @@ module IC::ReplInterface
     end
 
     # `"`, `:`, `'`, are not a delimiter because symbols and strings should be treated as one word.
-    WORD_DELIMITERS = /[ \n\t\+\-,@&\!\?%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
+    # ditto for '!', '?'
+    WORD_DELIMITERS = /[ \n\t\+\-,;@&%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
 
     def word_bound(x = @x, y = @y)
       line = @lines[y]
@@ -559,7 +560,7 @@ module IC::ReplInterface
           yield
           @lines = replace
         end
-      elsif expression_height >= Term::Size.height
+      else
         update(force_full_view: true) do
           yield
         end

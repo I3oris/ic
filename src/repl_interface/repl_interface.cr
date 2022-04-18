@@ -22,7 +22,7 @@ module IC::ReplInterface
 
     def initialize
       status = :default
-      @editor = ExpressionEditor.new do |expr_line_number, color?|
+      @editor = ExpressionEditor.new do |expr_line_number, _color?|
         String.build do |io|
           io << "ic(#{Crystal::Config.version}):"
           io << sprintf("%03d", @line_number + expr_line_number)
@@ -80,7 +80,11 @@ module IC::ReplInterface
         when :back
           @editor.update { back }
         when '\t'
-          on_tab
+          auto_complete
+        when :shift_tab
+          auto_complete(shift_tab: true)
+        when :escape
+          on_escape
         when :insert_new_line
           @editor.update { insert_new_line(indent: self.indentation_level) }
         when :move_cursor_to_begin
@@ -96,6 +100,10 @@ module IC::ReplInterface
           @editor.update do
             @editor << read
           end
+        end
+
+        if !read.in?('\t', :enter, :shift_tab, :escape) && @auto_completion.open?
+          @editor.update { @auto_completion.clear }
         end
       end
     end
@@ -173,33 +181,42 @@ module IC::ReplInterface
     # 4) Then, during the @editor update, we display theses entries
     # 5) At last, we replace the `word_on_cursor` by the `replacement` word, if any
     # 6) Finally, we move cursor at the end of replaced text.
-    private def on_tab
+    private def auto_complete(shift_tab = false)
       line = @editor.current_line
 
       # 1) Get current word on cursor:
       word_begin, word_end = @editor.word_bound
       word_on_cursor = line[word_begin..word_end]
 
-      # 2) Set context:
-      if repl = @repl
-        @auto_completion.set_context(repl)
+      if @auto_completion.open?
+        if shift_tab
+          replacement = @auto_completion.selection_previous
+        else
+          replacement = @auto_completion.selection_next
+        end
+      else
+        # 2) Set context:
+        if repl = @repl
+          @auto_completion.set_context(repl)
+        end
+        # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
+
+        expr = @editor.expression_before_cursor(x: word_begin - 1)
+        receiver, scope = @auto_completion.parse_receiver_code(expr)
+
+        # 3) Find entries:
+        # entries, receiver_name,
+        replacement = @auto_completion.find_entries(
+          receiver: receiver,
+          scope: scope,
+          word_on_cursor: word_on_cursor,
+        )
       end
-      # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
-
-      expr = @editor.expression_before_cursor(x: word_begin - 1)
-      receiver, scope = @auto_completion.parse_receiver_code(expr)
-
-      # 3) Find entries:
-      entries, receiver_name, replacement = @auto_completion.find_entries(
-        receiver: receiver,
-        scope: scope,
-        word_on_cursor: word_on_cursor,
-      )
 
       @editor.update do
         # 4) Display completion entries:
-        @auto_completion.clear_previous_display
-        @auto_completion.display_entries(entries, receiver_name, @editor.expression_height, color?)
+        # @auto_completion.clear_previous_display
+        @auto_completion.display_entries(@editor.expression_height, color?)
 
         # 5) Replace `word_on_cursor` by the replacement word:
         @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
@@ -209,10 +226,16 @@ module IC::ReplInterface
       if replacement
         added_size = replacement.size - (@editor.x - word_begin)
 
-        added_size.times do
-          @editor.move_cursor_right
+        if added_size > 0
+          (+added_size).times { @editor.move_cursor_right }
+        else
+          (-added_size).times { @editor.move_cursor_left }
         end
       end
+    end
+
+    def on_escape
+      @editor.update { @auto_completion.close }
     end
 
     private def multiline?
@@ -258,7 +281,7 @@ module IC::ReplInterface
 
     private def submit_expr(*, history = true, &)
       @editor.end_editing(replace: formated) do
-        @auto_completion.clear_previous_display
+        @auto_completion.close
       end
 
       @line_number += @editor.lines.size

@@ -18,6 +18,10 @@ module IC::ReplInterface
 
     # Store the previous display height in order to properly clear the screen:
     @previous_completion_display_height : Int32? = nil
+    @entries = [] of String
+    @scope_name = ""
+    @selection_pos : Int32? = nil
+    getter? open = false
 
     # [1+2] Parses the receiver code:
     def parse_receiver_code(expression_before_word_on_cursor)
@@ -165,50 +169,49 @@ module IC::ReplInterface
 
     # [4] Finds completion entries from the word on cursor, `set_context` must be called before.
     def find_entries(receiver, scope, word_on_cursor)
-      entries, receiver_name = internal_find_entries(receiver, scope, word_on_cursor)
+      internal_find_entries(receiver, scope, word_on_cursor)
 
-      replacement = entries.empty? ? nil : common_root(entries)
-      {entries, receiver_name, replacement}
+      return @entries.empty? ? nil : common_root(@entries)
     end
 
     # [4]
-    private def internal_find_entries(receiver, scope, name) : {Array(String), String}
-      results = [] of String
+    private def internal_find_entries(receiver, scope, name)
+      @entries.clear
+      @scope_name = ""
 
       if receiver
-        scope = receiver_type = receiver.type rescue return {results, ""}
+        scope = receiver_type = receiver.type rescue return
 
         # Add defs from receiver_type:
-        results += find_def_entries(receiver_type, name).sort
+        @entries += find_def_entries(receiver_type, name).sort
 
         # Add keyword methods (.is_a?, .nil?, ...):
-        results += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
+        @entries += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
       else
-        context = @context || return {results, ""}
+        context = @context || return
 
         scope ||= context.program
 
         # Add special command:
-        results += context.special_commands.select(&.starts_with? name)
+        @entries += context.special_commands.select(&.starts_with? name)
 
         # Add top-level vars:
         vars = context.local_vars.names_at_block_level_zero
-        results += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
+        @entries += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
 
         # Add defs from receiver_type:
-        results += find_def_entries(scope.metaclass, name).sort
+        @entries += find_def_entries(scope.metaclass, name).sort
 
         # Add keywords:
         keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
-        results += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
+        @entries += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
 
         # Add types:
-        results += scope.types.each_key.select(&.starts_with? name).to_a.sort
+        @entries += scope.types.each_key.select(&.starts_with? name).to_a.sort
       end
 
-      results.uniq!
-
-      {results, scope.to_s}
+      @entries.uniq!
+      @scope_name = scope.to_s
     end
 
     # [4]
@@ -268,47 +271,87 @@ module IC::ReplInterface
     end
 
     # [5] Displays completion entries by columns, minimizing the height:
-    def display_entries(entries, receiver_name, expression_height, color? = true)
+    def display_entries(expression_height, color? = true)
+      clear_previous_display
+
       # Compute the max number of row in a way to never take more than 3/4 of the screen.
       max_nb_row = (Term::Size.height - expression_height)*3//4 - 1
       return if max_nb_row <= 1
-      return if entries.size <= 1
+      return if @entries.size <= 1
 
-      # Print receiver type name:
-      print receiver_name.colorize(:blue).underline.toggle(color?)
+      # Print scope type name:
+      print @scope_name.colorize(:blue).underline.toggle(color?)
       puts ":"
 
-      nb_rows = compute_nb_row(entries, max_nb_row)
+      nb_rows = compute_nb_row(@entries, max_nb_row)
 
-      columns = entries.in_groups_of(nb_rows, "")
+      columns = @entries.in_groups_of(nb_rows, "")
       column_widths = columns.map &.max_of &.size.+(2)
 
+      nb_cols = nb_cols_hold_in_term_width(column_widths)
+
+      col_start = 0
+      if pos = @selection_pos
+        col_end = pos // nb_rows
+
+        if col_end >= nb_cols
+          nb_cols = nb_cols_hold_in_term_width(column_widths: column_widths[..col_end].reverse_each)
+
+          col_start = col_end - nb_cols + 1
+        end
+      end
+
       nb_rows.times do |r|
-        width = 0
-        columns.each_with_index do |col, c|
-          entry = col[r]
+        nb_cols.times do |c|
+          c += col_start
+
+          entry = columns[c][r]
           col_width = column_widths[c]
 
-          # As we doesn't known the nb of column to display, stop when column overflow the term width:
-          width += col_width
-          break if width > Term::Size.width
-
           # Display `...` on the last column and row:
-          if r == nb_rows - 1 && (next_col_width = column_widths[c + 1]?) && width + next_col_width > Term::Size.width
-            entry = "..."
+          if (r == nb_rows - 1) && (c - col_start == nb_cols - 1) && columns[c + 1]?
+            entry += ".."
           end
 
           # Display entry:
-          print Highlighter.highlight(entry.ljust(col_width), toggle: color?)
+          # entry_str = Highlighter.highlight(entry.ljust(col_width), toggle: color?)
+          entry_str = entry.ljust(col_width)
+
+          # Colorize selection
+          if r + c*nb_rows == @selection_pos
+            entry_str = entry_str.colorize.toggle(color?).bright.on_dark_gray
+          end
+          print entry_str
         end
         puts
       end
 
+      # Store the height actually displayed, so we can clear it later
       @previous_completion_display_height = nb_rows + 1
+      @open = true
     end
 
-    # [5]
-    def clear_previous_display
+    def selection_next
+      if (pos = @selection_pos).nil?
+        new_pos = 0
+      else
+        new_pos = (pos + 1) % @entries.size
+      end
+      @selection_pos = new_pos
+      @entries[new_pos]
+    end
+
+    def selection_previous
+      if (pos = @selection_pos).nil?
+        new_pos = 0
+      else
+        new_pos = (pos - 1) % @entries.size
+      end
+      @selection_pos = new_pos
+      @entries[new_pos]
+    end
+
+    private def clear_previous_display
       print Term::Cursor.clear_line_after
 
       if height = @previous_completion_display_height
@@ -317,6 +360,37 @@ module IC::ReplInterface
 
         @previous_completion_display_height = nil
       end
+    end
+
+    def clear
+      if open?
+        prev_height = @previous_completion_display_height || 0
+        clear_previous_display
+        prev_height.times { puts }
+        @previous_completion_display_height = prev_height
+
+        @selection_pos = nil
+        @entries.clear
+        @open = false
+      end
+    end
+
+    def close
+      clear_previous_display
+      @selection_pos = nil
+      @entries.clear
+      @open = false
+    end
+
+    private def nb_cols_hold_in_term_width(column_widths)
+      nb_cols = 0
+      width = 0
+      column_widths.each do |col_width|
+        width += col_width
+        break if width > Term::Size.width
+        nb_cols += 1
+      end
+      nb_cols
     end
 
     # [5] Computes the min number of rows required to display entries:
