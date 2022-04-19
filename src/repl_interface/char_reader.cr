@@ -41,6 +41,8 @@ module IC::ReplInterface
               end
             end
           end
+        elsif chars[1]? == '\t'.ord
+          :shift_tab
         elsif chars[1]? == '\r'.ord
           :insert_new_line
         else
