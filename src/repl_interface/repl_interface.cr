@@ -68,13 +68,13 @@ module IC::ReplInterface
         when :right
           @editor.move_cursor_right
         when :ctrl_up
-          on_ctrl_up
+          on_ctrl_up { |line| yield line }
         when :ctrl_down
-          on_ctrl_down
+          on_ctrl_down { |line| yield line }
         when :ctrl_left
-          on_ctrl_left
+          on_ctrl_left { |line| yield line }
         when :ctrl_right
-          on_ctrl_right
+          on_ctrl_right { |line| yield line }
         when :delete
           @editor.update { delete }
         when :back
@@ -108,21 +108,21 @@ module IC::ReplInterface
       end
     end
 
-    # These macros are here to allow using `yield` when they are overridden on a child class.
-    private macro on_ctrl_up
+    # If overriden, can yield an expression to giveback to `run`, see `PryInterface`.
+    private def on_ctrl_up(& : String ->)
       @editor.scroll_down
     end
 
-    private macro on_ctrl_down
+    private def on_ctrl_down(& : String ->)
       @editor.scroll_up
     end
 
-    private macro on_ctrl_left
+    private def on_ctrl_left(& : String ->)
       # TODO: move one word backward
       @editor.move_cursor_left
     end
 
-    private macro on_ctrl_right
+    private def on_ctrl_right(& : String ->)
       # TODO: move one word forward
       @editor.move_cursor_right
     end
@@ -280,7 +280,7 @@ module IC::ReplInterface
     end
 
     private def submit_expr(*, history = true, &)
-      @editor.end_editing(replace: formated) do
+      @editor.end_editing(replacement: formated) do
         @auto_completion.close
       end
 

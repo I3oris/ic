@@ -7,19 +7,19 @@ class IC::PryInterface < IC::ReplInterface::ReplInterface
     end
   end
 
-  private macro on_ctrl_up
+  def on_ctrl_up
     yield "whereami"
   end
 
-  private macro on_ctrl_down
+  def on_ctrl_down
     yield "next"
   end
 
-  private macro on_ctrl_left
+  def on_ctrl_left
     yield "finish"
   end
 
-  private macro on_ctrl_right
+  def on_ctrl_right
     yield "step"
   end
 end

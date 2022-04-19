@@ -9,7 +9,7 @@ module IC::ReplInterface
   # ```
   # # new editor:
   # @editor = ExpressionEditor.new(
-  #   prompt: ->(expr_line_number : Int32) { "prompt> " }
+  #   prompt: ->(expr_line_number : Int32) { "prompt>" }
   # )
   #
   # # edit some code:
@@ -40,8 +40,8 @@ module IC::ReplInterface
   #
   # The above has displayed:
   #
-  # prompt> puts "Hello World"
-  # prompt>   puts "!"
+  # prompt>puts "Hello World"
+  # prompt>  puts "!"
   # => ok
   # prompt>
   #
@@ -65,10 +65,10 @@ module IC::ReplInterface
     # `|` : cursor position
     #
     # ```
-    # prompt> def very_looo
+    # prompt>def very_looo
     # ooo|ng_name            <= wrapping
-    # prompt>   bar
-    # prompt> end
+    # prompt>  bar
+    # prompt>end
     # ```
     # For example here the cursor position is x=16, y=0, but real cursor is at x=3,y=1 from the beginning of expression.
     getter x = 0
@@ -118,11 +118,11 @@ module IC::ReplInterface
     end
 
     def expression_before_cursor(x = @x, y = @y)
-      @lines[...y].join('\n') + '\n' + current_line[..x]
+      "#{@lines[...y].join('\n')}\n#{current_line[..x]}"
     end
 
     # Following functions modifies the expression, they should be called inside
-    # an `update` block to see the changes in the screen : #
+    # an `update` block to see the changes in the screen: #
 
     def previous_line=(line)
       @lines[@y - 1] = line
@@ -140,9 +140,10 @@ module IC::ReplInterface
     end
 
     # `"`, `:`, `'`, are not a delimiter because symbols and strings should be treated as one word.
-    # ditto for '!', '?'
+    # ditto for '!', '?' for question and exclamative method.
     WORD_DELIMITERS = /[ \n\t\+\-,;@&%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
 
+    # Returns begin and end of the word under the cursor:
     def word_bound(x = @x, y = @y)
       line = @lines[y]
       word_begin = line.rindex(WORD_DELIMITERS, offset: {x - 1, 0}.max) || -1
@@ -220,13 +221,13 @@ module IC::ReplInterface
 
     # Gives the size of the last part of the line when it's wrapped
     #
-    # prompt> def very_looo
+    # prompt>def very_looo
     # ooooooooong              <= last part
-    # prompt>   bar
-    # prompt> end
+    # prompt>  bar
+    # prompt>end
     #
     # e.g. here "ooooooooong".size = 10
-    private def remaining_size(line_size)
+    private def last_part_size(line_size)
       (@prompt_size + line_size) % Term::Size.width
     end
 
@@ -254,16 +255,16 @@ module IC::ReplInterface
         # `*`: wanted pos
         #
         # ```
-        # prompt> def very_looo
+        # prompt>def very_looo
         # ooooooooong*
-        # prompt> | bar
-        # prompt> end
+        # prompt>| bar
+        # prompt>end
         # ```
         if prev_line = previous_line?
           scroll_up_if_needed if allow_scrolling
 
           # Wrap real cursor:
-          size_of_last_part = remaining_size(prev_line.size)
+          size_of_last_part = last_part_size(prev_line.size)
           move_real_cursor(x: -@prompt_size + size_of_last_part, y: -1)
 
           # Wrap cursor:
@@ -276,12 +277,12 @@ module IC::ReplInterface
         # `*`: wanted pos
         #
         # ```
-        # prompt> def very_looo*
+        # prompt>def very_looo*
         # |oooooooong
-        # prompt>   bar
-        # prompt> end
+        # prompt>  bar
+        # prompt>end
         # ```
-        if remaining_size(@x) == 0
+        if last_part_size(@x) == 0
           scroll_up_if_needed if allow_scrolling
           move_real_cursor(x: Term::Size.width + 1, y: -1)
         else
@@ -300,16 +301,16 @@ module IC::ReplInterface
         # `*`: wanted pos
         #
         # ```
-        # prompt> def very_looo
+        # prompt>def very_looo
         # ooooooooong|
-        # prompt> * bar
-        # prompt> end
+        # prompt>* bar
+        # prompt>end
         # ```
         if next_line?
           scroll_down_if_needed if allow_scrolling
 
           # Wrap real cursor:
-          size_of_last_part = remaining_size(current_line.size)
+          size_of_last_part = last_part_size(current_line.size)
           move_real_cursor(x: -size_of_last_part + @prompt_size, y: +1)
 
           # Wrap cursor:
@@ -322,12 +323,12 @@ module IC::ReplInterface
         # `*`: wanted pos
         #
         # ```
-        # prompt> def very_looo|
+        # prompt>def very_looo|
         # *oooooooong
-        # prompt>   bar
-        # prompt> end
+        # prompt>  bar
+        # prompt>end
         # ```
-        if remaining_size(@x) == (Term::Size.width - 1)
+        if last_part_size(@x) == (Term::Size.width - 1)
           scroll_down_if_needed if allow_scrolling
 
           move_real_cursor(x: -Term::Size.width, y: +1)
@@ -347,11 +348,11 @@ module IC::ReplInterface
         if @x >= Term::Size.width
           # Here, we have:
           # ```
-          # prompt> def *very_loo
-          # oooooooooooo|oooooooo
+          # prompt>def *very_looo
+          # ooooooooooo|ooooooooo
           # ooooooooong
-          # prompt>   bar
-          # prompt> end
+          # prompt>  bar
+          # prompt>end
           # ```
           # So we need only to move real cursor up
           # and move back @x by term-width.
@@ -361,11 +362,11 @@ module IC::ReplInterface
         else
           # Here, we have:
           # ```
-          # prompt> *def very_loo
+          # prompt>*def very_looo
           # ooo|ooooooooooooooooo
           # ooooooooong
-          # prompt>   bar
-          # prompt> end
+          # prompt>  bar
+          # prompt>end
           # ```
           #
           move_real_cursor(x: Term::Size.width - @x, y: -1)
@@ -376,25 +377,25 @@ module IC::ReplInterface
       elsif prev_line = previous_line?
         # Here, there are a previous line in which we can move up, we want to
         # move on the last part of the previous line:
-        size_of_last_part = remaining_size(prev_line.size)
+        size_of_last_part = last_part_size(prev_line.size)
 
         if size_of_last_part < @prompt_size + @x
           # ```
-          # prompt> def very_loo
+          # prompt>def very_looo
           # oooooooooooooooooooo
           # ong*                  <= last part
-          # prompt>   ba|aar
-          # prompt> end
+          # prompt>  ba|aar
+          # prompt>end
           # ```
           move_real_cursor(x: -@x - @prompt_size + size_of_last_part, y: -1)
           move_abs_cursor(x: prev_line.size, y: @y - 1)
         else
           # ```
-          # prompt> def very_loo
+          # prompt>def very_looo
           # oooooooooooooooooooo
-          # oooooooooooo*oong    <= last part
-          # prompt>   ba|aar
-          # prompt> end
+          # ooooooooooo*ooong    <= last part
+          # prompt>  ba|aar
+          # prompt>end
           # ```
           move_real_cursor(x: 0, y: -1)
           x = prev_line.size - size_of_last_part + @prompt_size + @x
@@ -409,8 +410,8 @@ module IC::ReplInterface
     def move_cursor_down
       scroll_down_if_needed
 
-      size_of_last_part = remaining_size(current_line.size)
-      real_x = remaining_size(@x)
+      size_of_last_part = last_part_size(current_line.size)
+      real_x = last_part_size(@x)
 
       remaining = current_line.size - @x
 
@@ -419,11 +420,11 @@ module IC::ReplInterface
         if remaining > Term::Size.width
           # Here, there are enough remaining to just move down
           # ```
-          # prompt>  def ve|ry_loo
+          # prompt>def very|_loooo
           # ooooooooooooooo*oooooo
           # ong
-          # prompt>   bar
-          # prompt> end
+          # prompt>  bar
+          # prompt>end
           # ```
           #
           move_real_cursor(x: 0, y: +1)
@@ -431,11 +432,11 @@ module IC::ReplInterface
         else
           # Here, we goes to end of current line:
           # ```
-          # prompt>  def very_loo
+          # prompt>def very_loooo
           # ooooooooooooooo|ooooo
           # ong*
-          # prompt>   bar
-          # prompt> end
+          # prompt>  bar
+          # prompt>end
           # ```
           move_real_cursor(x: -real_x + size_of_last_part, y: +1)
           move_abs_cursor(x: current_line.size, y: @y)
@@ -446,33 +447,33 @@ module IC::ReplInterface
         when .< @prompt_size
           # Here, we are behind the prompt so we want goes to the beginning of the next line:
           # ```
-          # prompt>  def very_loo
+          # prompt>def very_loooo
           # ooooooooooooooooooooo
           # ong|
-          # prompt> * bar
-          # prompt> end
+          # prompt>* bar
+          # prompt>end
           # ```
           move_real_cursor(x: -real_x + @prompt_size, y: +1)
           move_abs_cursor(x: 0, y: @y + 1)
         when .< @prompt_size + next_line.size
           # Here, we can just move down on the next line:
           # ```
-          # prompt>  def very_loo
+          # prompt>def very_loooo
           # ooooooooooooooooooooo
           # ooooooooong|
-          # prompt>   b*ar
-          # prompt> end
+          # prompt>  ba*r
+          # prompt>end
           # ```
           move_real_cursor(x: 0, y: +1)
           move_abs_cursor(x: real_x - @prompt_size, y: @y + 1)
         else
           # Finally, here, we want to move at end of the next line:
           # ```
-          # prompt>  def very_loo
+          # prompt>def very_loooo
           # ooooooooooooooooooooo
           # ooooooooooooooong|
-          # prompt>   bar*
-          # prompt> end
+          # prompt>  bar*
+          # prompt>end
           # ```
           x = real_x - (@prompt_size + next_line.size)
           move_real_cursor(x: -x, y: +1)
@@ -529,7 +530,7 @@ module IC::ReplInterface
 
       @expression = @expression_height = @colorized_lines = nil
 
-      # Updated expression can be smaller and we might need to adjust the cursor:
+      # Updated expression can be smaller so we might need to adjust the cursor:
       @y = @y.clamp(0, @lines.size - 1)
       @x = @x.clamp(0, @lines[@y].size)
 
@@ -549,16 +550,17 @@ module IC::ReplInterface
       update { @lines = lines.dup }
     end
 
-    def end_editing(replace : Array(String)? = nil)
+    def end_editing(replacement : Array(String)? = nil)
       end_editing(replace) { }
     end
 
-    # Yields a callback called after rewind the cursor and before reprint the replacement.
-    def end_editing(replace : Array(String)? = nil, &)
-      if replace
+    # Yields a callback called after rewind the cursor and before reprint the *replacement*.
+    # This allows for example the display of auto-completion entries, witch will appear above the expression.
+    def end_editing(replacement : Array(String)? = nil, &)
+      if replacement
         update(force_full_view: true) do
           yield
-          @lines = replace
+          @lines = replacement
         end
       else
         update(force_full_view: true) do
@@ -626,20 +628,22 @@ module IC::ReplInterface
       end
     end
 
+    # Returns y-start and end positions of the expression that should be displayed on the screen.
+    # This take account of @scroll_offset, and the size start-end should never be greater than screen height.
     private def view_bounds
       h = Term::Size.height
       end_ = expression_height() - 1
 
       start = {0, end_ + 1 - h}.max
 
-      @scroll_offset = @scroll_offset.clamp(0, start)
+      @scroll_offset = @scroll_offset.clamp(0, start) # @scroll_offset could not be greater than start.
 
       start -= @scroll_offset
       end_ -= @scroll_offset
       {start, end_}
     end
 
-    # Rewind the real cursor to the beginning of the expression without changing @x/@y cursor:
+    # Rewinds the real cursor to the beginning of the expression without changing @x/@y cursor:
     private def rewind_cursor
       if expression_height >= Term::Size.height
         print Term::Cursor.row(1)
@@ -660,19 +664,21 @@ module IC::ReplInterface
       io.print colorized_line
 
       # ```
-      # prompt> begin                  |
-      # prompt>   foooooooooooooooooooo|
-      #                                | <- If the line size match exactly the screen width, we need to add a
-      # prompt>   bar                  |    extra line feed, so computes based on `%` or `//` stay exact.
-      # prompt> end                    |
+      # prompt>begin                  |
+      # prompt>  foooooooooooooooooooo|
+      #                               | <- If the line size match exactly the screen width, we need to add a
+      # prompt>  bar                  |    extra line feed, so computes based on `%` or `//` stay exact.
+      # prompt>end                    |
       # ```
-      io.puts if is_last_part? && remaining_size(line_size) == 0
+      io.puts if is_last_part? && last_part_size(line_size) == 0
     end
 
     # Prints the colorized expression, this last is clipped if it's higher than screen.
     # The only displayed part of the expression is delimited by `view_bounds` and depend of the value of
     # `@scroll_offset`.
     # Lines that takes more than one line (if wrapped) are cut in consequence.
+    #
+    # if *force_full_view* is true, all expression is dumped on screen, without clipping.
     private def print_expression(force_full_view = false)
       if force_full_view
         start, end_ = 0, Int32::MAX
@@ -712,7 +718,7 @@ module IC::ReplInterface
                 # The part holds on the view, we can print it.
                 # FIXME:
                 # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
-                # recolor the part individually.
+                # recolor each part individually.
                 # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
                 colorized_line = @highlighter.highlight(part(line, part_number), toggle: color?)
 
