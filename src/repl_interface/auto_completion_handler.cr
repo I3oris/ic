@@ -323,6 +323,7 @@ module IC::ReplInterface
           end
           print entry_str
         end
+        print Term::Cursor.clear_line_after
         puts
       end
 
