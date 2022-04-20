@@ -49,7 +49,7 @@ module IC::ReplInterface
 
       # Copy the main visitor of the context
       main_visitor = context.main_visitor
-      main_visitor = Crystal::MainVisitor.new(program, main_visitor.meta_vars, main_visitor.@typed_def, main_visitor.meta_vars)
+      main_visitor = Crystal::MainVisitor.new(program, main_visitor.vars.clone, main_visitor.@typed_def, main_visitor.meta_vars.clone)
       main_visitor.scope = main_visitor.@scope
       main_visitor.path_lookup = main_visitor.path_lookup
 
