@@ -24,9 +24,14 @@ module IC::ReplInterface
     getter? open = false
 
     # [1+2] Parses the receiver code:
-    def parse_receiver_code(expression_before_word_on_cursor)
+    # Returns receiver AST if any, and the context type.
+    def parse_receiver_code(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
       context = @context || return nil, nil
       program = context.program
+
+      if expression_before_word_on_cursor.ends_with? "require "
+        return Crystal::Require.new(""), program
+      end
 
       # Add a fictitious call "__auto_completion_call__" in place of
       # auto-completed call, so we can easily found what is the receiver after the parsing
@@ -169,7 +174,11 @@ module IC::ReplInterface
 
     # [4] Finds completion entries from the word on cursor, `set_context` must be called before.
     def find_entries(receiver, scope, word_on_cursor)
-      internal_find_entries(receiver, scope, word_on_cursor)
+      if receiver.is_a? Crystal::Require
+        internal_find_require_entries(word_on_cursor)
+      else
+        internal_find_entries(receiver, scope, word_on_cursor)
+      end
 
       return @entries.empty? ? nil : common_root(@entries)
     end
@@ -249,6 +258,32 @@ module IC::ReplInterface
       end
 
       results
+    end
+
+    # [4]
+    def internal_find_require_entries(name)
+      name = name.strip('"')
+
+      if context = @context
+        already_required = context.program.requires
+      else
+        already_required = Set(String).new
+      end
+
+      @entries.clear
+      Crystal::CrystalPath.default_paths.each do |path|
+        Dir.children(path).each do |file|
+          if file.ends_with?(".cr") && file.starts_with?(name)
+            unless Path[path, file].to_s.in? already_required
+              require_name = file.chomp(".cr")
+              @entries << %("#{require_name}")
+            end
+          end
+        end
+      end
+
+      @entries.sort!
+      @scope_name = "require"
     end
 
     # [4] Finds the common root text between given entries.
