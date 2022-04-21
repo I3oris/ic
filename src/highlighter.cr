@@ -149,6 +149,9 @@ class IC::Highlighter
           highlight token, METHOD_COLOR, io
         elsif SPECIAL_WORDS.matches? token.to_s
           highlight token, KEYWORD_COLOR, io
+        elsif lexer.current_char == ':'
+          highlight "#{token}:", SYMBOL_COLOR, io
+          lexer.reader.next_char if lexer.reader.has_next?
         else
           highlight token, ident_color(token), io
         end
@@ -165,13 +168,6 @@ class IC::Highlighter
         io << token.value
       when :GLOBAL, :GLOBAL_MATCH_DATA_INDEX
         io << token.value
-      when :":"
-        if last_token[:type] == :IDENT
-          last_token[:value].size.times { io << '\b' }
-          highlight last_token[:value] + ':', SYMBOL_COLOR, io
-        else
-          io << ':'
-        end
       when :UNDERSCORE
         io << "_"
       else
