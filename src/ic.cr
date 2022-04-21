@@ -41,13 +41,16 @@ module IC
 end
 
 class Crystal::Repl
-  def run_next_code(code)
-    parser = Parser.new(
+  def create_parser(code)
+    Parser.new(
       code,
       string_pool: @program.string_pool,
       var_scopes: [@interpreter.local_vars.names_at_block_level_zero.to_set]
     )
-    node = parser.parse
+  end
+
+  def run_next_code(code)
+    node = create_parser(code).parse
     interpret(node)
   end
 

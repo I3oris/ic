@@ -238,15 +238,23 @@ module IC::ReplInterface
       @editor.update { @auto_completion.close }
     end
 
+    private def create_parser(code)
+      if repl = @repl
+        repl.create_parser(code)
+      else
+        Crystal::Parser.new(code)
+      end
+    end
+
     private def multiline?
-      Crystal::Parser.parse(@editor.expression)
+      create_parser(@editor.expression).parse
       false
     rescue e : Crystal::CodeError
       e.unterminated? ? true : false
     end
 
     private def indentation_level
-      parser = Crystal::Parser.new(@editor.expression_before_cursor)
+      parser = create_parser(@editor.expression_before_cursor)
       begin
         parser.parse
       rescue
