@@ -1,6 +1,8 @@
 require "./ic"
+require "option_parser"
 
 repl = Crystal::Repl.new
+debugger = false
 
 OptionParser.parse do |parser|
   parser.banner = "Usage: ic [file] [--] [arguments]"
@@ -14,6 +16,10 @@ OptionParser.parse do |parser|
   parser.on "-h", "--help", "Print this help" do
     puts parser
     exit
+  end
+
+  parser.on("-d", "--debugger", "If a file is given, start with the debugger") do
+    debugger = true
   end
 
   parser.on("-D FLAG", "--define FLAG", "Define a compile-time flag") do |flag|
@@ -43,7 +49,7 @@ OptionParser.parse do |parser|
 end
 
 if ARGV[0]?
-  IC.run_file repl, ARGV[0], ARGV[1..]
+  IC.run_file repl, ARGV[0], ARGV[1..], debugger
 else
   IC.run repl
 end

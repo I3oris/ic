@@ -1,5 +1,4 @@
 require "compiler/crystal/interpreter"
-require "option_parser"
 require "./repl_interface/repl_interface"
 require "./pry"
 require "./errors"
@@ -7,8 +6,8 @@ require "./errors"
 module IC
   VERSION = "0.3.2"
 
-  def self.run_file(repl, path, argv)
-    repl.run_file(path, argv)
+  def self.run_file(repl, path, argv, debugger = false)
+    repl.run_file(path, argv, debugger)
   end
 
   def self.run(repl)
@@ -52,6 +51,21 @@ class Crystal::Repl
   def run_next_code(code)
     node = create_parser(code).parse
     interpret(node)
+  end
+
+  def run_file(filename, argv, debugger = false)
+    @interpreter.argv = argv
+
+    prelude_node = parse_prelude
+    debugger_node = debugger ? Call.new(nil, "debugger") : Nop.new
+    other_node = parse_file(filename)
+    file_node = FileNode.new(other_node, filename)
+    exps = Expressions.new([prelude_node, debugger_node, file_node] of ASTNode)
+
+    interpret_and_exit_on_error(exps)
+
+    # Explicitly call exit at the end so at_exit handlers run
+    interpret_exit
   end
 
   def public_load_prelude
