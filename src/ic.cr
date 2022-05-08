@@ -22,6 +22,9 @@ module IC
     input.run do |expr|
       result = repl.run_next_code(expr)
       puts " => #{Highlighter.highlight(result.to_s, toggle: color)}"
+
+      repl.pry = false # Explicitly exit the debugger
+
     rescue ex : Crystal::Repl::EscapingException
       print "Unhandled exception: "
       print ex
@@ -70,6 +73,10 @@ class Crystal::Repl
 
   def public_load_prelude
     load_prelude
+  end
+
+  def pry=(pry)
+    @interpreter.pry = pry
   end
 
   def clean
