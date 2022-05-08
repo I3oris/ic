@@ -165,7 +165,13 @@ class IC::Highlighter
           highlight "#{token}:", SYMBOL_COLOR, io
           lexer.reader.next_char if lexer.reader.has_next?
         else
-          highlight token, ident_color(token), io
+          last_token_type = last_token[:type]
+          if last_token_type && last_token_type.op_period?
+            # Don't colorize keyword method e.g. `42.class`
+            io << token
+          else
+            highlight token, ident_color(token), io
+          end
         end
       when .magic_dir?, .magic_end_line?, .magic_file?, .magic_line?
         highlight token, SPECIAL_VALUES_COLOR, io
