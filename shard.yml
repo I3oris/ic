@@ -1,12 +1,12 @@
 name: ic
-version: 0.3.2
+version: 0.4.1
 description: Interpreter Crystal, working without compilation!
 authors:
   - I3oris
 
 targets:
-  icr:
-    main: src/ic.cr
+  ic:
+    main: src/main.cr
 
 crystal: 1.1.1
 

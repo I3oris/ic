@@ -4,7 +4,7 @@ require "./pry"
 require "./errors"
 
 module IC
-  VERSION = "0.3.2"
+  VERSION = "0.4.1"
 
   def self.run_file(repl, path, argv, debugger = false)
     repl.run_file(path, argv, debugger)
