@@ -23,8 +23,8 @@ module IC
       result = repl.run_next_code(expr)
       puts " => #{Highlighter.highlight(result.to_s, toggle: color)}"
 
-      repl.pry = false # Explicitly exit the debugger
-
+      # Explicitly exit the debugger
+      repl.pry = false
     rescue ex : Crystal::Repl::EscapingException
       print "Unhandled exception: "
       print ex

@@ -1,22 +1,22 @@
 # File retake and modified from https://github.com/crystal-community/icr/blob/master/src/icr/highlighter.cr
 # Thanks!
 class IC::Highlighter
-  COMMENT_COLOR           = {:dark_gray, :bold}
+  COMMENT_COLOR           = {:dark_gray, Colorize::Mode::Bold}
   NUMBER_COLOR            = :magenta
   CHAR_COLOR              = :light_yellow
   SYMBOL_COLOR            = :magenta
   STRING_COLOR            = :light_yellow
-  HEREDOC_DELIMITER_COLOR = {:light_yellow, :underline}
+  HEREDOC_DELIMITER_COLOR = {:light_yellow, Colorize::Mode::Underline}
   INTERPOLATION_COLOR     = :light_red
-  CONST_COLOR             = {:blue, :underline}
+  CONST_COLOR             = {:blue, Colorize::Mode::Underline}
   OPERATOR_COLOR          = :light_red
   IDENT_COLOR             = :default
   KEYWORD_COLOR           = :light_red
   KEYWORD_METHODS_COLOR   = :default
-  TRUE_FALSE_NIL_COLOR    = {:cyan, :bold}
-  SELF_COLOR              = {:cyan, :bold}
+  TRUE_FALSE_NIL_COLOR    = {:cyan, Colorize::Mode::Bold}
+  SELF_COLOR              = {:cyan, Colorize::Mode::Bold}
   SPECIAL_VALUES_COLOR    = :cyan
-  METHOD_COLOR            = {:green, :bold}
+  METHOD_COLOR            = {:green, Colorize::Mode::Bold}
 
   KEYWORDS = {
     :abstract, :alias, :annotation, :asm, :begin, :break, :case, :class,
@@ -46,7 +46,7 @@ class IC::Highlighter
     :"&=", :"|=", :"^=", :"**=", :">>=", :"<<=", :"%=",
     :"&+=", :"&-=", :"&*=",
     :"&&", :"||", :"&&=", :"||=",
-    # NOTE: :[], :[]?, :[]=, doesn't need to be colored.
+    :[], :[]?, :[]=,
   }
 
   def initialize
@@ -104,46 +104,58 @@ class IC::Highlighter
       token = lexer.next_token
 
       case token.type
-      when :NEWLINE
+      when .newline?
         io.puts
         heredoc_stack.each_with_index do |t, i|
           highlight_delimiter_state lexer, t, io, heredoc: true
           unless i == heredoc_stack.size - 1
             # Next token to heredoc's end is either NEWLINE or EOF.
             @pos = lexer.current_pos
-            if lexer.next_token.type == :EOF
+            if lexer.next_token.type.eof?
               raise "Unterminated heredoc"
             end
             io.puts
           end
         end
         heredoc_stack.clear
-      when :SPACE
+      when .space?
         io << token.value
-      when :COMMENT
+      when .comment?
         highlight token.value.to_s, COMMENT_COLOR, io
-      when :NUMBER
+      when .number?
         highlight token.raw, NUMBER_COLOR, io
-      when :CHAR
+      when .char?
         highlight token.raw, CHAR_COLOR, io
-      when :SYMBOL
+      when .symbol?
         highlight token.raw, SYMBOL_COLOR, io
-      when :CONST, :"::"
+      when .const?, .op_colon_colon?
         highlight token, CONST_COLOR, io
-      when :DELIMITER_START
-        if token.raw == "/" && last_token[:type].in?(:NUMBER, :CONST, :INSTANCE_VAR, :CLASS_VAR, :IDENT, :")", :"}", :"]")
+      when .delimiter_start?
+        last_token_type = last_token[:type]
+        slash_is_not_regex = last_token_type && (
+          last_token_type.number? ||
+          last_token_type.const? ||
+          last_token_type.instance_var? ||
+          last_token_type.class_var? ||
+          last_token_type.ident? ||
+          last_token_type.op_rparen? ||
+          last_token_type.op_rsquare? ||
+          last_token_type.op_rcurly?
+        )
+
+        if token.raw == "/" && slash_is_not_regex
           highlight "/", OPERATOR_COLOR, io
-        elsif token.delimiter_state.kind == :heredoc
+        elsif token.delimiter_state.kind.heredoc?
           highlight token.raw, HEREDOC_DELIMITER_COLOR, io
           heredoc_stack << token.dup
         else
           highlight_delimiter_state lexer, token, io
         end
-      when :STRING_ARRAY_START, :SYMBOL_ARRAY_START
+      when .string_array_start?, .symbol_array_start?
         highlight_string_array lexer, token, io
-      when :EOF
+      when .eof?
         break
-      when :IDENT
+      when .ident?
         if last_is_def
           last_is_def = false
           highlight token, METHOD_COLOR, io
@@ -155,32 +167,56 @@ class IC::Highlighter
         else
           highlight token, ident_color(token), io
         end
-      when .in? SPECIAL_VALUES
+      when .magic_dir?, .magic_end_line?, .magic_file?, .magic_line?
         highlight token, SPECIAL_VALUES_COLOR, io
-      when :"}"
+      when .op_rcurly?
         if break_on_rcurly
           highlight "}", INTERPOLATION_COLOR, io
           break
         else
           io << token
         end
-      when :INSTANCE_VAR, :CLASS_VAR
+      when .instance_var?, .class_var?
         io << token.value
-      when :GLOBAL, :GLOBAL_MATCH_DATA_INDEX
+      when .global?, .global_match_data_index?
         io << token.value
-      when :UNDERSCORE
+      when .underscore?
         io << "_"
-      else
-        if OPERATORS.includes? token.type
-          highlight token, OPERATOR_COLOR, io
-        else
+        # These operators should not be colored:
+      when .op_lparen?,                   # (
+           .op_rparen?,                   # )
+           .op_comma?,                    # ,
+           .op_period?,                   # .
+           .op_period_period?,            # ..
+           .op_period_period_period?,     # ...
+           .op_colon?,                    # :
+           .op_semicolon?,                # ;
+           .op_question?,                 # ?
+           .op_at_lsquare?,               # @[
+           .op_lsquare?,                  # [
+           .op_lsquare_rsquare?,          # [] (avoid colorization of `[] of Foo`)
+           .op_lsquare_rsquare_eq?,       # []=
+           .op_lsquare_rsquare_question?, # []?
+           .op_rsquare?,                  # ]
+           .op_grave?,                    # `
+           .op_lcurly?,                   # {
+           .op_rcurly?                    # }
+        io << token
+      when .operator?
+        last_token_type = last_token[:type]
+        if last_token_type && last_token_type.op_period?
+          # Don't colorize operators called as method e.g. `42.+ 1`
           io << token
+        else
+          highlight token, OPERATOR_COLOR, io
         end
+      else
+        io << token
       end
 
       last_token = {type: token.type, value: token.value.as?(String) || ""}
 
-      unless token.type == :SPACE
+      unless token.type.space?
         last_is_def = %i(def class module lib macro).any? { |t| token.keyword?(t) }
       end
     end
@@ -203,17 +239,17 @@ class IC::Highlighter
       @pos = lexer.current_pos
       token = lexer.next_string_token(token.delimiter_state)
       case token.type
-      when :DELIMITER_END
+      when .delimiter_end?
         if heredoc
           highlight_multiline token.raw, HEREDOC_DELIMITER_COLOR, io
         else
           highlight token.raw, STRING_COLOR, io
         end
         break
-      when :INTERPOLATION_START
+      when .interpolation_start?
         highlight "\#{", INTERPOLATION_COLOR, io
         highlight_normal_state lexer, io, break_on_rcurly: true
-      when :EOF
+      when .eof?
         break
       else
         highlight_multiline token.raw, STRING_COLOR, io
@@ -228,15 +264,15 @@ class IC::Highlighter
       @pos = lexer.current_pos
       token = lexer.next_string_array_token
       case token.type
-      when :STRING
+      when .string?
         highlight token.raw, STRING_COLOR, io
-      when :STRING_ARRAY_END
+      when .string_array_end?
         highlight token.raw, STRING_COLOR, io
         break
-      when :EOF
-        if token.delimiter_state.kind == :string_array
+      when .eof?
+        if token.delimiter_state.kind.string_array?
           raise "Unterminated string array literal"
-        else # == :symbol_array
+        else # .symbol_array?
           raise "Unterminated symbol array literal"
         end
       else
@@ -266,7 +302,7 @@ class IC::Highlighter
     io << token.colorize(color)
   end
 
-  private def highlight(token : Crystal::Token | String, color : Tuple(Symbol, Symbol), io)
+  private def highlight(token : Crystal::Token | String, color : Tuple(Symbol, Colorize::Mode), io)
     io << token.colorize(color[0]).mode(color[1])
   end
 

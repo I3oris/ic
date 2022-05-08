@@ -113,25 +113,30 @@ module IC::ReplInterface
       token = lexer.next_token
       loop do
         case token.type
-        when :EOF then break
-        when :"(", :"[", :"{"
-          delimiter_stack.push token.type
-        when :")", :"]", :"}"
+        when .eof?
+          break
+        when .op_lparen?
+          delimiter_stack.push :"("
+        when .op_lsquare?
+          delimiter_stack.push :"["
+        when .op_lcurly?
+          delimiter_stack.push :"{"
+        when .op_rparen?, .op_rsquare?, .op_rcurly?
           delimiter = delimiter_stack.pop?
           state = :string if delimiter == :interpolation
-        when :IDENT
+        when .ident?
           if token.value.in? %i(begin module class struct def if unless while until case do annotation lib)
             delimiter_stack.push :begin
           elsif token.value == :end
             delimiter_stack.pop?
           end
-        when :DELIMITER_START
+        when .delimiter_start?
           state = :string
           delimiter_stack.push :string
-        when :DELIMITER_END
+        when .delimiter_end?
           state = :normal
           delimiter_stack.pop
-        when :INTERPOLATION_START
+        when .interpolation_start?
           state = :interpolation
           delimiter_stack.push :interpolation
         end
@@ -234,9 +239,8 @@ module IC::ReplInterface
             def_name.starts_with? name
         end
         .reject do |def_name, _|
-          def_name.starts_with?('_') || def_name == "`" ||              # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
-            Highlighter::OPERATORS.any? { |op| op.to_s == def_name } || # Avoid operators methods
-            def_name.in? "[]", "[]=", "[]?"
+          def_name.starts_with?('_') || def_name == "`" ||           # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
+            Highlighter::OPERATORS.any? { |op| op.to_s == def_name } # Avoid operators methods
         end
         .each do |def_name, _|
           results << def_name

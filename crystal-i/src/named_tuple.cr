@@ -42,6 +42,7 @@ struct NamedTuple
       options
     {% elsif @type.name(generic_args: false) == "NamedTuple()" %}
       # special case: empty named tuple
+      # TODO: check against `NamedTuple()` directly after 1.4.0
       options
     {% else %}
       # explicitly provided type vars
@@ -236,10 +237,10 @@ struct NamedTuple
   # :ditto:
   def merge(**other : **U) forall U
     {% begin %}
-    {
+    NamedTuple.new(
       {% for k in T %} {% unless U.keys.includes?(k) %} {{k.stringify}}: self[{{k.symbolize}}],{% end %} {% end %}
       {% for k in U %} {{k.stringify}}: other[{{k.symbolize}}], {% end %}
-    }
+    )
     {% end %}
   end
 
@@ -586,11 +587,11 @@ struct NamedTuple
   # Returns a named tuple with the same keys but with cloned values, using the `clone` method.
   def clone
     {% begin %}
-      {
+      NamedTuple.new(
         {% for key in T %}
           {{key.stringify}}: self[{{key.symbolize}}].clone,
         {% end %}
-      }
+      )
     {% end %}
   end
 
