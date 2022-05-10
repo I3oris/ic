@@ -276,11 +276,13 @@ module IC::ReplInterface
 
       @entries.clear
       Crystal::CrystalPath.default_paths.each do |path|
-        Dir.children(path).each do |file|
-          if file.ends_with?(".cr") && file.starts_with?(name)
-            unless Path[path, file].to_s.in? already_required
-              require_name = file.chomp(".cr")
-              @entries << %("#{require_name}")
+        if File.exists?(path)
+          Dir.each_child(path) do |file|
+            if file.ends_with?(".cr") && file.starts_with?(name)
+              unless Path[path, file].to_s.in? already_required
+                require_name = file.chomp(".cr")
+                @entries << %("#{require_name}")
+              end
             end
           end
         end
