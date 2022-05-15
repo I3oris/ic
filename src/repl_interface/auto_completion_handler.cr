@@ -29,8 +29,10 @@ module IC::ReplInterface
       context = @context || return nil, nil
       program = context.program
 
-      if expression_before_word_on_cursor.ends_with? "require "
+      if expression_before_word_on_cursor.ends_with?("require ")
         return Crystal::Require.new(""), program
+      elsif expression_before_word_on_cursor.ends_with?("::")
+        return nil, program
       end
 
       # Add a fictitious call "__auto_completion_call__" in place of
@@ -182,7 +184,12 @@ module IC::ReplInterface
       if receiver.is_a? Crystal::Require
         internal_find_require_entries(word_on_cursor)
       else
-        internal_find_entries(receiver, scope, word_on_cursor)
+        names = word_on_cursor.split("::", remove_empty: false)
+        if names.size >= 2
+          internal_find_const_entries(scope, names)
+        else
+          internal_find_entries(receiver, scope, word_on_cursor)
+        end
       end
 
       return @entries.empty? ? nil : common_root(@entries)
@@ -221,7 +228,9 @@ module IC::ReplInterface
         @entries += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
 
         # Add types:
-        @entries += scope.types.each_key.select(&.starts_with? name).to_a.sort
+        if types = scope.types?
+          @entries += types.each_key.select(&.starts_with? name).to_a.sort
+        end
       end
 
       @entries.uniq!
@@ -290,6 +299,26 @@ module IC::ReplInterface
 
       @entries.sort!
       @scope_name = "require"
+    end
+
+    private def internal_find_const_entries(scope, names)
+      @entries.clear
+      @scope_name = ""
+
+      namespaces, name = names[...-1], names[-1]
+      if scope
+        full_scope = scope.lookup_path(namespaces, include_private: true)
+        return if full_scope.is_a? Crystal::ASTNode # TODO: Foo(42)::Bar is not handled yet.
+
+        if full_scope && (types = full_scope.types?)
+          @entries = types.compact_map do |const_name, type|
+            if !type.private? && const_name.starts_with?(name)
+              "#{namespaces.join("::")}::#{const_name}"
+            end
+          end.uniq!.sort!
+          @scope_name = full_scope.to_s
+        end
+      end
     end
 
     # [4] Finds the common root text between given entries.
