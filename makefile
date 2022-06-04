@@ -24,7 +24,7 @@ $(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
 	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)
 
 .PHONY: spec
-spec:
+spec: $(LLVM_EXT_OBJ)
 	$(ENV) $(COMPILER) spec $(FLAGS) --order random
 
 .PHONY: clean
