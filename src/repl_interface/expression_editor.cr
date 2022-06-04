@@ -118,7 +118,7 @@ module IC::ReplInterface
     end
 
     def expression_before_cursor(x = @x, y = @y)
-      "#{@lines[...y].join('\n')}\n#{current_line[..x]}"
+      "#{@lines[...y].join('\n')}\n#{current_line[...x]}"
     end
 
     # Following functions modifies the expression, they should be called inside

@@ -24,6 +24,15 @@ class Crystal::Parser
     ret
   end
 
+  def parse_call_args(stop_on_do_after_space = false, allow_curly = false, control = false)
+    paren = @token.type.op_lparen?
+
+    @control_nest += 1 if paren
+    ret = previous_def
+    @control_nest -= 1 if paren
+    ret
+  end
+
   # TODO: lib, macro, union
   {% for parse_method in %w(case begin unless while until select
                            parenthesized_expression empty_array_literal array_literal
