@@ -144,7 +144,7 @@ module IC::ReplInterface
             puts " => #{"✔".colorize(:green).toggle(color?)}"
           end
           return
-        when .blank?, .starts_with? '#'
+        when .blank?
           submit_expr(history: false)
           return
         end
