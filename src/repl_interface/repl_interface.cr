@@ -139,9 +139,10 @@ module IC::ReplInterface
           end
           return
         when "# reset", "#reset"
-          # TODO reset interpreter
           submit_expr do
-            puts " => #{"✔".colorize(:green).toggle(color?)}"
+            status = self.reset rescue false
+            icon = status ? "✔".colorize(:green) : "×".colorize(:red)
+            puts " => #{icon.toggle(color?)}"
           end
           return
         when .blank?
@@ -298,6 +299,13 @@ module IC::ReplInterface
       yield
 
       @editor.prompt_next
+    end
+
+    def reset
+      if repl = @repl
+        repl.reset
+        @line_number = 1
+      end
     end
   end
 end

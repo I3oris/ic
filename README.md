@@ -95,6 +95,11 @@ only on debugger (pry):
 * `ctrl-left`: `finish`
 * `ctrl-right`: `step`
 
+### Commands:
+You can type the following commands:
+* `# clear_history`: Clear history.
+* `# reset`: Reset the interpreter (clean all definitions, variables, constants, ...)
+
 ## Contributing:
 
 1. Fork it (<https://github.com/I3oris/ic/fork>)

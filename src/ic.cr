@@ -84,6 +84,27 @@ class Crystal::Repl
   def clean
     @main_visitor.clean
   end
+
+  def reset
+    @program = Program.new
+    @context.reset(@program)
+
+    @nest = 0
+    @incomplete = false
+    @line_number = 1
+    @main_visitor = MainVisitor.new(@program)
+
+    @interpreter = Interpreter.new(@context)
+
+    @buffer = ""
+    load_prelude
+  end
+end
+
+class Crystal::Repl::Context
+  def reset(@program)
+    @program.flags << "interpreted"
+  end
 end
 
 class Crystal::MainVisitor
