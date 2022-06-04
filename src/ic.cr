@@ -20,7 +20,7 @@ module IC
     input.repl = repl
 
     input.run do |expr|
-      result = repl.run_next_code(expr)
+      result = repl.run_next_code(expr, initial_line_number: input.line_number - input.lines.size - 1)
       puts " => #{Highlighter.highlight(result.to_s, toggle: color)}"
 
       # Explicitly exit the debugger
@@ -43,16 +43,18 @@ module IC
 end
 
 class Crystal::Repl
-  def create_parser(code)
-    Parser.new(
+  def create_parser(code, initial_line_number = 0)
+    parser = Parser.new(
       code,
       string_pool: @program.string_pool,
       var_scopes: [@interpreter.local_vars.names_at_block_level_zero.to_set]
     )
+    parser.filename = TopLevelExpressionVirtualFile.new(source: code, initial_line_number: initial_line_number)
+    parser
   end
 
-  def run_next_code(code)
-    node = create_parser(code).parse
+  def run_next_code(code, initial_line_number = 0)
+    node = create_parser(code, initial_line_number).parse
     interpret(node)
   end
 

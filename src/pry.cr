@@ -203,6 +203,12 @@ class Crystal::Repl::Interpreter
         print "    "
       end
 
+      # IC ADDING:
+      if (filename = location.filename).is_a? TopLevelExpressionVirtualFile
+        line_number += filename.initial_line_number
+      end
+      # END
+
       # Pad line number if needed
       line_number_size = line_number.to_s.size
       (max_line_number_size - line_number_size).times do

@@ -11,12 +11,12 @@ module IC::ReplInterface
     @repl : Crystal::Repl? = nil
     @auto_completion = AutoCompletionHandler.new
     @history = History.new
-    @line_number = 1
+    getter line_number = 1
 
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
-    delegate :color?, :color=, to: @editor
+    delegate :color?, :color=, :lines, to: @editor
     property repl
     getter auto_completion
 
