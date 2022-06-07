@@ -50,7 +50,9 @@ module IC::ReplInterface
         end
       when '\r'.ord, '\n'.ord
         :enter
-      when ctrl('c'), ctrl('d'), ctrl('x'), '\0'.ord
+      when ctrl('c')
+        :keyboard_interrupt
+      when ctrl('d'), ctrl('x'), '\0'.ord
         :exit
       when ctrl('a')
         :move_cursor_to_begin

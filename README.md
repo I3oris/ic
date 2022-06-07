@@ -87,7 +87,8 @@ On the `pry` prompt you can type:
 * `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
 * `ctrl-a`: Move cursor to begin of the expression.
 * `ctrl-e`: Move cursor to end of the expression.
-* ... : more up-coming.
+* `ctrl-c`: Keyboard Interruption.
+* `ctrl-d`: Exit (EOF).
 
 only on debugger (pry):
 * `ctrl-up`: `whereami`

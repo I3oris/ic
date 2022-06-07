@@ -29,6 +29,18 @@ class Crystal::Repl::Interpreter
   @pry_interface = IC::PryInterface.new
 
   private def pry(ip, instructions, stack_bottom, stack)
+    # We trigger keyboard interrupt here because only 'pry' can interrupt the running program.
+    if @keyboard_interrupt
+      @stack.clear
+      @call_stack = [] of CallFrame
+      @call_stack_leave_index = 0
+      @block_level = 0
+      @compiled_def = nil
+      @keyboard_interrupt = false
+      self.pry = false
+      raise KeyboardInterrupt.new
+    end
+
     call_frame = @call_stack.last
     compiled_def = call_frame.compiled_def
     a_def = compiled_def.def

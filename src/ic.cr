@@ -14,6 +14,7 @@ module IC
     color = repl.program.color?
 
     repl.public_load_prelude
+    repl.bind_keyboard_interrupt
 
     input = ReplInterface::ReplInterface.new
     input.color = color
@@ -25,6 +26,8 @@ module IC
 
       # Explicitly exit the debugger
       repl.pry = false
+    rescue ex : Crystal::Repl::KeyboardInterrupt
+      puts
     rescue ex : Crystal::Repl::EscapingException
       print "Unhandled exception: "
       print ex
@@ -81,6 +84,7 @@ class Crystal::Repl
     @interpreter.pry = pry
   end
 
+  # Cleans the stack and the main visitor
   def clean
     @main_visitor.clean
   end
@@ -98,6 +102,39 @@ class Crystal::Repl
 
     @buffer = ""
     load_prelude
+  end
+
+  class KeyboardInterrupt < Exception
+  end
+
+  def bind_keyboard_interrupt
+    @interpreter.bind_keyboard_interrupt
+  end
+end
+
+class Crystal::Repl::Interpreter
+  @keyboard_interrupt = false
+
+  # Interrupts the running program and raises `KeyboardInterrupt`.
+  def keyboard_interrupt
+    # We enable pry to be able to handle interruption.
+    @pry = @keyboard_interrupt = true
+  end
+
+  # The interpreter to stop when `Signal::INT` is caught.
+  @@keyboard_interrupt_target : Crystal::Repl::Interpreter?
+
+  # Associates `Signal::INT` to an interruption of `self`.
+  def bind_keyboard_interrupt
+    @@keyboard_interrupt_target = self
+
+    # We use `libC.signal` because `Signal.trap` doesn't trigger handler while the process is busy
+    # (e.g. an infinite loop)
+    LibC.signal ::Signal::INT.value, ->(_value : Int32) do
+      # Inside the LibC signal handler, only a very limited of function are allowed
+      # Here it's safe because we only use an `if` and set instance vars.
+      @@keyboard_interrupt_target.try &.keyboard_interrupt
+    end
   end
 end
 
