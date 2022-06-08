@@ -92,9 +92,9 @@ module IC::ReplInterface
         when :move_cursor_to_end
           @editor.move_cursor_to_end
         when :keyboard_interrupt
-          @editor.update { @auto_completion.close } if @auto_completion.open?
-          puts
+          @editor.end_editing { @auto_completion.close }
           puts "^C"
+          @history.set_to_last
           @editor.prompt_next
           next
         when Char

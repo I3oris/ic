@@ -157,6 +157,11 @@ module IC::ReplInterface
       @expression = @expression_height = @colorized_lines = nil
     end
 
+    def clear_expression
+      @lines.clear << ""
+      @expression = @expression_height = @colorized_lines = nil
+    end
+
     def <<(char : Char)
       return insert_new_line(0) if char.in? '\n', '\r'
 

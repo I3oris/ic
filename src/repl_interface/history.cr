@@ -16,15 +16,19 @@ module IC::ReplInterface
       else
         @history.push(lines)
       end
-      @index = @history.size
-
-      @edited_history.fill(nil).push(nil)
+      set_to_last
     end
 
     def clear
       @history.clear
       @edited_history.clear.push(nil)
       @index = 0
+    end
+
+    # Sets the index to last added value
+    def set_to_last
+      @index = @history.size
+      @edited_history.fill(nil).push(nil)
     end
 
     def up(current_edited_lines : Array(String), &)
