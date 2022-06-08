@@ -38,7 +38,7 @@ module IC::ReplInterface
   # @editor.prompt_next
   # ```
   #
-  # The above has displayed:
+  # The above display:
   #
   # prompt>puts "Hello World"
   # prompt>  puts "!"
@@ -229,16 +229,6 @@ module IC::ReplInterface
     # e.g. here "ooooooooong".size = 10
     private def last_part_size(line_size)
       (@prompt_size + line_size) % Term::Size.width
-    end
-
-    # Returns the part number *p* of this line:
-    private def part(line, p)
-      first_part_size = (Term::Size.width - @prompt_size)
-      if p == 0
-        line[0...first_part_size]
-      else
-        line[(first_part_size + (p - 1)*Term::Size.width)...(first_part_size + p*Term::Size.width)]
-      end
     end
 
     # Returns the height of this line, (1 on common lines, more on wrapped lines):
@@ -551,7 +541,7 @@ module IC::ReplInterface
     end
 
     def end_editing(replacement : Array(String)? = nil)
-      end_editing(replace) { }
+      end_editing(replacement) { }
     end
 
     # Yields a callback called after rewind the cursor and before reprint the *replacement*.
@@ -673,7 +663,7 @@ module IC::ReplInterface
       io.puts if is_last_part? && last_part_size(line_size) == 0
     end
 
-    # Prints the colorized expression, this last is clipped if it's higher than screen.
+    # Prints the colorized expression, this later is clipped if it's higher than screen.
     # The only displayed part of the expression is delimited by `view_bounds` and depend of the value of
     # `@scroll_offset`.
     # Lines that takes more than one line (if wrapped) are cut in consequence.
@@ -692,8 +682,9 @@ module IC::ReplInterface
 
       y = 0
 
-      # Track the real cursor position so we are able to correctly retrieve it to its original position (before clearing screen):
-      real_cursor_x = real_cursor_y = 0
+      # While printing, real cursor move, but @x/@y don't, so we track the moved cursor position to be able to
+      # restore real cursor at @x/@y position.
+      cursor_move_x = cursor_move_y = 0
 
       display = String.build do |io|
         # Iterate over the uncolored lines because we need to know the true size of each line:
@@ -703,30 +694,27 @@ module IC::ReplInterface
           break if y > end_
 
           if start <= y && y + line_height - 1 <= end_
-            # The line can hold entirely between the view bound, print it:
+            # The line can hold entirely between the view bounds, print it:
             print_line(io, colorized_lines[line_index], line_index, line.size, prompt?: true, first?: first, is_last_part?: true)
             first = false
 
-            real_cursor_x = line.size
-            real_cursor_y = line_index
+            cursor_move_x = line.size
+            cursor_move_y = line_index
 
             y += line_height
           else
-            # The line cannot holds entirely between the view bound, we need to check each part individually:
-            line_height.times do |part_number|
+            # The line cannot holds entirely between the view bounds.
+            # We need to cut the line into each part and display only parts that hold in the view
+            colorized_parts = parts_from_colorized(colorized_lines[line_index])
+
+            colorized_parts.each_with_index do |colorized_part, part_number|
               if start <= y <= end_
                 # The part holds on the view, we can print it.
-                # FIXME:
-                # /!\ Because we cannot extract the part from the colorized line (inserted escape colors makes impossible to know when it wraps), we need to
-                # recolor each part individually.
-                # This lead to a wrong coloration!, but should not happen often (wrapped long lines, on expression higher than screen, scrolled on border of the view).
-                colorized_line = @highlighter.highlight(part(line, part_number), toggle: color?)
-
-                print_line(io, colorized_line, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
+                print_line(io, colorized_part, line_index, line.size, prompt?: part_number == 0, first?: first, is_last_part?: part_number == line_height - 1)
                 first = false
 
-                real_cursor_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
-                real_cursor_y = line_index
+                cursor_move_x = {line.size, (part_number + 1)*Term::Size.width - @prompt_size - 1}.min
+                cursor_move_y = line_index
               end
               y += 1
             end
@@ -739,9 +727,57 @@ module IC::ReplInterface
 
       # Retrieve the real cursor at its corresponding cursor position (`@x`, `@y`)
       x_save, y_save = @x, @y
-      @y = real_cursor_y
-      @x = real_cursor_x
+      @y = cursor_move_y
+      @x = cursor_move_x
       move_cursor_to(x_save, y_save, allow_scrolling: false)
+    end
+
+    # Splits the given *line* (colorized) into parts delimited by wrapping.
+    #
+    #  Because *line* is colorized, it's hard to know when it's wrap based on its size (colors sequence might appear anywhere in the string)
+    #  Here we does the following:
+    #  * Create a `String::Builder` for the first part (`part_builder`)
+    #  * Iterate over the *line*, parsing the color sequence
+    #  * Count cursor `x` for each char unless color sequences
+    #  * If count goes over term width:
+    #    reset `x` to 0, and create a new `String::Builder` for next part.
+    private def parts_from_colorized(line)
+      parts = Array(String).new
+
+      color_sequence = ""
+      part_builder = String::Builder.new
+
+      x = @prompt_size
+      chars = line.each_char
+      until (c = chars.next).is_a? Iterator::Stop
+        # Parse color sequence:
+        if c == '\e' && chars.next == '['
+          color_sequence = String.build do |seq|
+            seq << '\e' << '['
+
+            until (c = chars.next) == 'm'
+              break if c.is_a? Iterator::Stop
+              seq << c
+            end
+            seq << 'm'
+          end
+          part_builder << color_sequence
+        else
+          part_builder << c
+          x += 1
+        end
+
+        if x >= Term::Size.width
+          # Wrapping: save part and create a new builder for next part
+          part_builder << "\e[0m"
+          parts << part_builder.to_s
+          part_builder = String::Builder.new
+          part_builder << color_sequence # We also add the previous color sequence because color need to be preserved.
+          x = 0
+        end
+      end
+      parts << part_builder.to_s
+      parts
     end
   end
 end
