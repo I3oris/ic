@@ -23,6 +23,7 @@ INSTALL ?= /usr/bin/install
 all: $(O)
 
 $(O): $(LLVM_EXT_OBJ) $(SOURCES)
+	mkdir -p bin
 	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr -o $(O)
 
 .PHONY: release
