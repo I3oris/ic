@@ -5,5 +5,5 @@
 *.dwarf
 /ic
 /tests/
-/crystal-i/src/llvm/ext/llvm_ext.o
+/share/crystal-ic/src/llvm/ext/llvm_ext.o
 shard.lock

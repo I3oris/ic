@@ -33,24 +33,39 @@ git clone https://github.com/I3oris/ic.git
 cd ic
 
 make
+# => bin/ic
 ```
 
 ### Optimized Build:
-```
+```sh
 make release
 ```
 > This is a bit long, and require at least 4.5 GB of available RAM.
+
+### Install:
+
+install IC at `/usr/local/`
+```
+sudo make install
+```
 
 ## Usage:
 
 ### Interactive mode:
 ```sh
-./ic
+ic
 ```
 
 ### Run file with arguments:
+```cr
+# say_hello.cr
+
+name = ARGV[0]?
+puts "Hello #{name}!"
+```
+
 ```sh
-./ic say_hello.cr World
+ic say_hello.cr World
 ```
 
 ### Debugger (pry):
@@ -63,7 +78,7 @@ debugger # <= will start the debugger at this point
 name = ARGV[0]?
 puts "Hello #{name}!"
 ```
-Then, run as usually: `./ic say_hello.cr World`.
+Then, just run IC: `ic say_hello.cr World`.
 
 You will see the current position on your code:
 ```cr
