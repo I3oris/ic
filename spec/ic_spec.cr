@@ -1,5 +1,5 @@
 require "spec"
-require "../src/ic"
+require "../src/repl"
 
 describe IC do
 end

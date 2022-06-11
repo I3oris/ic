@@ -1,8 +1,8 @@
-require "../src/ic"
+require "../src/repl"
 
 module IC::Spec
   @@repl = Crystal::Repl.new
-  @@repl.public_load_prelude
+  @@repl.run_prelude
 
   def self.auto_completion_handler
     handler = IC::ReplInterface::AutoCompletionHandler.new
@@ -42,5 +42,14 @@ module IC::Spec
   def self.verify_history(history, entries, index)
     history.@history.should eq entries
     history.@index.should eq index
+  end
+
+  def self.verify_read_char(to_read, expect : Array)
+    chars = [] of Char | Symbol | String?
+    io = IO::Memory.new
+    io << to_read
+    io.rewind
+    IC::ReplInterface::CharReader.read_chars(io) { |c| chars << c }
+    chars.should eq expect
   end
 end

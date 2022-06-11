@@ -62,6 +62,10 @@ class Crystal::Repl
     interpret_exit
   end
 
+  def run_prelude
+    load_prelude
+  end
+
   private def run_next_code(code, initial_line_number = 0)
     node = create_parser(code, initial_line_number).parse
     interpret(node)
