@@ -20,5 +20,7 @@ Style/RedundantReturn:
   Severity: Warning
 
 Excluded:
-  - crystal-i
+  - share/crystal-ic
+  - src/highlighter.cr
+  - src/pry.cr
   - tests/*
