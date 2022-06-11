@@ -1,10 +1,15 @@
 module IC::ReplInterface
   module CharReader
-    def self.read_chars(io = STDIN, &)
+    def self.read_chars(io : T = STDIN, &) forall T
       slice_buffer = Bytes.new(1024)
 
       loop do
-        nb_read = io.raw { io.read(slice_buffer) }
+        nb_read =
+          {% if T.has_method?(:raw) %}
+            io.raw { io.read(slice_buffer) }
+          {% else %}
+            io.read(slice_buffer)
+          {% end %}
 
         c = parse_escape_sequence(slice_buffer[0...nb_read])
         yield c if c
@@ -14,9 +19,8 @@ module IC::ReplInterface
     end
 
     private def self.parse_escape_sequence(chars : Bytes) : Char | Symbol | String?
-      if chars.size > 6
-        return String.new(chars)
-      end
+      return String.new(chars) if chars.size > 6
+      return :exit if chars.empty?
 
       case chars[0]?
       when '\e'.ord
