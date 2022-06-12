@@ -1,11 +1,13 @@
 CRYSTAL_PATH ?= $(shell pwd)/share/crystal-ic/src
 CRYSTAL_CONFIG_PATH ?= '$$ORIGIN/../share/crystal-ic/src'
+CRYSTAL_LIB_CONFIG_PATH ?= '$$ORIGIN/../lib/ic/share/crystal-ic/src'
 
 COMPILER ?= crystal
 FLAGS ?= --progress
-RELEASE_FLAGS ?= --progress --static
+RELEASE_FLAGS ?= --progress --static --release
 
 ENV ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
+ENV_LIB ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_LIB_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 SOURCES := $(shell find src -name '*.cr')
 O := bin/ic
 
@@ -61,6 +63,15 @@ uninstall: ## Uninstall the compiler from DESTDIR
 
 .PHONY: clean
 clean:
-	rm $(LLVM_EXT_OBJ)
-	rm $(O)
+	rm -f $(LLVM_EXT_OBJ)
+	rm -f $(O)
 
+.PHONY: lib_build
+lib_build: clean $(LLVM_EXT_OBJ)
+	mkdir -p bin
+	$(ENV_LIB) $(COMPILER) build $(FLAGS) src/ic.cr -o $(O)
+
+.PHONY: postinstall
+postinstall: lib_build
+	mkdir -p ../../bin
+	cp $(O) ../../bin/
