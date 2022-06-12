@@ -49,6 +49,18 @@ install IC at `/usr/local/`
 sudo make install
 ```
 
+### As a Shard
+
+Add this to your `shard.yml` file:
+
+```yaml
+development_dependencies:
+  ic:
+    github: I3oris/ic
+```
+
+And run `shards install`
+
 ## Usage:
 
 ### Interactive mode:
