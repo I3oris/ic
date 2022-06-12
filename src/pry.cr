@@ -26,7 +26,7 @@ end
 
 # from compiler/crystal/interpreter/interpreter.cr: (1.3.0-dev)
 class Crystal::Repl::Interpreter
-  @pry_interface = IC::PryInterface.new
+  getter pry_interface = IC::PryInterface.new
 
   private def pry(ip, instructions, stack_bottom, stack)
     # We trigger keyboard interrupt here because only 'pry' can interrupt the running program.
@@ -41,6 +41,7 @@ class Crystal::Repl::Interpreter
       raise KeyboardInterrupt.new
     end
 
+    output = @pry_interface.output
     call_frame = @call_stack.last
     compiled_def = call_frame.compiled_def
     a_def = compiled_def.def
@@ -119,11 +120,11 @@ class Crystal::Repl::Interpreter
           whereami(a_def, location)
           next
         when "*d"
-          puts compiled_def.local_vars
-          puts Disassembler.disassemble(@context, compiled_def)
+          output.puts compiled_def.local_vars
+          output.puts Disassembler.disassemble(@context, compiled_def)
           next
         when "*s"
-          puts Slice.new(@stack, stack - @stack).hexdump
+          output.puts Slice.new(@stack, stack - @stack).hexdump
           next
         end
 
@@ -140,7 +141,7 @@ class Crystal::Repl::Interpreter
 
           value = interpreter.interpret(line_node, meta_vars)
           # IC MODIFICATION:
-          puts " => #{IC::Highlighter.highlight(value.to_s, toggle: @context.program.color?)}"
+          output.puts " => #{IC::Highlighter.highlight(value.to_s, toggle: @context.program.color?)}"
           # WAS:
           # puts value.to_s
           # END
@@ -152,10 +153,10 @@ class Crystal::Repl::Interpreter
           # ex.color = true
           # END
           ex.error_trace = true
-          puts ex
+          output.puts ex
           next
         rescue ex : Exception
-          ex.inspect_with_backtrace(STDOUT)
+          ex.inspect_with_backtrace(output)
           next
         end
       end
@@ -170,6 +171,8 @@ class Crystal::Repl::Interpreter
     column_number = location.column_number
 
     # IC ADDING:
+    output = @pry_interface.output
+
     a_def_owner = @context.program.colorize(a_def.owner.to_s).blue.underline
     hashtag = @context.program.colorize("#").dark_gray.bold
     # END
@@ -179,12 +182,12 @@ class Crystal::Repl::Interpreter
       return if filename.empty?
       # END
 
-      puts "From: #{Crystal.relative_filename(filename)}:#{line_number}:#{column_number} #{a_def_owner}#{hashtag}#{a_def.name}:"
+      output.puts "From: #{Crystal.relative_filename(filename)}:#{line_number}:#{column_number} #{a_def_owner}#{hashtag}#{a_def.name}:"
     else
-      puts "From: #{location} #{a_def_owner}#{hashtag}#{a_def.name}:"
+      output.puts "From: #{location} #{a_def_owner}#{hashtag}#{a_def.name}:"
     end
 
-    puts
+    output.puts
 
     lines =
       case filename
@@ -210,9 +213,9 @@ class Crystal::Repl::Interpreter
     min_line_number.upto(max_line_number) do |line_number|
       line = lines[line_number - 1]
       if line_number == location.line_number
-        print " => "
+        output.print " => "
       else
-        print "    "
+        output.print "    "
       end
 
       # IC ADDING:
@@ -224,17 +227,17 @@ class Crystal::Repl::Interpreter
       # Pad line number if needed
       line_number_size = line_number.to_s.size
       (max_line_number_size - line_number_size).times do
-        print ' '
+        output.print ' '
       end
 
       # IC MODIFICATION:
-      print @context.program.colorize(line_number).blue
+      output.print @context.program.colorize(line_number).blue
       # WAS:
       # print line_number.colorize.blue
       # END
-      print ": "
-      puts line
+      output.print ": "
+      output.puts line
     end
-    puts
+    output.puts
   end
 end

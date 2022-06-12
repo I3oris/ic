@@ -16,7 +16,7 @@ module IC::ReplInterface
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
-    delegate :color?, :color=, :lines, to: @editor
+    delegate :color?, :color=, :lines, :output, :output=, to: @editor
     property repl
     getter auto_completion
 
@@ -92,8 +92,8 @@ module IC::ReplInterface
         when :move_cursor_to_end
           @editor.move_cursor_to_end
         when :keyboard_interrupt
-          @editor.end_editing { @auto_completion.close(STDOUT) }
-          puts "^C"
+          @editor.end_editing { @auto_completion.close(output) }
+          output.puts "^C"
           @history.set_to_last
           @editor.prompt_next
           next
@@ -109,7 +109,7 @@ module IC::ReplInterface
         end
 
         if !read.in?('\t', :enter, :shift_tab, :escape) && @auto_completion.open?
-          @editor.update { @auto_completion.clear(STDOUT) }
+          @editor.update { @auto_completion.clear(output) }
         end
       end
     end
@@ -141,14 +141,14 @@ module IC::ReplInterface
         when "# clear_history", "#clear_history"
           @history.clear
           submit_expr(history: false) do
-            puts " => #{"✔".colorize(:green).toggle(color?)}"
+            output.puts " => #{"✔".colorize(:green).toggle(color?)}"
           end
           return
         when "# reset", "#reset"
           submit_expr do
             status = self.reset rescue false
             icon = status ? "✔".colorize(:green) : "×".colorize(:red)
-            puts " => #{icon.toggle(color?)}"
+            output.puts " => #{icon.toggle(color?)}"
           end
           return
         when .blank?
@@ -223,7 +223,7 @@ module IC::ReplInterface
       @editor.update do
         # 4) Display completion entries:
         # @auto_completion.clear_previous_display
-        @auto_completion.display_entries(STDOUT, @editor.expression_height, color?)
+        @auto_completion.display_entries(output, @editor.expression_height, color?)
 
         # 5) Replace `word_on_cursor` by the replacement word:
         @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
@@ -242,7 +242,7 @@ module IC::ReplInterface
     end
 
     def on_escape
-      @editor.update { @auto_completion.close(STDOUT) }
+      @editor.update { @auto_completion.close(output) }
     end
 
     private def create_parser(code)
@@ -296,7 +296,7 @@ module IC::ReplInterface
 
     private def submit_expr(*, history = true, &)
       @editor.end_editing(replacement: formated) do
-        @auto_completion.close(STDOUT)
+        @auto_completion.close(output)
       end
 
       @line_number += @editor.lines.size
