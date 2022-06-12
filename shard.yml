@@ -12,6 +12,9 @@ crystal: 1.1.1
 
 license: MIT
 
+scripts:
+  postinstall: make postinstall
+
 development_dependencies:
   ameba:
     github: crystal-ameba/ameba
