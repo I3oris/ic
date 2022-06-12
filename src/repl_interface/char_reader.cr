@@ -1,15 +1,10 @@
 module IC::ReplInterface
   module CharReader
-    def self.read_chars(io : T = STDIN, &) forall T
+    def self.read_chars(io = STDIN, &)
       slice_buffer = Bytes.new(1024)
 
       loop do
-        nb_read =
-          {% if T.has_method?(:raw) %}
-            io.raw { io.read(slice_buffer) }
-          {% else %}
-            io.read(slice_buffer)
-          {% end %}
+        nb_read = raw(io) { io.read(slice_buffer) }
 
         c = parse_escape_sequence(slice_buffer[0...nb_read])
         yield c if c
@@ -71,6 +66,14 @@ module IC::ReplInterface
           String.new chars
         end
       end
+    end
+
+    private def self.raw(io : T, &) forall T
+      {% if T.has_method?(:raw) %}
+        io.raw { yield io }
+      {% else %}
+        yield io
+      {% end %}
     end
 
     private def self.ctrl(k)
