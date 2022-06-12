@@ -4,7 +4,7 @@ CRYSTAL_LIB_CONFIG_PATH ?= '$$ORIGIN/../lib/ic/share/crystal-ic/src'
 
 COMPILER ?= crystal
 FLAGS ?= --progress
-RELEASE_FLAGS ?= --progress --static --release
+RELEASE_FLAGS ?= --progress --release
 
 ENV ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 ENV_LIB ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_LIB_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
@@ -52,8 +52,6 @@ install: $(O) ## Install the compiler at DESTDIR
 
 	$(INSTALL) -d -m 0755 "$(DESTDIR)/share/licenses/ic/"
 	$(INSTALL) -m 644 LICENSE "$(DESTDIR)/share/licenses/ic/LICENSE"
-
-# TODO make uninstall
 
 .PHONY: uninstall
 uninstall: ## Uninstall the compiler from DESTDIR
