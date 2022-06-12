@@ -54,6 +54,7 @@ module IC::ReplInterface
     end
 
     property? color = true
+    property output : IO = STDOUT
 
     @highlighter = Highlighter.new
     @prompt : Int32, Bool -> String
@@ -80,7 +81,7 @@ module IC::ReplInterface
     def initialize(&@prompt : Int32, Bool -> String)
       @prompt_size = @prompt.call(0, false).size # uncolorized size
 
-      at_exit { print Term::Cursor.show }
+      at_exit { @output.print Term::Cursor.show }
     end
 
     private def move_cursor(x, y)
@@ -89,7 +90,7 @@ module IC::ReplInterface
     end
 
     private def move_real_cursor(x, y)
-      print Term::Cursor.move(x, -y)
+      @output.print Term::Cursor.move(x, -y)
     end
 
     private def move_abs_cursor(@x, @y)
@@ -518,7 +519,7 @@ module IC::ReplInterface
     # then yields for modifications, and displays the new expression.
     # cursor is adjusted to not overflow if the new expression is smaller.
     def update(force_full_view = false, &)
-      print Term::Cursor.hide
+      @output.print Term::Cursor.hide
       rewind_cursor
 
       with self yield
@@ -530,15 +531,15 @@ module IC::ReplInterface
       @x = @x.clamp(0, @lines[@y].size)
 
       print_expression(force_full_view)
-      print Term::Cursor.show
+      @output.print Term::Cursor.show
     end
 
     def update(force_full_view = false)
-      print Term::Cursor.hide
+      @output.print Term::Cursor.hide
       rewind_cursor
 
       print_expression(force_full_view)
-      print Term::Cursor.show
+      @output.print Term::Cursor.show
     end
 
     def replace(lines : Array(String))
@@ -564,7 +565,7 @@ module IC::ReplInterface
       end
 
       move_cursor_to_end(allow_scrolling: false)
-      puts
+      @output.puts
     end
 
     def prompt_next
@@ -572,7 +573,7 @@ module IC::ReplInterface
       @lines = [""]
       @expression = @expression_height = @colorized_lines = nil
       reset_cursor
-      print @prompt.call(0, color?)
+      @output.print @prompt.call(0, color?)
     end
 
     def scroll_up
@@ -641,14 +642,14 @@ module IC::ReplInterface
     # Rewinds the real cursor to the beginning of the expression without changing @x/@y cursor:
     private def rewind_cursor
       if expression_height >= Term::Size.height
-        print Term::Cursor.row(1)
+        @output.print Term::Cursor.row(1)
       else
         x_save, y_save = @x, @y
         move_cursor_to_begin(allow_scrolling: false)
         @x, @y = x_save, y_save
       end
 
-      print Term::Cursor.column(1)
+      @output.print Term::Cursor.column(1)
     end
 
     private def print_line(io, colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
@@ -727,8 +728,8 @@ module IC::ReplInterface
         end
       end
 
-      print Term::Cursor.clear_screen_down
-      print display
+      @output.print Term::Cursor.clear_screen_down
+      @output.print display
 
       # Retrieve the real cursor at its corresponding cursor position (`@x`, `@y`)
       x_save, y_save = @x, @y
