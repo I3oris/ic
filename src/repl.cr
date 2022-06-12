@@ -9,32 +9,33 @@ class Crystal::Repl
 
     load_prelude
 
-    input = IC::ReplInterface::ReplInterface.new
-    input.color = color
-    input.repl = self
+    repl_interface = IC::ReplInterface::ReplInterface.new
+    repl_interface.color = color
+    repl_interface.output = output = @interpreter.pry_interface.output = @program.stdout
+    repl_interface.repl = self
 
-    input.run do |expr|
-      result = run_next_code(expr, initial_line_number: input.line_number - input.lines.size - 1)
-      puts " => #{IC::Highlighter.highlight(result.to_s, toggle: color)}"
+    repl_interface.run do |expr|
+      result = run_next_code(expr, initial_line_number: repl_interface.line_number - repl_interface.lines.size - 1)
+      output.puts " => #{IC::Highlighter.highlight(result.to_s, toggle: color)}"
 
       # Explicitly exit the debugger
       @interpreter.pry = false
     rescue ex : Crystal::Repl::KeyboardInterrupt
-      puts
+      output.puts
     rescue ex : Crystal::Repl::EscapingException
-      print "Unhandled exception: "
-      print ex
+      output.print "Unhandled exception: "
+      output.print ex
     rescue ex : Crystal::CodeError
       self.clean
 
       ex.color = color
       ex.error_trace = true
-      puts ex
+      output.puts ex
     rescue ex : Exception
-      ex.inspect_with_backtrace(STDOUT)
+      ex.inspect_with_backtrace(output)
     end
 
-    puts
+    output.puts
   end
 
   def create_parser(code, initial_line_number = 0)
