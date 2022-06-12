@@ -29,7 +29,7 @@ $(O): $(LLVM_EXT_OBJ) $(SOURCES)
 .PHONY: release
 release: $(LLVM_EXT_OBJ)
 	mkdir -p bin
-	$(ENV) $(COMPILER) build $(RELEASE_FLAGS) src/main.cr -o $(O)
+	$(ENV) $(COMPILER) build $(RELEASE_FLAGS) src/ic.cr -o $(O)
 
 $(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
 	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)
