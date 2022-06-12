@@ -92,7 +92,7 @@ module IC::ReplInterface
         when :move_cursor_to_end
           @editor.move_cursor_to_end
         when :keyboard_interrupt
-          @editor.end_editing { @auto_completion.close }
+          @editor.end_editing { @auto_completion.close(STDOUT) }
           puts "^C"
           @history.set_to_last
           @editor.prompt_next
@@ -109,7 +109,7 @@ module IC::ReplInterface
         end
 
         if !read.in?('\t', :enter, :shift_tab, :escape) && @auto_completion.open?
-          @editor.update { @auto_completion.clear }
+          @editor.update { @auto_completion.clear(STDOUT) }
         end
       end
     end
@@ -223,7 +223,7 @@ module IC::ReplInterface
       @editor.update do
         # 4) Display completion entries:
         # @auto_completion.clear_previous_display
-        @auto_completion.display_entries(@editor.expression_height, color?)
+        @auto_completion.display_entries(STDOUT, @editor.expression_height, color?)
 
         # 5) Replace `word_on_cursor` by the replacement word:
         @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
@@ -242,7 +242,7 @@ module IC::ReplInterface
     end
 
     def on_escape
-      @editor.update { @auto_completion.close }
+      @editor.update { @auto_completion.close(STDOUT) }
     end
 
     private def create_parser(code)
@@ -296,7 +296,7 @@ module IC::ReplInterface
 
     private def submit_expr(*, history = true, &)
       @editor.end_editing(replacement: formated) do
-        @auto_completion.close
+        @auto_completion.close(STDOUT)
       end
 
       @line_number += @editor.lines.size

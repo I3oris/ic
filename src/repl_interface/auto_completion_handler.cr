@@ -341,8 +341,8 @@ module IC::ReplInterface
     end
 
     # [5] Displays completion entries by columns, minimizing the height:
-    def display_entries(expression_height, color? = true)
-      clear_previous_display
+    def display_entries(io, expression_height, color? = true)
+      clear_previous_display(io)
 
       # Compute the max number of row in a way to never take more than 3/4 of the screen.
       max_nb_row = (Term::Size.height - expression_height)*3//4 - 1
@@ -350,8 +350,8 @@ module IC::ReplInterface
       return if @entries.size <= 1
 
       # Print scope type name:
-      print @scope_name.colorize(:blue).underline.toggle(color?)
-      puts ":"
+      io.print @scope_name.colorize(:blue).underline.toggle(color?)
+      io.puts ":"
 
       nb_rows = compute_nb_row(@entries, max_nb_row)
 
@@ -391,10 +391,10 @@ module IC::ReplInterface
           if r + c*nb_rows == @selection_pos
             entry_str = entry_str.colorize.toggle(color?).bright.on_dark_gray
           end
-          print entry_str
+          io.print entry_str
         end
-        print Term::Cursor.clear_line_after
-        puts
+        io.print Term::Cursor.clear_line_after
+        io.puts
       end
 
       # Store the height actually displayed, so we can clear it later
@@ -422,22 +422,22 @@ module IC::ReplInterface
       @entries[new_pos]
     end
 
-    private def clear_previous_display
-      print Term::Cursor.clear_line_after
+    private def clear_previous_display(io)
+      io.print Term::Cursor.clear_line_after
 
       if height = @previous_completion_display_height
-        print Term::Cursor.up(height)
-        print Term::Cursor.clear_screen_down
+        io.print Term::Cursor.up(height)
+        io.print Term::Cursor.clear_screen_down
 
         @previous_completion_display_height = nil
       end
     end
 
-    def clear
+    def clear(io)
       if open?
         prev_height = @previous_completion_display_height || 0
-        clear_previous_display
-        prev_height.times { puts }
+        clear_previous_display(io)
+        prev_height.times { io.puts }
         @previous_completion_display_height = prev_height
 
         @selection_pos = nil
@@ -446,8 +446,8 @@ module IC::ReplInterface
       end
     end
 
-    def close
-      clear_previous_display
+    def close(io)
+      clear_previous_display(io)
       @selection_pos = nil
       @entries.clear
       @open = false
