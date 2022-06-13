@@ -36,7 +36,7 @@ module IC::ReplInterface
         @edited_history[@index] = current_edited_lines
 
         @index -= 1
-        yield @edited_history[@index]? || @history[@index]
+        yield (@edited_history[@index]? || @history[@index]).dup
       end
     end
 
@@ -45,7 +45,7 @@ module IC::ReplInterface
         @edited_history[@index] = current_edited_lines
 
         @index += 1
-        yield @edited_history[@index]? || @history[@index]
+        yield (@edited_history[@index]? || @history[@index]).dup
       end
     end
   end

@@ -546,7 +546,7 @@ module IC::ReplInterface
     end
 
     def replace(lines : Array(String))
-      update { @lines = lines.dup }
+      update { @lines = lines }
     end
 
     def end_editing(replacement : Array(String)? = nil)
