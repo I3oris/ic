@@ -1,5 +1,12 @@
 require "../src/repl"
 
+module IC::ReplInterface::Term::Size
+  # For spec, simulate of term size of 5 lines, and 15 characters wide:
+  def self.size
+    {15, 5}
+  end
+end
+
 module IC::Spec
   @@repl = Crystal::Repl.new
   @@repl.run_prelude
@@ -14,6 +21,33 @@ module IC::Spec
     receiver, scope = handler.parse_receiver_code(code)
     receiver.try(&.type).to_s.should eq type
     scope.to_s.should eq with_scope
+  end
+
+  def self.expression_editor
+    editor = IC::ReplInterface::ExpressionEditor.new do |line_number, _color?|
+      # Prompt size = 5
+      "p:#{sprintf("%02d", line_number)}>"
+    end
+    editor.output = IO::Memory.new
+    editor.color = false
+    editor
+  end
+
+  def self.verify_editor(editor, expression : String)
+    editor.expression.should eq expression
+  end
+
+  def self.verify_editor(editor, x : Int32, y : Int32)
+    {editor.x, editor.y}.should eq({x, y})
+  end
+
+  def self.verify_editor(editor, expression : String, x : Int32, y : Int32)
+    self.verify_editor(editor, expression)
+    self.verify_editor(editor, x, y)
+  end
+
+  def self.verify_editor_ouput(editor, output)
+    editor.output.to_s.should eq output
   end
 
   def self.history_entries
