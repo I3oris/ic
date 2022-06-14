@@ -241,7 +241,7 @@ module IC::ReplInterface
       end
     end
 
-    def on_escape
+    private def on_escape
       @editor.update { @auto_completion.close(output) }
     end
 

@@ -106,7 +106,7 @@ module IC::ReplInterface
     end
 
     # [1] Returns missing 'end's of an expression in order to parse it.
-    def missing_ends(expr) : String
+    private def missing_ends(expr) : String
       lexer = Crystal::Lexer.new(expr)
 
       delimiter_stack = [] of Symbol
@@ -274,7 +274,7 @@ module IC::ReplInterface
     end
 
     # [4]
-    def internal_find_require_entries(name)
+    private def internal_find_require_entries(name)
       name = name.strip('"')
 
       if context = @context
@@ -301,6 +301,7 @@ module IC::ReplInterface
       @scope_name = "require"
     end
 
+    # [4]
     private def internal_find_const_entries(scope, names)
       @entries.clear
       @scope_name = ""
