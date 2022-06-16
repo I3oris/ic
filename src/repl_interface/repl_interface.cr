@@ -2,7 +2,7 @@ require "./history"
 require "./expression_editor"
 require "./char_reader"
 require "./auto_completion_handler"
-require "./crystal_parser_nest"
+require "../crystal_parser_nest"
 require "colorize"
 
 module IC::ReplInterface

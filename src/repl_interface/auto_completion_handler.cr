@@ -1,4 +1,4 @@
-require "./crystal_state"
+require "../crystal_state"
 
 module IC::ReplInterface
   # Handles auto completion.

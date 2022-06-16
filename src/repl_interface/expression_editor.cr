@@ -1,5 +1,5 @@
-require "./term_cursor"
-require "./term_size"
+require "../term_cursor"
+require "../term_size"
 require "../highlighter"
 
 module IC::ReplInterface

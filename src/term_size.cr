@@ -1,4 +1,4 @@
-module IC::ReplInterface::Term
+module IC::Term
   module Size
     lib C
       struct WinSize

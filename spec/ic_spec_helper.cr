@@ -1,6 +1,6 @@
 require "../src/repl"
 
-module IC::ReplInterface::Term::Size
+module IC::Term::Size
   # For spec, simulate of term size of 5 lines, and 15 characters wide:
   def self.size
     {15, 5}

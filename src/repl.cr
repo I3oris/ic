@@ -1,7 +1,7 @@
 require "compiler/crystal/interpreter"
 require "./repl_interface/repl_interface"
 require "./pry"
-require "./errors"
+require "./crystal_errors"
 
 class Crystal::Repl
   def run
