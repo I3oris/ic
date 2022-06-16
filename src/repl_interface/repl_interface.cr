@@ -114,7 +114,7 @@ module IC::ReplInterface
       end
     end
 
-    # If overriden, can yield an expression to giveback to `run`, see `PryInterface`.
+    # If overridden, can yield an expression to giveback to `run`, see `PryInterface`.
     private def on_ctrl_up(& : String ->)
       @editor.scroll_down
     end
@@ -178,20 +178,10 @@ module IC::ReplInterface
       expr && expr.starts_with?('.') && !expr.starts_with?("..")
     end
 
-    # When `tab` is pressed for auto-completion, we does the followings things:
-    # 1) We retrieve the word under the cursor (corresponding to the method name being write)
-    # 2) Given the expression before the cursor, the auto-completion handler deduce the
-    #    context of auto-completion (which receiver, local vars, etc..)
-    # 3) We find entries corresponding to the context + the word_on_cursor. This will give us
-    #    the entries (`Array(String)` of method's names), the `receiver_type` name, and the
-    #    `replacement` name (`nil` if no entry, full name if only one entry, or partial name that match the most otherwise)
-    # 4) Then, during the @editor update, we display theses entries
-    # 5) At last, we replace the `word_on_cursor` by the `replacement` word, if any
-    # 6) Finally, we move cursor at the end of replaced text.
     private def auto_complete(shift_tab = false)
       line = @editor.current_line
 
-      # 1) Get current word on cursor:
+      # Retrieve the word under the cursor (corresponding to the method name being write)
       word_begin, word_end = @editor.word_bound
       word_on_cursor = line[word_begin..word_end]
 
@@ -202,42 +192,28 @@ module IC::ReplInterface
           replacement = @auto_completion.selection_next
         end
       else
-        # 2) Set context:
-        if repl = @repl
-          @auto_completion.set_context(repl)
-        end
-        # NOTE: if there have no `repl`, in case of `pry`, the context is set somewhere else before.
+        # Set auto-completion context from repl, allow auto-completion to take account of previously defined types, methods and local vars.
+        repl = @repl
+        @auto_completion.set_context(repl) if repl
 
+        # Get hole expression before cursor, allow auto-completion to deduce the receiver type
         expr = @editor.expression_before_cursor(x: word_begin)
-        receiver, scope = @auto_completion.parse_receiver_code(expr)
 
-        # 3) Find entries:
-        # entries, receiver_name,
-        replacement = @auto_completion.find_entries(
-          receiver: receiver,
-          scope: scope,
-          word_on_cursor: word_on_cursor,
-        )
+        # Compute auto-completion, return `replacement` (`nil` if no entry, full name if only one entry, or the begin match of entries otherwise)
+        replacement = @auto_completion.complete_on(word_on_cursor, expr)
       end
 
       @editor.update do
-        # 4) Display completion entries:
-        # @auto_completion.clear_previous_display
+        # Display completion entries:
         @auto_completion.display_entries(output, @editor.expression_height, color?)
 
-        # 5) Replace `word_on_cursor` by the replacement word:
+        # Replace `word_on_cursor` by the replacement word:
         @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
       end
 
-      # 6) Move cursor:
+      # Move cursor:
       if replacement
-        added_size = replacement.size - (@editor.x - word_begin)
-
-        if added_size > 0
-          (+added_size).times { @editor.move_cursor_right }
-        else
-          (-added_size).times { @editor.move_cursor_left }
-        end
+        @editor.move_cursor_to(x: word_begin + replacement.size, y: @editor.y)
       end
     end
 

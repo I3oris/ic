@@ -1,12 +1,23 @@
 require "./crystal_state"
 
 module IC::ReplInterface
-  # Handles the auto completion, this is done in five step:
-  # 1) Retrieve an parse the receiver code of the auto completed method call
-  # 2) Execute the semantic on the parsed node
-  # 3) Determine the context (local vars, main_visitor, etc..)
-  # 4) Search the method's name entries given a context and a receiver
-  # 5) Display of these entries.
+  # Handles auto completion.
+  # Provides following important methods:
+  #
+  # * `set_context`: Sets an execution context on auto-completion.
+  # Allow the handler to know program types, methods and local vars.
+  #
+  # * `complete_on`: Trigger the auto-completion given a *word_on_cursor* and expression before.
+  # Stores the list of entries, and returns the *replacement* string.
+  #
+  # * `display_entries`: Displays on screen the stored entries.
+  # Highlight the one selected. (initially `nil`).
+  #
+  # * `selection_next`/`selection_previous`: Increases/decrease the selected entry.
+  #
+  # * `clear`: Erases previous display on screen, but doesn't clear entries themselves.
+  #
+  # * `close`: Erases previous display and clear entries.
   class AutoCompletionHandler
     record AutoCompletionContext,
       local_vars : Crystal::Repl::LocalVars,
@@ -18,14 +29,42 @@ module IC::ReplInterface
 
     # Store the previous display height in order to properly clear the screen:
     @previous_completion_display_height : Int32? = nil
-    @entries = [] of String
     @scope_name = ""
     @selection_pos : Int32? = nil
+    getter entries = [] of String
     getter? open = false
 
-    # [1+2] Parses the receiver code:
+    # Determines the context from a Repl
+    def set_context(repl)
+      @context = AutoCompletionContext.new(
+        local_vars: repl.@interpreter.local_vars,
+        program: repl.program,
+        main_visitor: repl.@main_visitor,
+        special_commands: [] of String
+      )
+    end
+
+    # Sets the context directly (used by pry)
+    def set_context(local_vars, program, main_visitor, special_commands)
+      @context = AutoCompletionContext.new(local_vars, program, main_visitor, special_commands.sort)
+    end
+
+    # Triggers the auto-completion and returns a *replacement* string.
+    # *word_on_cursor* correspond to call name to complete.
+    # *expression_before_word_on_cursor* allow context to found the receiver type in which lookup auto-completion entries
+    #
+    # Stores the `entries` found.
+    # returns *replacement* that correspond to the greatest common root of founds entries.
+    # return *nil* is no entry found.
+    def complete_on(word_on_cursor : String, expression_before_word_on_cursor : String) : String?
+      receiver, scope = parse_receiver_code(expression_before_word_on_cursor)
+
+      find_entries(receiver, scope, word_on_cursor)
+    end
+
+    # Parses the receiver code:
     # Returns receiver AST if any, and the context type.
-    def parse_receiver_code(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
+    private def parse_receiver_code(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
       context = @context || return nil, nil
       program = context.program
 
@@ -105,7 +144,7 @@ module IC::ReplInterface
       end
     end
 
-    # [1] Returns missing 'end's of an expression in order to parse it.
+    # Returns missing 'end's of an expression in order to parse it.
     private def missing_ends(expr) : String
       lexer = Crystal::Lexer.new(expr)
 
@@ -164,47 +203,31 @@ module IC::ReplInterface
       end
     end
 
-    # [2] Determines the context from a Repl
-    def set_context(repl)
-      @context = AutoCompletionContext.new(
-        local_vars: repl.@interpreter.local_vars,
-        program: repl.program,
-        main_visitor: repl.@main_visitor,
-        special_commands: [] of String
-      )
-    end
-
-    # [2] Sets the context directly (used by pry):
-    def set_context(local_vars, program, main_visitor, special_commands)
-      @context = AutoCompletionContext.new(local_vars, program, main_visitor, special_commands.sort)
-    end
-
-    # [4] Finds completion entries from the word on cursor, `set_context` must be called before.
-    def find_entries(receiver, scope, word_on_cursor)
+    # Finds completion entries matching *word_on_cursor*, on *receiver* type, within a *scope*.
+    private def find_entries(receiver, scope, word_on_cursor)
       if receiver.is_a? Crystal::Require
-        internal_find_require_entries(word_on_cursor)
+        find_require_entries(word_on_cursor)
       else
         names = word_on_cursor.split("::", remove_empty: false)
         if names.size >= 2
-          internal_find_const_entries(scope, names)
+          find_const_entries(scope, names)
         else
-          internal_find_entries(receiver, scope, word_on_cursor)
+          find_def_entries(receiver, scope, word_on_cursor)
         end
       end
 
       return @entries.empty? ? nil : common_root(@entries)
     end
 
-    # [4]
-    private def internal_find_entries(receiver, scope, name)
+    private def find_def_entries(receiver, scope, name)
       @entries.clear
       @scope_name = ""
 
       if receiver
         scope = receiver_type = receiver.type rescue return
 
-        # Add defs from receiver_type:
-        @entries += find_def_entries(receiver_type, name).sort
+        # Add methods from receiver_type:
+        @entries += find_entries_on_type(receiver_type, name).sort
 
         # Add keyword methods (.is_a?, .nil?, ...):
         @entries += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
@@ -220,8 +243,8 @@ module IC::ReplInterface
         vars = context.local_vars.names_at_block_level_zero
         @entries += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
 
-        # Add defs from receiver_type:
-        @entries += find_def_entries(scope.metaclass, name).sort
+        # Add methods from receiver_type:
+        @entries += find_entries_on_type(scope.metaclass, name).sort
 
         # Add keywords:
         keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
@@ -237,11 +260,10 @@ module IC::ReplInterface
       @scope_name = scope.to_s
     end
 
-    # [4]
-    private def find_def_entries(type, name)
+    private def find_entries_on_type(type, name)
       results = [] of String
 
-      # Add def names from type:
+      # Add methods names from type:
       type.defs.try &.each
         .select do |def_name, defs|
           defs.any?(&.def.visibility.public?) &&
@@ -249,7 +271,7 @@ module IC::ReplInterface
         end
         .reject do |def_name, _|
           def_name.starts_with?('_') || def_name == "`" ||           # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
-            Highlighter::OPERATORS.any? { |op| op.to_s == def_name } # Avoid operators methods
+            Highlighter::OPERATORS.any? { |op| op.to_s == def_name } # Avoid operators methods. TODO: allow them?
         end
         .each do |def_name, _|
           results << def_name
@@ -265,16 +287,15 @@ module IC::ReplInterface
           results << macro_name
         end
 
-      # Recursively add def names from parents:
+      # Recursively add methods names from parents:
       type.parents.try &.each do |parent|
-        results += find_def_entries(parent, name)
+        results += find_entries_on_type(parent, name)
       end
 
       results
     end
 
-    # [4]
-    private def internal_find_require_entries(name)
+    private def find_require_entries(name)
       name = name.strip('"')
 
       if context = @context
@@ -301,8 +322,7 @@ module IC::ReplInterface
       @scope_name = "require"
     end
 
-    # [4]
-    private def internal_find_const_entries(scope, names)
+    private def find_const_entries(scope, names)
       @entries.clear
       @scope_name = ""
 
@@ -322,7 +342,7 @@ module IC::ReplInterface
       end
     end
 
-    # [4] Finds the common root text between given entries.
+    # Finds the common root text between given entries.
     private def common_root(entries)
       return "" if entries.empty?
       return entries[0] if entries.size == 1
@@ -341,7 +361,9 @@ module IC::ReplInterface
       entries[0][...(i - 1)]
     end
 
-    # [5] Displays completion entries by columns, minimizing the height:
+    # Displays completion entries by columns, minimizing the height.
+    # Highlight the selected entry (initially `nil`).
+    # AutoCompletionHandler is set as `open`.
     def display_entries(io, expression_height, color? = true)
       clear_previous_display(io)
 
@@ -385,7 +407,6 @@ module IC::ReplInterface
           end
 
           # Display entry:
-          # entry_str = Highlighter.highlight(entry.ljust(col_width), toggle: color?)
           entry_str = entry.ljust(col_width)
 
           # Colorize selection
@@ -403,6 +424,7 @@ module IC::ReplInterface
       @open = true
     end
 
+    # Increases selected entry.
     def selection_next
       if (pos = @selection_pos).nil?
         new_pos = 0
@@ -413,6 +435,7 @@ module IC::ReplInterface
       @entries[new_pos]
     end
 
+    # Decreases selected entry.
     def selection_previous
       if (pos = @selection_pos).nil?
         new_pos = 0
@@ -423,17 +446,8 @@ module IC::ReplInterface
       @entries[new_pos]
     end
 
-    private def clear_previous_display(io)
-      io.print Term::Cursor.clear_line_after
-
-      if height = @previous_completion_display_height
-        io.print Term::Cursor.up(height)
-        io.print Term::Cursor.clear_screen_down
-
-        @previous_completion_display_height = nil
-      end
-    end
-
+    # Erases previous display on screen.
+    # Doesn't clear entries.
     def clear(io)
       if open?
         prev_height = @previous_completion_display_height || 0
@@ -447,11 +461,24 @@ module IC::ReplInterface
       end
     end
 
+    # Erases previous display and clear entries.
+    # Sets AutoCompletionHandler as `close`.
     def close(io)
       clear_previous_display(io)
       @selection_pos = nil
       @entries.clear
       @open = false
+    end
+
+    private def clear_previous_display(io)
+      io.print Term::Cursor.clear_line_after
+
+      if height = @previous_completion_display_height
+        io.print Term::Cursor.up(height)
+        io.print Term::Cursor.clear_screen_down
+
+        @previous_completion_display_height = nil
+      end
     end
 
     private def nb_cols_hold_in_term_width(column_widths)
@@ -465,7 +492,7 @@ module IC::ReplInterface
       nb_cols
     end
 
-    # [5] Computes the min number of rows required to display entries:
+    # Computes the min number of rows required to display entries:
     # * if all entries cannot fit in `max_nb_row` rows, returns `max_nb_row`,
     # * if there are less than 10 entries, returns `entries.size` because in this case, it's more convenient to display them in one column.
     private def compute_nb_row(entries, max_nb_row)
@@ -488,7 +515,7 @@ module IC::ReplInterface
   end
 
   # Search for the auto-completion call, in found its receiver, its surrounding def if any, and its scope.
-  class GetAutoCompletionReceiverVisitor < Crystal::Visitor
+  private class GetAutoCompletionReceiverVisitor < Crystal::Visitor
     @found = false
     getter receiver : Crystal::ASTNode? = nil
     getter surrounding_def : Crystal::Def? = nil
