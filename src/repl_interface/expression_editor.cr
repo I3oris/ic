@@ -144,8 +144,8 @@ module IC::ReplInterface
     end
 
     # `"`, `:`, `'`, are not a delimiter because symbols and strings should be treated as one word.
-    # ditto for '!', '?' for question and exclamative method.
-    WORD_DELIMITERS = /[ \n\t\+\-,;@&%=<>*\/\\\[\]\(\)\{\}\|\.\~]/
+    # '=', !', '?' are not a delimiter because they could make part of method name.
+    WORD_DELIMITERS = /[ \n\t\+\-,;@&%<>*\/\\\[\]\(\)\{\}\|\.\~]/
 
     # Returns begin and end of the word under the cursor:
     def word_bound(x = @x, y = @y)
