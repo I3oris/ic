@@ -86,4 +86,23 @@ module IC::Spec
     IC::ReplInterface::CharReader.read_chars(io) { |c| chars << c }
     chars.should eq expect
   end
+
+  module MakePublic
+    macro included
+      {% for m in @type.methods.select(&.visibility.!= :public) %}
+        {{m}}
+      {% end %}
+    end
+  end
 end
+
+# Allow spec to test private methods
+{% for klass in %w(
+                  IC::ReplInterface::AutoCompletionHandler
+                  IC::ReplInterface::ReplInterface
+                  IC::ReplInterface::ExpressionEditor
+                ) %}
+  class {{klass.id}}
+    include IC::Spec::MakePublic
+  end
+{% end %}
