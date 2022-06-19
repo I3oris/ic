@@ -709,6 +709,10 @@ module IC::ReplInterface
           line_height = line_height(line)
 
           break if y > end_
+          if y + line_height <= start
+            y += line_height
+            next
+          end
 
           if start <= y && y + line_height - 1 <= end_
             # The line can hold entirely between the view bounds, print it:
