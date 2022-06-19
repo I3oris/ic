@@ -19,7 +19,8 @@ module IC::ReplInterface
 
       case chars[0]?
       when '\e'.ord
-        if chars[1]? == '['.ord
+        case chars[1]?
+        when '['.ord
           case chars[2]?
           when 'A'.ord then :up
           when 'B'.ord then :down
@@ -38,12 +39,28 @@ module IC::ReplInterface
               when 'C'.ord then :ctrl_right
               when 'D'.ord then :ctrl_left
               end
+            elsif chars[3]? == '~'.ord # linux console HOME
+              :move_cursor_to_begin
             end
+          when '4'.ord # linux console END
+            if chars[3]? == '~'.ord
+              :move_cursor_to_end
+            end
+          when 'H'.ord # xterm HOME
+            :move_cursor_to_begin
+          when 'F'.ord # xterm END
+            :move_cursor_to_end
           end
-        elsif chars[1]? == '\t'.ord
+        when '\t'.ord
           :shift_tab
-        elsif chars[1]? == '\r'.ord
+        when '\r'.ord
           :insert_new_line
+        when 'O'.ord
+          if chars[2]? == 'H'.ord # gnome terminal HOME
+            :move_cursor_to_begin
+          elsif chars[2]? == 'F'.ord # gnome terminal END
+            :move_cursor_to_end
+          end
         else
           :escape
         end

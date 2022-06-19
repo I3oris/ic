@@ -17,6 +17,12 @@ describe IC::ReplInterface::CharReader do
     IC::Spec.verify_read_char("\e[1;5B", expect: [:ctrl_down, :exit])
     IC::Spec.verify_read_char("\e[1;5C", expect: [:ctrl_right, :exit])
     IC::Spec.verify_read_char("\e[1;5D", expect: [:ctrl_left, :exit])
+    IC::Spec.verify_read_char("\e[H", expect: [:move_cursor_to_begin, :exit])
+    IC::Spec.verify_read_char("\e[F", expect: [:move_cursor_to_end, :exit])
+    IC::Spec.verify_read_char("\eOH", expect: [:move_cursor_to_begin, :exit])
+    IC::Spec.verify_read_char("\eOF", expect: [:move_cursor_to_end, :exit])
+    IC::Spec.verify_read_char("\e[1~", expect: [:move_cursor_to_begin, :exit])
+    IC::Spec.verify_read_char("\e[4~", expect: [:move_cursor_to_end, :exit])
 
     IC::Spec.verify_read_char("\e\t", expect: [:shift_tab, :exit])
     IC::Spec.verify_read_char("\e\r", expect: [:insert_new_line, :exit])
