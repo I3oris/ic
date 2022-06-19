@@ -579,7 +579,12 @@ module IC::ReplInterface
       @lines = [""]
       @expression = @expression_height = @colorized_lines = nil
       reset_cursor
-      @output.print @prompt.call(0, color?)
+      print_prompt(@output, 0)
+    end
+
+    private def print_prompt(io, line_index)
+      io.print @prompt.call(line_index, color?)
+      @prompt_size = @prompt.call(line_index, false).size # uncolorized size
     end
 
     def scroll_up
@@ -661,7 +666,7 @@ module IC::ReplInterface
     private def print_line(io, colorized_line, line_index, line_size, prompt?, first?, is_last_part?)
       if prompt?
         io.puts unless first?
-        io.print @prompt.call(line_index, color?)
+        print_prompt(io, line_index)
       end
       io.print colorized_line
 
