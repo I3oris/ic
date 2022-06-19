@@ -28,6 +28,7 @@ describe IC::ReplInterface::CharReader do
     IC::Spec.verify_read_char("\e\r", expect: [:insert_new_line, :exit])
     IC::Spec.verify_read_char("\e", expect: [:escape, :exit])
     IC::Spec.verify_read_char("\n", expect: [:enter, :exit])
+    IC::Spec.verify_read_char("\t", expect: [:tab, :exit])
 
     IC::Spec.verify_read_char('\0', expect: [:exit])
     IC::Spec.verify_read_char('\u0001', expect: [:move_cursor_to_begin, :exit])

@@ -79,7 +79,7 @@ module IC::ReplInterface
           @editor.update { delete }
         when :back
           @editor.update { back }
-        when '\t'
+        when :tab
           auto_complete
         when :shift_tab
           auto_complete(shift_tab: true)
@@ -108,7 +108,7 @@ module IC::ReplInterface
           end
         end
 
-        if !read.in?('\t', :enter, :shift_tab, :escape) && @auto_completion.open?
+        if !read.in?(:tab, :enter, :shift_tab, :escape) && @auto_completion.open?
           @editor.update { @auto_completion.clear(output) }
         end
       end

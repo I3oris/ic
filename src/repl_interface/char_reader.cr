@@ -66,6 +66,8 @@ module IC::ReplInterface
         end
       when '\r'.ord, '\n'.ord
         :enter
+      when '\t'.ord
+        :tab
       when ctrl('c')
         :keyboard_interrupt
       when ctrl('d'), ctrl('x'), '\0'.ord

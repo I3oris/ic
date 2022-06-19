@@ -166,8 +166,9 @@ module IC::ReplInterface
       @expression = @expression_height = @colorized_lines = nil
     end
 
-    def <<(char : Char)
+    def <<(char : Char) : self
       return insert_new_line(0) if char.in? '\n', '\r'
+      return self if char.ascii_control?
 
       if @x >= current_line.size
         self.current_line = current_line + char
@@ -179,10 +180,11 @@ module IC::ReplInterface
       self
     end
 
-    def <<(str : String)
+    def <<(str : String) : self
       str.each_char do |ch|
         self << ch
       end
+      self
     end
 
     def insert_new_line(indent)
@@ -196,6 +198,7 @@ module IC::ReplInterface
 
       @expression = @expression_height = @colorized_lines = nil
       move_abs_cursor(x: indent*2, y: @y + 1)
+      self
     end
 
     def delete

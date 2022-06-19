@@ -128,6 +128,20 @@ describe IC::ReplInterface::ExpressionEditor do
     IC::Spec.verify_editor(editor, "b\na", x: 0, y: 1)
   end
 
+  it "ignores control characters" do
+    editor = IC::Spec.expression_editor
+    editor << "abc"
+
+    editor << '\b'
+    IC::Spec.verify_editor(editor, "abc", x: 3, y: 0)
+
+    editor << '\u007F' << '\u0002'
+    IC::Spec.verify_editor(editor, "abc", x: 3, y: 0)
+
+    editor << "def\u007F\b\eghi\u0007"
+    IC::Spec.verify_editor(editor, "abcdefghi", x: 9, y: 0)
+  end
+
   it "inserts new line" do
     editor = IC::Spec.expression_editor
     editor << "aaa"
