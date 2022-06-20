@@ -7,7 +7,9 @@ class Crystal::Repl
   def run
     color = @program.color?
 
-    load_prelude
+    spawn do
+      load_prelude
+    end
 
     repl_interface = IC::ReplInterface::ReplInterface.new
     repl_interface.color = color
