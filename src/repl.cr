@@ -7,8 +7,10 @@ class Crystal::Repl
   def run
     color = @program.color?
 
+    prelude_complete_channel = Channel(Int32).new
     spawn do
       load_prelude
+      prelude_complete_channel.send(1)
     end
 
     repl_interface = IC::ReplInterface::ReplInterface.new
@@ -17,6 +19,8 @@ class Crystal::Repl
     repl_interface.repl = self
 
     repl_interface.run do |expr|
+      prelude_complete_channel.receive && prelude_complete_channel.close unless prelude_complete_channel.closed?
+
       result = run_next_code(expr, initial_line_number: repl_interface.line_number - repl_interface.lines.size - 1)
       output.puts " => #{IC::Highlighter.highlight(result.to_s, toggle: color)}"
 
