@@ -3,8 +3,8 @@ CRYSTAL_CONFIG_PATH ?= '$$ORIGIN/../share/crystal-ic/src'
 CRYSTAL_LIB_CONFIG_PATH ?= '$$ORIGIN/../lib/ic/share/crystal-ic/src'
 
 COMPILER ?= crystal
-FLAGS ?= --progress
-RELEASE_FLAGS ?= --progress --release
+FLAGS ?= -Dpreview_mt --progress
+RELEASE_FLAGS ?= -Dpreview_mt --progress --release
 
 ENV ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
 ENV_LIB ?= CRYSTAL_CONFIG_PATH=$(CRYSTAL_LIB_CONFIG_PATH) CRYSTAL_PATH=$(CRYSTAL_PATH)
