@@ -52,6 +52,8 @@ OptionParser.parse do |parser|
   end
 end
 
+repl.program.color = false if ENV["NO_COLOR"]?.presence
+
 if ARGV[0]?
   repl.run_file ARGV[0], ARGV[1..], debugger
 else
