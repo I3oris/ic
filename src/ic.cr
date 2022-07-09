@@ -46,7 +46,7 @@ OptionParser.parse do |parser|
   end
 
   parser.invalid_option do |option_flag|
-    STDERR.puts "ERROR: Unkonwn option '#{option_flag}'."
+    STDERR.puts "ERROR: Unknown option '#{option_flag}'."
     STDERR.puts parser
     exit(1)
   end
