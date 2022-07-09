@@ -4,6 +4,8 @@ require "./pry"
 require "./crystal_errors"
 
 class Crystal::Repl
+  getter? prelude_complete = false
+
   def run
     color = @program.color?
 
@@ -69,8 +71,10 @@ class Crystal::Repl
     interpret_exit
   end
 
-  def run_prelude
-    load_prelude
+  def load_prelude
+    @prelude_complete = false
+    previous_def
+    @prelude_complete = true
   end
 
   private def run_next_code(code, initial_line_number = 0)

@@ -185,6 +185,9 @@ module IC::ReplInterface
     end
 
     private def auto_complete(shift_tab = false)
+      repl = @repl
+      return if repl && !repl.prelude_complete? # Prevent to trigger auto-completion while running the prelude.
+
       line = @editor.current_line
 
       # Retrieve the word under the cursor (corresponding to the method name being write)
@@ -199,7 +202,6 @@ module IC::ReplInterface
         end
       else
         # Set auto-completion context from repl, allow auto-completion to take account of previously defined types, methods and local vars.
-        repl = @repl
         @auto_completion.set_context(repl) if repl
 
         # Get hole expression before cursor, allow auto-completion to deduce the receiver type

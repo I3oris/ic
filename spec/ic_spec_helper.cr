@@ -24,7 +24,7 @@ end
 
 module IC::Spec
   @@repl = Crystal::Repl.new
-  @@repl.run_prelude
+  @@repl.load_prelude
 
   def self.auto_completion_handler
     handler = IC::ReplInterface::AutoCompletionHandler.new
