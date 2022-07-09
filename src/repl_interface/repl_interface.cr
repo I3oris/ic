@@ -8,34 +8,31 @@ require "colorize"
 module IC::ReplInterface
   class ReplInterface
     @editor : ExpressionEditor
-    @repl : Crystal::Repl? = nil
-    @auto_completion = AutoCompletionHandler.new
     @history = History.new
+    property repl : Crystal::Repl? = nil
+    getter auto_completion = AutoCompletionHandler.new
     getter line_number = 1
 
     private CLOSING_KEYWORD  = %w(end \) ] })
     private UNINDENT_KEYWORD = %w(else elsif when in rescue ensure)
 
     delegate :color?, :color=, :lines, :output, :output=, to: @editor
-    property repl
-    getter auto_completion
-
-    def initialize
-      status = :default
-      @editor = ExpressionEditor.new do |expr_line_number, _color?|
-        String.build do |io|
-          io << "ic(#{Crystal::Config.version}):"
-          io << sprintf("%03d", @line_number + expr_line_number)
-          case status
-          when :multiline then io << "* "
-          else                 io << "> "
-          end
-        end
-      end
-    end
 
     def initialize(&prompt : Int32, Bool -> String)
       @editor = ExpressionEditor.new(&prompt)
+      @editor.set_header do |io, previous_height|
+        @auto_completion.display_entries(io, color?, max_height: {10, Term::Size.height - 1}.min, clear_size: previous_height)
+      end
+    end
+
+    def initialize
+      initialize do |expr_line_number, _color?|
+        String.build do |io|
+          io << "ic(#{Crystal::Config.version}):"
+          io << sprintf("%03d", @line_number + expr_line_number)
+          io << "> "
+        end
+      end
     end
 
     def run(& : String -> _)
@@ -44,6 +41,7 @@ module IC::ReplInterface
       CharReader.read_chars(STDIN) do |read|
         case read
         when :enter
+          @auto_completion.close
           on_enter { |line| yield line }
         when :up
           has_moved = @editor.move_cursor_up
@@ -84,15 +82,18 @@ module IC::ReplInterface
         when :shift_tab
           auto_complete(shift_tab: true)
         when :escape
-          on_escape
+          @auto_completion.close
+          @editor.update
         when :insert_new_line
+          @auto_completion.close
           @editor.update { insert_new_line(indent: self.indentation_level) }
         when :move_cursor_to_begin
           @editor.move_cursor_to_begin
         when :move_cursor_to_end
           @editor.move_cursor_to_end
         when :keyboard_interrupt
-          @editor.end_editing { @auto_completion.close(output) }
+          @auto_completion.close
+          @editor.end_editing
           output.puts "^C"
           @history.set_to_last
           @editor.prompt_next
@@ -108,8 +109,13 @@ module IC::ReplInterface
           end
         end
 
-        if !read.in?(:tab, :enter, :shift_tab, :escape) && @auto_completion.open?
-          @editor.update { @auto_completion.clear(output) }
+        if !read.in?(:tab, :enter, :insert_new_line, :shift_tab, :escape) && @auto_completion.open?
+          if @editor.expression_scrolled? || read.is_a?(String)
+            @auto_completion.close
+          else
+            @auto_completion.clear
+          end
+          @editor.update
         end
       end
     end
@@ -201,12 +207,11 @@ module IC::ReplInterface
 
         # Compute auto-completion, return `replacement` (`nil` if no entry, full name if only one entry, or the begin match of entries otherwise)
         replacement = @auto_completion.complete_on(word_on_cursor, expr)
+
+        @auto_completion.open
       end
 
       @editor.update do
-        # Display completion entries:
-        @auto_completion.display_entries(output, @editor.expression_height, color?)
-
         # Replace `word_on_cursor` by the replacement word:
         @editor.current_line = line.sub(word_begin..word_end, replacement) if replacement
       end
@@ -215,10 +220,6 @@ module IC::ReplInterface
       if replacement
         @editor.move_cursor_to(x: word_begin + replacement.size, y: @editor.y)
       end
-    end
-
-    private def on_escape
-      @editor.update { @auto_completion.close(output) }
     end
 
     private def create_parser(code)
@@ -271,9 +272,7 @@ module IC::ReplInterface
     end
 
     private def submit_expr(*, history = true, &)
-      @editor.end_editing(replacement: formated) do
-        @auto_completion.close(output)
-      end
+      @editor.end_editing(replacement: formated)
 
       @line_number += @editor.lines.size
       @history << @editor.lines if history

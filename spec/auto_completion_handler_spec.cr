@@ -171,4 +171,219 @@ describe IC::ReplInterface::AutoCompletionHandler do
         CODE
     end
   end
+
+  describe "displays entries" do
+    it "for many entries" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs         bits       clamp            \n" \
+                   "abs2        bits_set?  class            \n" \
+                   "bit         ceil       clone            \n" \
+                   "bit_length  chr        crystal_type_id..\n",
+          height: 5
+      end
+    end
+
+    it "for many entries with larger screen" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(54) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs         bits       clamp            \n" \
+                   "abs2        bits_set?  class            \n" \
+                   "bit         ceil       clone            \n" \
+                   "bit_length  chr        crystal_type_id..\n",
+          height: 5
+      end
+      handler.with_term_width(55) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs         bits       clamp            day            \n" \
+                   "abs2        bits_set?  class            days           \n" \
+                   "bit         ceil       clone            digits         \n" \
+                   "bit_length  chr        crystal_type_id  divisible_by?..\n",
+          height: 5
+      end
+    end
+
+    it "for many entries with higher screen" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs         bits       clamp            \n" \
+                   "abs2        bits_set?  class            \n" \
+                   "bit         ceil       clone            \n" \
+                   "bit_length  chr        crystal_type_id..\n",
+          height: 5
+      end
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 6,
+          display: "Int32:\n" \
+                   "abs         bits_set?  clone            \n" \
+                   "abs2        ceil       crystal_type_id  \n" \
+                   "bit         chr        day              \n" \
+                   "bit_length  clamp      days             \n" \
+                   "bits        class      digits..         \n",
+          height: 6
+      end
+    end
+
+    it "for few entries" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("ab", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs   \n" \
+                   "abs2  \n",
+          height: 3
+      end
+    end
+
+    it "when closed" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.close
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "",
+          height: 0
+      end
+    end
+
+    it "when cleared" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.clear
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5, clear_size: 3,
+          display: "\n\n\n",
+          height: 3
+        IC::Spec.verify_completion_display handler, max_height: 5, clear_size: 5,
+          display: "\n\n\n\n\n",
+          height: 5
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "",
+          height: 0
+      end
+    end
+
+    it "when max height is zero" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 0,
+          display: "",
+          height: 0
+      end
+    end
+
+    it "for no entry" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("___nop___", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "",
+          height: 0
+      end
+    end
+  end
+
+  describe "moves selection" do
+    it "selection next" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(20) do
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "abs   bit_length  \n" \
+                   "abs2  bits        \n" \
+                   "bit   bits_set?.. \n",
+          height: 4
+
+        handler.selection_next
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   ">abs  bit_length  \n" \
+                   "abs2  bits        \n" \
+                   "bit   bits_set?.. \n",
+          height: 4
+
+        3.times { handler.selection_next }
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "abs   >bit_length \n" \
+                   "abs2  bits        \n" \
+                   "bit   bits_set?.. \n",
+          height: 4
+      end
+    end
+
+    it "selection next on next column" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      6.times { handler.selection_next }
+      handler.with_term_width(20) do
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "abs   bit_length  \n" \
+                   "abs2  bits        \n" \
+                   "bit   >bits_set?..\n",
+          height: 4
+
+        handler.selection_next
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "bit_length  >ceil  \n" \
+                   "bits        chr    \n" \
+                   "bits_set?   clamp..\n",
+          height: 4
+      end
+    end
+
+    it "selection previous" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      2.times { handler.selection_next }
+      handler.with_term_width(20) do
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "abs   bit_length  \n" \
+                   ">abs2 bits        \n" \
+                   "bit   bits_set?.. \n",
+          height: 4
+
+        handler.selection_previous
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   ">abs  bit_length  \n" \
+                   "abs2  bits        \n" \
+                   "bit   bits_set?.. \n",
+          height: 4
+
+        handler.selection_previous
+        IC::Spec.verify_completion_display handler, max_height: 4,
+          display: "Int32:\n" \
+                   "nil?          \n" \
+                   ">responds_to? \n" \
+                   "              \n",
+          height: 4
+      end
+    end
+  end
 end

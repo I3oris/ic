@@ -15,9 +15,9 @@ module IC::ReplInterface
   #
   # * `selection_next`/`selection_previous`: Increases/decrease the selected entry.
   #
-  # * `clear`: Erases previous display on screen, but doesn't clear entries themselves.
+  # * `open`/`close`: Toggle display, clear entries if close.
   #
-  # * `close`: Erases previous display and clear entries.
+  # * `clear`: Like `close`, but display a empty space instead of nothing.
   class AutoCompletionHandler
     record AutoCompletionContext,
       local_vars : Crystal::Repl::LocalVars,
@@ -33,6 +33,7 @@ module IC::ReplInterface
     @selection_pos : Int32? = nil
     getter entries = [] of String
     getter? open = false
+    getter? cleared = false
 
     # Determines the context from a Repl
     def set_context(repl)
@@ -361,22 +362,33 @@ module IC::ReplInterface
       entries[0][...(i - 1)]
     end
 
-    # Displays completion entries by columns, minimizing the height.
+    # If open, displays completion entries by columns, minimizing the height.
     # Highlight the selected entry (initially `nil`).
-    # AutoCompletionHandler is set as `open`.
-    def display_entries(io, expression_height, color? = true)
-      clear_previous_display(io)
+    #
+    # If cleared, displays `clear_size` space.
+    #
+    # If closed, do nothing.
+    #
+    # Returns the actual displayed height.
+    def display_entries(io, color? = true, max_height = 10, clear_size = 0) : Int32
+      if cleared?
+        clear_size.times { io.puts }
+        return clear_size
+      end
 
-      # Compute the max number of row in a way to never take more than 3/4 of the screen.
-      max_nb_row = (Term::Size.height - expression_height)*3//4 - 1
-      return if max_nb_row <= 1
-      return if @entries.size <= 1
+      return 0 unless open?
+
+      return 0 if max_height <= 1
+      return 0 if @entries.size <= 1
+
+      height = 0
 
       # Print scope type name:
       io.print @scope_name.colorize(:blue).underline.toggle(color?)
       io.puts ":"
+      height += 1
 
-      nb_rows = compute_nb_row(@entries, max_nb_row)
+      nb_rows = compute_nb_row(@entries, max_nb_row: max_height - height)
 
       columns = @entries.in_groups_of(nb_rows, "")
       column_widths = columns.map &.max_of &.size.+(2)
@@ -411,21 +423,26 @@ module IC::ReplInterface
 
           # Colorize selection
           if r + c*nb_rows == @selection_pos
-            entry_str = entry_str.colorize.toggle(color?).bright.on_dark_gray
+            if color?
+              entry_str = entry_str.colorize.bright.on_dark_gray
+            else
+              entry_str = ">" + entry_str[...-1] # if no color, remove last spaces to let place to '*'.
+            end
           end
           io.print entry_str
         end
-        io.print Term::Cursor.clear_line_after
+        io.print Term::Cursor.clear_line_after if color?
         io.puts
       end
 
-      # Store the height actually displayed, so we can clear it later
-      @previous_completion_display_height = nb_rows + 1
-      @open = true
+      height += nb_rows
+      height
     end
 
     # Increases selected entry.
     def selection_next
+      return nil if @entries.empty?
+
       if (pos = @selection_pos).nil?
         new_pos = 0
       else
@@ -437,6 +454,8 @@ module IC::ReplInterface
 
     # Decreases selected entry.
     def selection_previous
+      return nil if @entries.empty?
+
       if (pos = @selection_pos).nil?
         new_pos = 0
       else
@@ -446,39 +465,21 @@ module IC::ReplInterface
       @entries[new_pos]
     end
 
-    # Erases previous display on screen.
-    # Doesn't clear entries.
-    def clear(io)
-      if open?
-        prev_height = @previous_completion_display_height || 0
-        clear_previous_display(io)
-        prev_height.times { io.puts }
-        @previous_completion_display_height = prev_height
-
-        @selection_pos = nil
-        @entries.clear
-        @open = false
-      end
+    def open
+      @open = true
+      @cleared = false
     end
 
-    # Erases previous display and clear entries.
-    # Sets AutoCompletionHandler as `close`.
-    def close(io)
-      clear_previous_display(io)
+    def close
       @selection_pos = nil
       @entries.clear
       @open = false
+      @cleared = false
     end
 
-    private def clear_previous_display(io)
-      io.print Term::Cursor.clear_line_after
-
-      if height = @previous_completion_display_height
-        io.print Term::Cursor.up(height)
-        io.print Term::Cursor.clear_screen_down
-
-        @previous_completion_display_height = nil
-      end
+    def clear
+      close
+      @cleared = true
     end
 
     private def nb_cols_hold_in_term_width(column_widths)
@@ -486,7 +487,7 @@ module IC::ReplInterface
       width = 0
       column_widths.each do |col_width|
         width += col_width
-        break if width > Term::Size.width
+        break if width > self.term_width
         nb_cols += 1
       end
       nb_cols
@@ -506,11 +507,15 @@ module IC::ReplInterface
           end
 
           # If width fit width terminal, we found min row required:
-          return r if width < Term::Size.width
+          return r if width < self.term_width
         end
       end
 
       {entries.size, max_nb_row}.min
+    end
+
+    private def term_width
+      Term::Size.width
     end
   end
 

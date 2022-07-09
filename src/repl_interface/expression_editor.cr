@@ -76,6 +76,18 @@ module IC::ReplInterface
     getter y = 0
 
     @scroll_offset = 0
+    @header_height = 0
+
+    # A `Proc` allowing to display a header above the prompt. (used by auto-completion)
+    #
+    # *io*: The IO in which the header should be displayed.
+    # *previous_hight*: Previous header height, useful to keep a header size constant.
+    # Should returns the exact *height* printed in the io.
+    getter header : Proc(IO, Int32, Int32) = ->(io : IO, previous_height : Int32) { 0 }
+
+    # Sets the header proc.
+    def set_header(&@header : Proc(IO, Int32, Int32))
+    end
 
     # Prompt size must stay constant.
     def initialize(&@prompt : Int32, Bool -> String)
@@ -246,6 +258,13 @@ module IC::ReplInterface
     # Returns the height of this line, (1 on common lines, more on wrapped lines):
     private def line_height(line)
       1 + (@prompt_size + line.size) // Term::Size.width
+    end
+
+    # Returns the max height that could take an expression on screen.
+    #
+    # Expression can scroll if it's higher than max_height.
+    private def max_height
+      Term::Size.height - @header_height
     end
 
     def move_cursor_left(allow_scrolling = true)
@@ -527,7 +546,7 @@ module IC::ReplInterface
     def update(force_full_view = false, &)
       @output.print Term::Cursor.hide
       rewind_cursor
-
+      header = update_header
       with self yield
 
       @expression = @expression_height = @colorized_lines = nil
@@ -536,6 +555,7 @@ module IC::ReplInterface
       @y = @y.clamp(0, @lines.size - 1)
       @x = @x.clamp(0, @lines[@y].size)
 
+      @output.print header
       print_expression(force_full_view)
       @output.print Term::Cursor.show
     end
@@ -543,31 +563,37 @@ module IC::ReplInterface
     def update(force_full_view = false)
       @output.print Term::Cursor.hide
       rewind_cursor
+      header = update_header
 
+      @output.print header
       print_expression(force_full_view)
       @output.print Term::Cursor.show
+    end
+
+    # Clears previous headers (knowing its size), then call the header proc and returns it as string.
+    private def update_header : String
+      @output.print Term::Cursor.clear_line_after
+      unless @header_height == 0
+        @output.print Term::Cursor.up(@header_height)
+        @output.print Term::Cursor.clear_screen_down
+      end
+      String.build do |io|
+        @header_height = @header.call(io, @header_height)
+      end
     end
 
     def replace(lines : Array(String))
       update { @lines = lines }
     end
 
+    # Prints the full expression (without view bounds), and eventually replace it by *replacement*.
     def end_editing(replacement : Array(String)? = nil)
-      end_editing(replacement) { }
-    end
-
-    # Yields a callback called after rewind the cursor and before reprint the *replacement*.
-    # This allows for example the display of auto-completion entries, witch will appear above the expression.
-    def end_editing(replacement : Array(String)? = nil, &)
       if replacement
         update(force_full_view: true) do
-          yield
           @lines = replacement
         end
       else
-        update(force_full_view: true) do
-          yield
-        end
+        update(force_full_view: true)
       end
 
       move_cursor_to_end(allow_scrolling: false)
@@ -588,7 +614,7 @@ module IC::ReplInterface
     end
 
     def scroll_up
-      if @scroll_offset < expression_height() - Term::Size.height
+      if @scroll_offset < expression_height() - max_height()
         @scroll_offset += 1
         update
       end
@@ -635,13 +661,16 @@ module IC::ReplInterface
       end
     end
 
+    def expression_scrolled?
+      expression_height() > max_height()
+    end
+
     # Returns y-start and end positions of the expression that should be displayed on the screen.
     # This take account of @scroll_offset, and the size start-end should never be greater than screen height.
     private def view_bounds
-      h = Term::Size.height
       end_ = expression_height() - 1
 
-      start = {0, end_ + 1 - h}.max
+      start = {0, end_ + 1 - max_height()}.max
 
       @scroll_offset = @scroll_offset.clamp(0, start) # @scroll_offset could not be greater than start.
 
