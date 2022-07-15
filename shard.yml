@@ -1,6 +1,6 @@
 name: ic
-version: 0.4.1
-description: Interpreter Crystal, working without compilation!
+version: 0.5.0
+description: REPL Interface wrapping Crystal Interpreter (crystal-i).
 authors:
   - I3oris
 

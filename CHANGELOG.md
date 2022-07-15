@@ -1,3 +1,57 @@
+# 0.5.0 (Fry Jul 15 2022)
+
+### New
+* Implements auto-completion on Paths (`Foo::Bar::`)
+* Improve error location, now display the correct location corresponding to prompt lines. Allow `pry` to display top-level frames.
+* Add the `reset` command.
+* Implement keyboard interruption on `ctrl-c`.
+* Make interpreter installable via shard (Add postinstall script for shard), thanks @Vici37
+* Implements shortcuts `home` and `end` to respectively move cursor to begin and end of  expression, thanks @Vici37.
+* Load crystal stb in background during REPL startup, thanks @Vici37.
+* Add a visual mark ('>') on auto-completion entries if `--no-color`.
+* Allow usage of `NO_COLOR` environment (compliant to https://no-color.org).
+* Update to the last crystal version (1.5.0)
+
+### Bugs fix
+* Don't colorize keyword methods, e.g. `42.class`
+* Fix crash occurring on `require` auto-completion if current folder doesn't contain a `lib` folder.
+* Fix wrong auto-indentation on parenthesized call.
+* Fix color bug occurring on wrapped line on edge of view scroll.
+* Fix bad display when `ctrl-c` an multiline expression.
+* Fix missing `bin/` when using `make`.
+* Fix broken `make release`.
+* Fix #3: compile failed on local linux laptop (arch linux), thanks @zw963
+* Fix `Invalid option: -v`, from https://github.com/crystal-lang/crystal/pull/12094.
+* Fix already required files to not be removed from auto-completion entries.
+* Fix bug auto-completing setter methods.
+* Avoid insertion of control characters in editor, causing bad display.
+* Prevent auto-completion while prelude is still loading. (Fix bug due to concurrent call)
+
+### Other
+* Allow comments to be in history.
+* Ensure llvm-ext is built before 'make spec'.
+*  Add 'make install' & 'make uninstall', make IC works independently of its position, also move `crystal-i` -> `share/crystal-ic`.
+* Remove `--static` in release mode.
+* Better handling if prompt change its size (line_number >= 1000).
+* Improve performance when editing large expressions.
+* Fix typo on invalid option.
+
+### Internal
+* Write spec for `History`/`AutoCompletionHandler`/`CharReader`/`ExpressionEditor`.
+* Allow spec to test private methods
+* Add some missing `private`.
+* Make `CharReader` accept IO without `raw` mode.
+* Make `ExpressionEditor`/ `AutoCompletionHandler`/`ReplInterface`/`Repl` output on any IO.
+* Tiny refactor on `ReadChar.raw`.
+* Small refactoring: remove static methods in IC to puts them directly to Repl. (Re)rename `main.cr` to `ic.cr`.
+* Refactor `AutoCompletionHandler`.
+* Refactor auto-completion (second time), allow it to trigger when editing long multiline expressions.
+* Improve 'ExpressionEditor#expression_before_cursor'.
+* Move `.dup` for a more semantically correct behavior.
+* Update .ameba.yml
+* Re-organize files.
+* Compile with -Dpreview_mt flag.
+
 # 0.4.1 (Sun May 8 2022)
 
 ### New
