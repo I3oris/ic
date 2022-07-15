@@ -1,10 +1,12 @@
 # IC
 
-IC, meaning **Interactive Crystal**, is an interface wrapping the [Crystal Interpreter](https://crystal-lang.org/2021/12/29/crystal-i.html).
+IC, for **Interactive Crystal**, is an [REPL](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop) interface for [Crystal Interpreter](https://crystal-lang.org/2021/12/29/crystal-i.html).
+
+It allows to quickly try and test some crystal code, or debug your code thanks to crystal `pry`.
 
 ![](./hello_ic.gif)
 
-## Features:
+## Features
 
 * [Crystal](https://crystal-lang.org) Interpretation (Indeed!)
 * Syntax highlighting
@@ -13,20 +15,20 @@ IC, meaning **Interactive Crystal**, is an interface wrapping the [Crystal Inter
 * Auto indentation
 * Auto completion (Experimental)
 * History
-* Pasting of expressions
+* Pasting of large expressions
 * Debugger
 
-## Warning:
+## Warning
 
-Crystal-i is experimental and not yet released, the inputted code is not guaranteed to always work as expected. This repository is a preparation for this up-coming feature.
+The Crystal interpreter is experimental and not yet released, some issue can still occur while interpreting.
 
-## Installation:
+## Installation
 
-### Dependencies:
+### Dependencies
 
 You need to install the same dependencies as the crystal compiler, follow the instructions [here](https://github.com/crystal-lang/crystal/wiki/All-required-libraries). If you have already installed crystal from source, you can skip this step.
 
-### Build:
+### Build
 
 ```sh
 git clone https://github.com/I3oris/ic.git
@@ -36,15 +38,15 @@ make
 # => bin/ic
 ```
 
-### Optimized Build:
+### Optimized Build
 ```sh
 make release
 ```
 > This is a bit long, and require at least 4.5 GB of available RAM.
 
-### Install:
+### Install
 
-install IC at `/usr/local/`
+Install IC at `/usr/local/`
 ```
 sudo make install
 ```
@@ -61,14 +63,14 @@ development_dependencies:
 
 And run `shards install`
 
-## Usage:
+## Usage
 
-### Interactive mode:
+### Interactive mode
 ```sh
 ic
 ```
 
-### Run file with arguments:
+### Run file with arguments
 ```cr
 # say_hello.cr
 
@@ -80,7 +82,7 @@ puts "Hello #{name}!"
 ic say_hello.cr World
 ```
 
-### Debugger (pry):
+### Debugger (pry)
 
 On a file use the macro `debugger`:
 ```cr
@@ -108,7 +110,7 @@ On the `pry` prompt you can type:
 * `whereami`: To re-display where the execution is.
 * Other     : To interpret code while debugger (e.g the name of a variable).
 
-### Shortcuts:
+### Shortcuts
 
 * `alt-enter`: On multiline input: insert a new line instead of submit edition.
 * `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
@@ -117,13 +119,13 @@ On the `pry` prompt you can type:
 * `ctrl-c`: Keyboard Interruption.
 * `ctrl-d`: Exit (EOF).
 
-only on debugger (pry):
+Only on debugger (pry):
 * `ctrl-up`: `whereami`
 * `ctrl-down`: `next`
 * `ctrl-left`: `finish`
 * `ctrl-right`: `step`
 
-### Commands:
+### Commands
 You can type the following commands:
 * `# clear_history`: Clear history.
 * `# reset`: Reset the interpreter (clean all definitions, variables, constants, ...)
@@ -136,6 +138,6 @@ You can type the following commands:
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create a new Pull Request
 
-## Contributors:
+## Contributors
 
 - [I3oris](https://github.com/I3oris) - creator and maintainer
