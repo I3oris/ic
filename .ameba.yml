@@ -13,6 +13,8 @@ Metrics/CyclomaticComplexity:
   MaxComplexity: 30
   Enabled: true
   Severity: Warning
+  Excluded:
+    - src/repl_interface/char_reader.cr
 
 Style/RedundantReturn:
   Description: Reports redundant return expressions
