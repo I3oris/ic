@@ -108,7 +108,7 @@ On the `pry` prompt you can type:
 * `step`    : To jump to the next instruction (entering into functions if possible).
 * `finish`  : To jump out of the current function.
 * `whereami`: To re-display where the execution is.
-* Other     : To interpret code while debugger (e.g the name of a variable).
+* Other     : To interpret code while debugging (e.g. the name of a variable).
 
 ### Shortcuts
 
