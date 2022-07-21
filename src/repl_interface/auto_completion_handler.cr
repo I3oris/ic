@@ -109,7 +109,7 @@ module IC::ReplInterface
       # Retrieve the receiver node (now typed), and gets its scope.
       visitor = GetAutoCompletionReceiverVisitor.new
       ast.accept(visitor)
-      receiver = visitor.receiver
+      receiver = visitor.receiver # ameba:disable Lint/UselessAssign
 
       surrounding_def = visitor.surrounding_def
       scope = visitor.scope || program
@@ -130,9 +130,14 @@ module IC::ReplInterface
         main_visitor.path_lookup = scope
 
         begin
-          program.semantic(surrounding_def.body, main_visitor: main_visitor)
+          ast = program.semantic(surrounding_def.body, main_visitor: main_visitor)
         rescue
         end
+
+        # Retrieve again the receiver node (now typed inside the def)
+        visitor = GetAutoCompletionReceiverVisitor.new
+        ast.accept(visitor)
+        receiver = visitor.receiver
       end
 
       return receiver, scope
@@ -232,6 +237,7 @@ module IC::ReplInterface
 
         # Add keyword methods (.is_a?, .nil?, ...):
         @entries += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
+        @scope_name = receiver_type.to_s
       else
         context = @context || return
 
@@ -255,10 +261,10 @@ module IC::ReplInterface
         if types = scope.types?
           @entries += types.each_key.select(&.starts_with? name).to_a.sort
         end
+        @scope_name = scope.to_s
       end
 
       @entries.uniq!
-      @scope_name = scope.to_s
     end
 
     private def find_entries_on_type(type, name)
@@ -556,6 +562,18 @@ module IC::ReplInterface
     def end_visit(node : Crystal::ClassDef | Crystal::ModuleDef)
       @scopes.pop? unless @found
       true
+    end
+  end
+end
+
+# [Monkey Patch] Skip the `_auto_completion_call_` while executing semantic stage.
+class Crystal::MainVisitor < Crystal::SemanticVisitor
+  def visit(node : Call)
+    if node.name == "__auto_completion_call__"
+      node.set_type(@program.no_return)
+      true
+    else
+      previous_def
     end
   end
 end

@@ -67,6 +67,12 @@ describe IC::ReplInterface::AutoCompletionHandler do
       IC::Spec.verify_completion(handler, %([1, [1, 2, [3]]].), should_be: "Array(Array(Array(Int32) | Int32) | Int32)")
     end
 
+    it "something inside an array literal" do
+      IC::Spec.verify_completion(handler, %([1, '2'.), should_be: "Char")
+      IC::Spec.verify_completion(handler, %([1, '2', "3".), should_be: "String")
+      IC::Spec.verify_completion(handler, %([1, '2', [[["3".), should_be: "String")
+    end
+
     it "hash literal" do
       IC::Spec.verify_completion(handler, %({"foo" => 1, "bar" => '2', 42 => "3"}.),
         should_be: "Hash(Int32 | String, Char | Int32 | String)")
@@ -82,6 +88,10 @@ describe IC::ReplInterface::AutoCompletionHandler do
 
     it "const literal" do
       IC::Spec.verify_completion(handler, %(Crystal::VERSION.), should_be: "String")
+    end
+
+    it "const literal with scope" do
+      IC::Spec.verify_completion(handler, %(module Crystal; VERSION.), should_be: "String", with_scope: "Crystal")
     end
 
     it "proc literal" do
@@ -169,6 +179,25 @@ describe IC::ReplInterface::AutoCompletionHandler do
         when String
         end.
         CODE
+    end
+
+    it "something inside a call" do
+      IC::Spec.verify_completion(handler, %(def foo; 42.), should_be: "Int32")
+      IC::Spec.verify_completion(handler, %(def foo; "foo".), should_be: "String")
+      IC::Spec.verify_completion(handler, %(def foo; [[42.), should_be: "Int32")
+      IC::Spec.verify_completion(handler, %(def foo; x = 42; x.), should_be: "Int32")
+    end
+
+    it "something with scope inside a call" do
+      IC::Spec.verify_completion(handler, %(class Foo; def foo; 42.), should_be: "Int32", with_scope: "Foo")
+      IC::Spec.verify_completion(handler, %(class Foo::Bar; class Baz; def foo; "foo".), should_be: "String", with_scope: "Foo::Bar::Baz")
+      IC::Spec.verify_completion(handler, %(class Foo::Bar; class ::Baz; def foo; [[42.), should_be: "Int32", with_scope: "Baz")
+    end
+
+    it "something with scope" do
+      IC::Spec.verify_completion(handler, %(class Foo; 42.), should_be: "Int32", with_scope: "Foo")
+      IC::Spec.verify_completion(handler, %(class Foo::Bar; class Baz;), should_be: "", with_scope: "Foo::Bar::Baz")
+      IC::Spec.verify_completion(handler, %(class Foo::Bar; class ::Baz;), should_be: "", with_scope: "Baz")
     end
   end
 
