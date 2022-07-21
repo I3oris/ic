@@ -13,6 +13,7 @@ module IC::ReplInterface
       end
     end
 
+    # ameba:disable Metrics/CyclomaticComplexity
     private def self.parse_escape_sequence(chars : Bytes) : Char | Symbol | String?
       return String.new(chars) if chars.size > 6
       return :exit if chars.empty?

@@ -94,6 +94,7 @@ class IC::Highlighter
     return @colorized
   end
 
+  # ameba:disable Metrics/CyclomaticComplexity
   private def highlight_normal_state(lexer, io, break_on_rcurly = false)
     last_is_def = false
     heredoc_stack = [] of Crystal::Token

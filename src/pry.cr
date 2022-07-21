@@ -117,13 +117,13 @@ class Crystal::Repl::Interpreter
     )
 
     @pry_interface.run do |line|
-    # WAS:
-    # while @pry
-    #   TODO: supoort multi-line expressions
+      # WAS:
+      # while @pry
+      #   TODO: supoort multi-line expressions
 
-    #   print "pry> "
-    #   line = gets
-    # END
+      #   print "pry> "
+      #   line = gets
+      # END
       unless line
         self.pry = false
         break
@@ -259,6 +259,7 @@ class Crystal::Repl::Interpreter
 
     max_line_number_size = max_line_number.to_s.size
 
+    # ameba:disable Lint/ShadowingOuterLocalVar
     min_line_number.upto(max_line_number) do |line_number|
       line = lines[line_number - 1]
       if line_number == location.line_number
