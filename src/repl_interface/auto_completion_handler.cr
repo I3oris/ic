@@ -157,6 +157,7 @@ module IC::ReplInterface
       delimiter_stack = [] of Symbol
       state = :normal
 
+      previous_noblank_token_kind = nil
       token = lexer.next_token
       loop do
         case token.type
@@ -172,7 +173,13 @@ module IC::ReplInterface
           delimiter = delimiter_stack.pop?
           state = :string if delimiter == :interpolation
         when .ident?
-          if token.value.in? %i(begin module class struct def if unless while until case do annotation lib)
+          if token.value.in? %i(if unless)
+            if is_suffix_if?(previous_noblank_token_kind)
+              # nothing: suffix if should not be ended.
+            else
+              delimiter_stack.push :begin
+            end
+          elsif token.value.in? %i(begin module class struct def while until case do annotation lib)
             delimiter_stack.push :begin
           elsif token.value == :end
             delimiter_stack.pop?
@@ -188,6 +195,7 @@ module IC::ReplInterface
           delimiter_stack.push :interpolation
         end
 
+        previous_noblank_token_kind = token.type unless token.type.space?
         if state == :string
           token = lexer.next_string_token(token.delimiter_state)
         else
@@ -207,6 +215,14 @@ module IC::ReplInterface
           end
         end
       end
+    end
+
+    private def is_suffix_if?(previous_token_kind)
+      kind = previous_token_kind
+      return false if kind.nil?
+
+      kind.ident? || kind.number? || kind.symbol? || kind.const? || kind.delimiter_end? ||
+        kind.op_rparen? || kind.op_rcurly? || kind.op_rsquare? || kind.op_percent_rcurly?
     end
 
     # Finds completion entries matching *word_on_cursor*, on *receiver* type, within a *scope*.

@@ -171,6 +171,25 @@ describe IC::ReplInterface::AutoCompletionHandler do
         CODE
     end
 
+    it "suffix if" do
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "(Array(Int32) | Int32 | Regex | String | Symbol | Tuple(Int32) | Nil)")
+        x = 42 if rand < 0.5
+        x = :foo if rand < 0.5
+        x = "bar" if rand < 0.5
+        x = /baz/ if rand < 0.5
+        x = (0) if rand < 0.5
+        x = {0} if rand < 0.5
+        x = [0] if rand < 0.5
+        x.
+        CODE
+
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "(Int32 | Nil)")
+        x = 42 if rand < 0.5 unless rand < 0.5 \
+          if rand < 0.5
+        x.
+        CODE
+    end
+
     it "case expression" do
       IC::Spec.verify_completion(handler, <<-'CODE', should_be: "(Symbol | Nil)")
         case {42, "foo"}.sample
