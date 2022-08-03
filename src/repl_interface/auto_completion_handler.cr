@@ -179,7 +179,9 @@ module IC::ReplInterface
             else
               delimiter_stack.push :begin
             end
-          elsif token.value.in? %i(begin module class struct def while until case do annotation lib)
+          elsif token.value == :class
+            delimiter_stack.push :begin unless previous_noblank_token_kind == Crystal::Token::Kind::OP_PERIOD
+          elsif token.value.in? %i(begin module struct def while until case do annotation lib)
             delimiter_stack.push :begin
           elsif token.value == :end
             delimiter_stack.pop?

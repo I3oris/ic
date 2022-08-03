@@ -200,6 +200,20 @@ describe IC::ReplInterface::AutoCompletionHandler do
         CODE
     end
 
+    it "after .class expression" do
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Int32.class")
+        x = 42.class
+        x.
+        CODE
+
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Int32.class", with_scope: "Foo")
+        class Foo
+          x = 42 . \
+          class
+          x.
+        CODE
+    end
+
     it "something inside a call" do
       IC::Spec.verify_completion(handler, %(def foo; 42.), should_be: "Int32")
       IC::Spec.verify_completion(handler, %(def foo; "foo".), should_be: "String")
