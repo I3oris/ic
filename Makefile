@@ -1,4 +1,5 @@
-CRYSTAL_PATH ?= $(shell pwd)/share/crystal-ic/src
+CRYSTAL_ROOT ?= $(shell pwd)/share/crystal-ic/src
+CRYSTAL_PATH ?= lib:$(CRYSTAL_ROOT)
 CRYSTAL_CONFIG_PATH ?= '$$ORIGIN/../share/crystal-ic/src'
 CRYSTAL_LIB_CONFIG_PATH ?= '$$ORIGIN/../lib/ic/share/crystal-ic/src'
 
@@ -12,9 +13,9 @@ SOURCES := $(shell find src -name '*.cr')
 O := bin/ic
 
 # LLVM:
-LLVM_EXT_DIR := $(CRYSTAL_PATH)/llvm/ext
+LLVM_EXT_DIR := $(CRYSTAL_ROOT)/llvm/ext
 LLVM_EXT_OBJ := $(LLVM_EXT_DIR)/llvm_ext.o
-LLVM_CONFIG ?= $(shell $(CRYSTAL_PATH)/llvm/ext/find-llvm-config)
+LLVM_CONFIG ?= $(shell $(CRYSTAL_ROOT)/llvm/ext/find-llvm-config)
 
 # INSTALL:
 DESTDIR ?= /usr/local
