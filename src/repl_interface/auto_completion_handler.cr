@@ -58,14 +58,14 @@ module IC::ReplInterface
     # returns *replacement* that correspond to the greatest common root of founds entries.
     # return *nil* is no entry found.
     def complete_on(word_on_cursor : String, expression_before_word_on_cursor : String) : String?
-      receiver, scope = parse_receiver_code(expression_before_word_on_cursor)
+      receiver, scope = semantics(expression_before_word_on_cursor)
 
       find_entries(receiver, scope, word_on_cursor)
     end
 
-    # Parses the receiver code:
+    # Execute the semantics on *expression_before_word_on_cursor*:
     # Returns receiver AST if any, and the context type.
-    private def parse_receiver_code(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
+    private def semantics(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
       context = @context || return nil, nil
       program = context.program
 
@@ -83,7 +83,12 @@ module IC::ReplInterface
       # Terminate incomplete expressions with missing 'end's
       expr += missing_ends(expr)
 
+      # Save the program state
       state = program.state
+
+      # Create a temporary `Any` type that implements all types (like `NoReturn`)
+      # This type is assigned to any unknown type in a def, and bypass some semantics checks (see `AnyType`).
+      program.types["Any"] = AnyType.new program, program, "Any", nil
 
       # Now the expression is complete, parse it within the context
       parser = Crystal::Parser.new(
@@ -109,35 +114,14 @@ module IC::ReplInterface
       # Retrieve the receiver node (now typed), and gets its scope.
       visitor = GetAutoCompletionReceiverVisitor.new
       ast.accept(visitor)
-      receiver = visitor.receiver # ameba:disable Lint/UselessAssign
+      receiver = visitor.receiver
 
       surrounding_def = visitor.surrounding_def
       scope = visitor.scope || program
 
-      # Semantics step cannot compute the types inside a def, because the def is not instantiated.
-      # So, to have auto-completion inside a def though, we execute semantics on the body only,
-      # within the def scope.
       if surrounding_def
-        gatherer = Crystal::Repl::LocalVarsGatherer.new(surrounding_def.location.not_nil!, surrounding_def)
-        gatherer.gather
-
-        main_visitor = Crystal::MainVisitor.new(
-          program,
-          vars: gatherer.meta_vars,
-          meta_vars: gatherer.meta_vars,
-          typed_def: context.main_visitor.@typed_def)
-        main_visitor.scope = scope
-        main_visitor.path_lookup = scope
-
-        begin
-          ast = program.semantic(surrounding_def.body, main_visitor: main_visitor)
-        rescue
-        end
-
-        # Retrieve again the receiver node (now typed inside the def)
-        visitor = GetAutoCompletionReceiverVisitor.new
-        ast.accept(visitor)
-        receiver = visitor.receiver
+        # We are in a Def which is not instantiated, so it have been ignored. Compute then the semantics inside it:
+        receiver = semantics_on_def(surrounding_def, program, main_visitor, scope)
       end
 
       return receiver, scope
@@ -148,6 +132,93 @@ module IC::ReplInterface
         context.main_visitor.clean
         context.program.state = state
       end
+    end
+
+    # Computes semantics inside a Def.
+    #
+    # To do so, we should instantiate the Def with a fictitious `Call` constructed from args signature.
+    # e.g.
+    # ```
+    # def foo(x, y : String, z = 0)
+    #   ...
+    # ```
+    # is instantiated with:
+    # foo(<Any>, <String>, <typeof(0)>)
+    # with `<Type>` being a fictitious `ASTNode` with type `Type`.
+    # `Any` is a special type to represented unknown arg instantiation.
+    #
+    # `*splat` are instantiated with one value, with type `Tuple(ArgumentType)`.
+    # `**double_splat` are instantiated with no value, with type the empty `NamedTuple()`.
+    #
+    # TODO: block instantiation
+    # TODO: free vars
+    # TODO: class methods
+    # TODO: make it work in Generics
+    private def semantics_on_def(a_def, program, main_visitor, scope) : Crystal::ASTNode?
+      args = [] of Crystal::ASTNode
+      arg_types = [] of Crystal::Type
+      named_args = [] of Crystal::NamedArgument
+      named_args_types = [] of Crystal::NamedArgumentType
+
+      # MainVisitor for arguments
+      arg_main_visitor = Crystal::MainVisitor.new(program, main_visitor.vars, main_visitor.@typed_def, main_visitor.meta_vars)
+      arg_main_visitor.scope = scope
+      arg_main_visitor.path_lookup = scope
+
+      a_def.args.each_with_index do |a, i|
+        arg_type = argument_type(a, program, arg_main_visitor)
+        if a_def.splat_index.try &.< i
+          # Argument after splat need to be instantiated with named arg:
+          named_args_types << Crystal::NamedArgumentType.new(a.external_name, arg_type)
+          named_args << Crystal::NamedArgument.new(a.external_name, Crystal::Nop.new).tap(&.type = arg_type)
+        else
+          arg_types << arg_type
+          args << Crystal::Nop.new.tap(&.type = arg_type)
+        end
+      end
+
+      # Create the fictitious Call with typed args.
+      call = Crystal::Call.new(nil, a_def.name, args, named_args: named_args)
+      call.parent_visitor = main_visitor
+      call.scope = scope
+
+      # Instantiate the Call, gives back a typed `Def` ready to semantics.
+      typed_defs = call.lookup_matches_in(scope, arg_types, named_args_types, nil, a_def.name, search_in_parents: false)
+
+      if typed_def = typed_defs[0]? # TODO: we guess there is only one typed def for our Call, what append on dispatch?
+        main_visitor = Crystal::MainVisitor.new(
+          program,
+          vars: typed_def.vars || Crystal::MetaVars.new,
+          typed_def: typed_def)
+        main_visitor.scope = scope
+        main_visitor.path_lookup = scope
+
+        # Execute the semantics on def body:
+        begin
+          ast = program.semantic(a_def.body, main_visitor: main_visitor)
+        rescue
+        end
+
+        # Retrieve again the receiver node (now typed inside the def)
+        visitor = GetAutoCompletionReceiverVisitor.new
+        ast.try &.accept(visitor)
+        return visitor.receiver
+      end
+    end
+
+    # Gets `Crystal::Type` from `ASTNode` in a context of argument.
+    private def argument_type(argument, program, main_visitor)
+      if restriction = argument.restriction
+        ast = program.semantic(restriction, main_visitor: main_visitor)
+        ast.type.instance_type
+      elsif value = argument.default_value
+        ast = program.semantic(value, main_visitor: main_visitor)
+        ast.type
+      else
+        program.types["Any"]
+      end
+    rescue
+      program.types["Any"]
     end
 
     # Returns missing 'end's of an expression in order to parse it.
@@ -582,16 +653,58 @@ module IC::ReplInterface
       true
     end
   end
+
+  # Special Type used when executing the semantics on auto-completion def.
+  # It bypass the semantics checks.
+  private class AnyType < ::Crystal::NonGenericClassType
+    # implements all other types. (like NoReturn)
+    def implements?(other_type)
+      true
+    end
+  end
 end
 
-# [Monkey Patch] Skip the `_auto_completion_call_` while executing semantic stage.
+# [Monkey Patch]
+# 1) Skip the `_auto_completion_call_` while executing semantic stage.
+# 2) If any call argument is a `Any` type, skip that call and set the type to `Any`.
+# this allows the auto-completion works after a `Any`:
+# ```
+# def foo(x)
+#   x.to_s # would have raised "Error: undefined method 'to_s' for Any"
+#
+#   42.t| # ok
+# ```
 class Crystal::MainVisitor < Crystal::SemanticVisitor
+  # Count if we are in a Call
+  @call_nest = 0
+
+  private class AnyTypeByPass < Exception
+  end
+
   def visit(node : Call)
+    @call_nest += 1
     if node.name == "__auto_completion_call__"
-      node.set_type(@program.no_return)
+      # Skip the `_auto_completion_call_`
+      node.set_type(@program.types["Any"])
       true
     else
+      # Or does the normal behavior
       previous_def
+    end
+  rescue AnyTypeByPass
+    # If any argument or obj was Any, we jump here
+    node.set_type(@program.types["Any"])
+    true
+  ensure
+    @call_nest -= 1
+  end
+
+  def end_visit(node)
+    if @call_nest != 0 && (type = node.@type) && type == @program.types["Any"]?
+      # `Any` in a Call, bypass the semantics
+      raise AnyTypeByPass.new
+    else
+      true
     end
   end
 end

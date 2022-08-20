@@ -33,7 +33,7 @@ module IC::Spec
   end
 
   def self.verify_completion(handler, code, should_be type, with_scope = "main")
-    receiver, scope = handler.parse_receiver_code(code)
+    receiver, scope = handler.semantics(code)
     receiver.try(&.type).to_s.should eq type
     scope.to_s.should eq with_scope
   end

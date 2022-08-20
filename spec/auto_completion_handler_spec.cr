@@ -214,14 +214,14 @@ describe IC::ReplInterface::AutoCompletionHandler do
         CODE
     end
 
-    it "something inside a call" do
+    it "something inside a def" do
       IC::Spec.verify_completion(handler, %(def foo; 42.), should_be: "Int32")
       IC::Spec.verify_completion(handler, %(def foo; "foo".), should_be: "String")
       IC::Spec.verify_completion(handler, %(def foo; [[42.), should_be: "Int32")
       IC::Spec.verify_completion(handler, %(def foo; x = 42; x.), should_be: "Int32")
     end
 
-    it "something with scope inside a call" do
+    it "something with scope inside a def" do
       IC::Spec.verify_completion(handler, %(class Foo; def foo; 42.), should_be: "Int32", with_scope: "Foo")
       IC::Spec.verify_completion(handler, %(class Foo::Bar; class Baz; def foo; "foo".), should_be: "String", with_scope: "Foo::Bar::Baz")
       IC::Spec.verify_completion(handler, %(class Foo::Bar; class ::Baz; def foo; [[42.), should_be: "Int32", with_scope: "Baz")
@@ -231,6 +231,61 @@ describe IC::ReplInterface::AutoCompletionHandler do
       IC::Spec.verify_completion(handler, %(class Foo; 42.), should_be: "Int32", with_scope: "Foo")
       IC::Spec.verify_completion(handler, %(class Foo::Bar; class Baz;), should_be: "", with_scope: "Foo::Bar::Baz")
       IC::Spec.verify_completion(handler, %(class Foo::Bar; class ::Baz;), should_be: "", with_scope: "Baz")
+    end
+
+    it "arguments inside a def" do
+      IC::Spec.verify_completion(handler, %(def foo(a); a.), should_be: "Any")
+      IC::Spec.verify_completion(handler, %(def foo(b : String); b.), should_be: "String")
+      IC::Spec.verify_completion(handler, %(def foo(c = 42); c.), should_be: "Int32")
+      IC::Spec.verify_completion(handler, %(def foo(a, b : String, c = 42); {a, b, c}.), should_be: "Tuple(Any, String, Int32)")
+    end
+
+    it "arguments inside a def with scope" do
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Tuple(Foo::Bar, String)", with_scope: "Foo")
+        class Foo
+          class Bar
+          end
+
+          def bar
+            "bar"
+          end
+
+          def foo(x : Bar, y = bar)
+            {x, y}.
+        CODE
+    end
+
+    it "splat arguments inside a def" do
+      IC::Spec.verify_completion(handler, %(def foo(*splat); splat.), should_be: "Tuple(Any)")
+      IC::Spec.verify_completion(handler, %(def foo(*splat : Int32); splat.), should_be: "Tuple(Int32)")
+      IC::Spec.verify_completion(handler, %(def foo(*splat); splat.each &.), should_be: "Any")
+      IC::Spec.verify_completion(handler, %(def foo(a, b = 42, *splat, c = "foo"); {a, b, splat, c}.), should_be: "Tuple(Any, Int32, Tuple(Any), String)")
+    end
+
+    it "double splat arguments inside a def" do
+      IC::Spec.verify_completion(handler, %(def foo(**double_splat); double_splat.), should_be: "NamedTuple()")
+      IC::Spec.verify_completion(handler, %(def foo(a, b = 42, *splat, c = "foo", **double_splat); {a, b, splat, c, double_splat}.),
+        should_be: "Tuple(Any, Int32, Tuple(Any), String, NamedTuple())")
+    end
+
+    it "recursive call" do
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Tuple(Int32, String)")
+        def foo(x = 0) : String
+          {x, foo(x + 1)}.
+        CODE
+    end
+
+    it "something after Any" do
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Any")
+        def foo(x)
+          bar(x.baz.bam(0)).
+        CODE
+      IC::Spec.verify_completion(handler, <<-'CODE', should_be: "Int32")
+        def foo(x)
+          y = bar(baz(x)).bam
+
+          42.
+        CODE
     end
   end
 
