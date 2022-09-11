@@ -412,8 +412,8 @@ describe IC::ReplInterface::AutoCompletionHandler do
       handler.open
       handler.with_term_width(40) do
         IC::Spec.verify_completion_display handler, max_height: 5,
-          display: "",
-          height: 0
+          display: "Int32:\n",
+          height: 1
       end
     end
   end
@@ -498,8 +498,54 @@ describe IC::ReplInterface::AutoCompletionHandler do
           display: "Int32:\n" \
                    "nil?          \n" \
                    ">responds_to? \n" \
-                   "              \n",
+                   "\n",
           height: 4
+      end
+    end
+  end
+
+  describe "name filter" do
+    it "changes" do
+      handler = IC::Spec.auto_completion_handler
+      handler.complete_on("", "42.")
+      handler.open
+      handler.with_term_width(40) do
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "abs         bits       clamp            \n" \
+                   "abs2        bits_set?  class            \n" \
+                   "bit         ceil       clone            \n" \
+                   "bit_length  chr        crystal_type_id..\n",
+          height: 5
+        handler.name_filter = "to"
+
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "to      to_f32!  to_i!     to_i16!  \n" \
+                   "to_f    to_f64   to_i128   to_i32   \n" \
+                   "to_f!   to_f64!  to_i128!  to_i32!  \n" \
+                   "to_f32  to_i     to_i16    to_i64.. \n",
+          height: 5
+
+        handler.name_filter = "to_nop"
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n",
+          height: 1
+
+        handler.name_filter = "to_"
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "to_f     to_f64   to_i128   to_i32   \n" \
+                   "to_f!    to_f64!  to_i128!  to_i32!  \n" \
+                   "to_f32   to_i     to_i16    to_i64   \n" \
+                   "to_f32!  to_i!    to_i16!   to_i64!..\n",
+          height: 5
+
+        handler.name_filter = "to_i32!"
+        IC::Spec.verify_completion_display handler, max_height: 5,
+          display: "Int32:\n" \
+                   "to_i32!  \n",
+          height: 2
       end
     end
   end

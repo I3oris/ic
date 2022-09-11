@@ -21,7 +21,7 @@ module IC::ReplInterface
     def initialize(&prompt : Int32, Bool -> String)
       @editor = ExpressionEditor.new(&prompt)
       @editor.set_header do |io, previous_height|
-        @auto_completion.display_entries(io, color?, max_height: {10, Term::Size.height - 1}.min, clear_size: previous_height)
+        @auto_completion.display_entries(io, color?, max_height: {10, Term::Size.height - 1}.min, min_height: previous_height)
       end
     end
 
@@ -76,6 +76,7 @@ module IC::ReplInterface
         when :delete
           @editor.update { delete }
         when :back
+          auto_complete_remove_char if @auto_completion.open?
           @editor.update { back }
         when :tab
           auto_complete
@@ -109,12 +110,8 @@ module IC::ReplInterface
           end
         end
 
-        if !read.in?(:tab, :enter, :insert_new_line, :shift_tab, :escape) && @auto_completion.open?
-          if @editor.expression_scrolled? || read.is_a?(String)
-            @auto_completion.close
-          else
-            @auto_completion.clear
-          end
+        if !read.in?(:tab, :enter, :insert_new_line, :shift_tab, :escape, :back) && @auto_completion.open?
+          auto_complete_insert_char(read)
           @editor.update
         end
       end
@@ -210,7 +207,7 @@ module IC::ReplInterface
         # Compute auto-completion, return `replacement` (`nil` if no entry, full name if only one entry, or the begin match of entries otherwise)
         replacement = @auto_completion.complete_on(word_on_cursor, expr)
 
-        @auto_completion.open
+        @auto_completion.open if replacement
       end
 
       @editor.update do
@@ -221,6 +218,34 @@ module IC::ReplInterface
       # Move cursor:
       if replacement
         @editor.move_cursor_to(x: word_begin + replacement.size, y: @editor.y)
+      end
+    end
+
+    private def auto_complete_insert_char(read)
+      if read.is_a? Char && @editor.word_char?(@editor.x - 1)
+        line = @editor.current_line
+
+        # Retrieve the word under the cursor (corresponding to the method name being write)
+        word_begin, word_end = @editor.word_bound
+        word_on_cursor = line[word_begin..word_end]
+
+        @auto_completion.name_filter = word_on_cursor
+      elsif @editor.expression_scrolled? || read.is_a?(String)
+        @auto_completion.close
+      else
+        @auto_completion.clear
+      end
+    end
+
+    private def auto_complete_remove_char
+      if @editor.word_char?(@editor.x - 1)
+        line = @editor.current_line
+
+        word_begin, word_end = @editor.word_bound
+        word_on_cursor = line[word_begin..(word_end - 1)]
+        @auto_completion.name_filter = word_on_cursor
+      else
+        @auto_completion.clear
       end
     end
 

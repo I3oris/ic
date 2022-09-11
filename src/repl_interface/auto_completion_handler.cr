@@ -31,7 +31,9 @@ module IC::ReplInterface
     @previous_completion_display_height : Int32? = nil
     @scope_name = ""
     @selection_pos : Int32? = nil
+    @all_entries = [] of String
     getter entries = [] of String
+    property name_filter = ""
     getter? open = false
     getter? cleared = false
 
@@ -57,10 +59,18 @@ module IC::ReplInterface
     # Stores the `entries` found.
     # returns *replacement* that correspond to the greatest common root of founds entries.
     # return *nil* is no entry found.
-    def complete_on(word_on_cursor : String, expression_before_word_on_cursor : String) : String?
+    def complete_on(@name_filter : String, expression_before_word_on_cursor : String) : String?
       receiver, scope = semantics(expression_before_word_on_cursor)
 
-      find_entries(receiver, scope, word_on_cursor)
+      find_entries(receiver, scope, @name_filter)
+      self.name_filter = @name_filter
+
+      return @entries.empty? ? nil : common_root(@entries)
+    end
+
+    def name_filter=(@name_filter)
+      @selection_pos = nil
+      @entries = @all_entries.select(&.starts_with?(@name_filter))
     end
 
     # Execute the semantics on *expression_before_word_on_cursor*:
@@ -307,25 +317,23 @@ module IC::ReplInterface
         if names.size >= 2
           find_const_entries(scope, names)
         else
-          find_def_entries(receiver, scope, word_on_cursor)
+          find_def_entries(receiver, scope)
         end
       end
-
-      return @entries.empty? ? nil : common_root(@entries)
     end
 
-    private def find_def_entries(receiver, scope, name)
-      @entries.clear
+    private def find_def_entries(receiver, scope)
+      @all_entries.clear
       @scope_name = ""
 
       if receiver
         scope = receiver_type = receiver.type rescue return
 
         # Add methods from receiver_type:
-        @entries += find_entries_on_type(receiver_type, name).sort
+        @all_entries += find_entries_on_type(receiver_type).sort
 
         # Add keyword methods (.is_a?, .nil?, ...):
-        @entries += Highlighter::KEYWORD_METHODS.each.map(&.to_s).select(&.starts_with? name).to_a.sort
+        @all_entries += Highlighter::KEYWORD_METHODS.map(&.to_s).to_a.sort
         @scope_name = receiver_type.to_s
       else
         context = @context || return
@@ -333,37 +341,36 @@ module IC::ReplInterface
         scope ||= context.program
 
         # Add special command:
-        @entries += context.special_commands.select(&.starts_with? name)
+        @all_entries += context.special_commands
 
         # Add top-level vars:
         vars = context.local_vars.names_at_block_level_zero
-        @entries += vars.each.reject(&.starts_with? '_').select(&.starts_with? name).to_a.sort
+        @all_entries += vars.reject(&.starts_with? '_').sort!
 
         # Add methods from receiver_type:
-        @entries += find_entries_on_type(scope.metaclass, name).sort
+        @all_entries += find_entries_on_type(scope.metaclass).sort
 
         # Add keywords:
         keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
-        @entries += keywords.each.map(&.to_s).select(&.starts_with? name).to_a.sort
+        @all_entries += keywords.map(&.to_s).to_a.sort
 
         # Add types:
         if types = scope.types?
-          @entries += types.each_key.select(&.starts_with? name).to_a.sort
+          @all_entries += types.keys.sort!
         end
         @scope_name = scope.to_s
       end
 
-      @entries.uniq!
+      @all_entries.uniq!
     end
 
-    private def find_entries_on_type(type, name)
+    private def find_entries_on_type(type)
       results = [] of String
 
       # Add methods names from type:
       type.defs.try &.each
-        .select do |def_name, defs|
-          defs.any?(&.def.visibility.public?) &&
-            def_name.starts_with? name
+        .select do |_def_name, defs|
+          defs.any?(&.def.visibility.public?)
         end
         .reject do |def_name, _|
           def_name.starts_with?('_') || def_name == "`" ||           # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
@@ -375,9 +382,8 @@ module IC::ReplInterface
 
       # Add macro names from type:
       type.macros.try &.each
-        .select do |macro_name, macros|
-          macros.any?(&.visibility.public?) &&
-            macro_name.starts_with? name
+        .select do |_macro_name, macros|
+          macros.any?(&.visibility.public?)
         end
         .each do |macro_name, _|
           results << macro_name
@@ -385,7 +391,7 @@ module IC::ReplInterface
 
       # Recursively add methods names from parents:
       type.parents.try &.each do |parent|
-        results += find_entries_on_type(parent, name)
+        results += find_entries_on_type(parent)
       end
 
       results
@@ -393,6 +399,7 @@ module IC::ReplInterface
 
     private def find_require_entries(name)
       name = name.strip('"')
+      @name_filter = %("#{name}) # allow to auto-complete when `require jso` is written. (name_filter = `"jso` instead of `jso`)
 
       if context = @context
         already_required = context.program.requires
@@ -400,26 +407,26 @@ module IC::ReplInterface
         already_required = Set(String).new
       end
 
-      @entries.clear
+      @all_entries.clear
       Crystal::CrystalPath.default_paths.each do |path|
         if File.exists?(path)
           Dir.each_child(path) do |file|
             if file.ends_with?(".cr") && file.starts_with?(name)
               unless Path[path, file].normalize.to_s.in? already_required
                 require_name = file.chomp(".cr")
-                @entries << %("#{require_name}")
+                @all_entries << %("#{require_name}")
               end
             end
           end
         end
       end
 
-      @entries.sort!
+      @all_entries.sort!
       @scope_name = "require"
     end
 
     private def find_const_entries(scope, names)
-      @entries.clear
+      @all_entries.clear
       @scope_name = ""
 
       namespaces, name = names[...-1], names[-1]
@@ -428,7 +435,7 @@ module IC::ReplInterface
         return if full_scope.is_a? Crystal::ASTNode # TODO: Foo(42)::Bar is not handled yet.
 
         if full_scope && (types = full_scope.types?)
-          @entries = types.compact_map do |const_name, type|
+          @all_entries = types.compact_map do |const_name, type|
             if !type.private? && const_name.starts_with?(name)
               "#{namespaces.join("::")}::#{const_name}"
             end
@@ -465,16 +472,14 @@ module IC::ReplInterface
     # If closed, do nothing.
     #
     # Returns the actual displayed height.
-    def display_entries(io, color? = true, max_height = 10, clear_size = 0) : Int32
+    def display_entries(io, color? = true, max_height = 10, min_height = 0) : Int32
       if cleared?
-        clear_size.times { io.puts }
-        return clear_size
+        min_height.times { io.puts }
+        return min_height
       end
 
       return 0 unless open?
-
       return 0 if max_height <= 1
-      return 0 if @entries.size <= 1
 
       height = 0
 
@@ -483,9 +488,16 @@ module IC::ReplInterface
       io.puts ":"
       height += 1
 
+      if @entries.empty?
+        (min_height - height).times { io.puts }
+        return {height, min_height}.max
+      end
+
+      {height, min_height}.max
+
       nb_rows = compute_nb_row(@entries, max_nb_row: max_height - height)
 
-      columns = @entries.in_groups_of(nb_rows, "")
+      columns = @entries.in_groups_of(nb_rows, filled_up_with: "")
       column_widths = columns.map &.max_of &.size.+(2)
 
       nb_cols = nb_cols_hold_in_term_width(column_widths)
@@ -508,30 +520,38 @@ module IC::ReplInterface
           entry = columns[c][r]
           col_width = column_widths[c]
 
-          # Display `...` on the last column and row:
+          # `...` on the last column and row:
           if (r == nb_rows - 1) && (c - col_start == nb_cols - 1) && columns[c + 1]?
             entry += ".."
           end
 
-          # Display entry:
+          # Entry to display:
           entry_str = entry.ljust(col_width)
 
-          # Colorize selection
           if r + c*nb_rows == @selection_pos
+            # Colorize selection:
             if color?
-              entry_str = entry_str.colorize.bright.on_dark_gray
+              io.print entry_str.colorize.bright.on_dark_gray
             else
-              entry_str = ">" + entry_str[...-1] # if no color, remove last spaces to let place to '*'.
+              io.print ">" + entry_str[...-1] # if no color, remove last spaces to let place to '*'.
+            end
+          else
+            # Display entry_str, with @name_filter prefix in bright:
+            unless entry.empty?
+              io.print color? ? @name_filter.colorize.bright : @name_filter
+              io.print entry_str.lchop(@name_filter)
             end
           end
-          io.print entry_str
         end
         io.print Term::Cursor.clear_line_after if color?
         io.puts
       end
 
       height += nb_rows
-      height
+
+      (min_height - height).times { io.puts }
+
+      {height, min_height}.max
     end
 
     # Increases selected entry.
@@ -568,6 +588,7 @@ module IC::ReplInterface
     def close
       @selection_pos = nil
       @entries.clear
+      @all_entries.clear
       @open = false
       @cleared = false
     end

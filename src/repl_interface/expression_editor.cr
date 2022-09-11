@@ -168,6 +168,13 @@ module IC::ReplInterface
       {word_begin + 1, word_end - 1}
     end
 
+    # Returns true is the char at *x*, *y* is a word char.
+    def word_char?(x = @x, y = @y)
+      if x >= 0 && (ch = current_line[x]?)
+        ch.alphanumeric? || ch.in?('!', '?', '=', '_', '"')
+      end
+    end
+
     def delete_line(y)
       @lines.delete_at(y)
       @expression = @expression_height = @colorized_lines = nil

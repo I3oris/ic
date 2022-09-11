@@ -44,7 +44,6 @@ module IC::Spec
     display_got = String.build do |io|
       height_got = handler.display_entries(io, false, max_height, clear_size)
     end
-    # IC::Term::Size.size.should eq({40, 5})
     display_got.should eq display
     height_got.should eq height
     (display_got.split("\n").size - 1).should eq height
