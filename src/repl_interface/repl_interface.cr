@@ -58,7 +58,7 @@ module IC::ReplInterface
           if !has_moved
             @history.down(@editor.lines) do |expression|
               @editor.replace(expression)
-              @editor.move_cursor_to_end_of_first_line
+              @editor.move_cursor_to_end_of_line(y: 0)
             end
           end
         when :left
@@ -266,12 +266,18 @@ module IC::ReplInterface
 
     private def indentation_level
       parser = create_parser(@editor.expression_before_cursor)
-      begin
-        parser.parse
-      rescue
-      end
+      parser.parse rescue nil
 
-      parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest
+      parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest + parser.case_nest
+    end
+
+    private def indentation_level_if_in_a_case
+      parser = create_parser(@editor.expression_before_cursor)
+      parser.parse rescue nil
+
+      if parser.case_nest > 0
+        parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest + parser.case_nest
+      end
     end
 
     private def formated
@@ -282,15 +288,20 @@ module IC::ReplInterface
       current_line = @editor.current_line.rstrip(' ')
       return if @editor.x != current_line.size
 
-      last_word = current_line.split.last?
+      keyword = current_line.lstrip(' ')
 
-      case last_word
+      case keyword
       when Nil
       when .in? CLOSING_KEYWORD
-        @editor.current_line = "  "*self.indentation_level + current_line.lstrip(' ')
+        @editor.current_line = "  "*self.indentation_level + keyword
+      when "in", "when"
+        if indent_level = self.indentation_level_if_in_a_case
+          indent = {indent_level - 1, 0}.max
+          @editor.current_line = "  "*indent + keyword
+        end
       when .in? UNINDENT_KEYWORD
         indent = {self.indentation_level - 1, 0}.max
-        @editor.current_line = "  "*indent + current_line.lstrip(' ')
+        @editor.current_line = "  "*indent + keyword
       end
     end
 

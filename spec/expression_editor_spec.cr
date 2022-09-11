@@ -310,8 +310,11 @@ describe IC::ReplInterface::ExpressionEditor do
     editor.move_cursor_to_end(allow_scrolling: false)
     IC::Spec.verify_editor(editor, x: 4, y: 2)
 
-    editor.move_cursor_to_end_of_first_line(allow_scrolling: false)
+    editor.move_cursor_to_end_of_line(y: 0, allow_scrolling: false)
     IC::Spec.verify_editor(editor, x: 12, y: 0)
+
+    editor.move_cursor_to_end_of_line(y: 1, allow_scrolling: false)
+    IC::Spec.verify_editor(editor, x: 33, y: 1)
   end
 
   it "replaces" do

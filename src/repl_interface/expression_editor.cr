@@ -543,8 +543,8 @@ module IC::ReplInterface
       move_cursor_to(@lines[y].size, y, allow_scrolling: allow_scrolling)
     end
 
-    def move_cursor_to_end_of_first_line(allow_scrolling = true)
-      move_cursor_to(@lines[0].size, 0, allow_scrolling: allow_scrolling)
+    def move_cursor_to_end_of_line(y = @y, allow_scrolling = true)
+      move_cursor_to(@lines[y].size, y, allow_scrolling: allow_scrolling)
     end
 
     # Rewinds the cursor to the beginning of the expression

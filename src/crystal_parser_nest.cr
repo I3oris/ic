@@ -2,6 +2,14 @@
 # to track nesting of more expressions:
 class Crystal::Parser
   getter control_nest = 0
+  getter case_nest = 0
+
+  def parse_case
+    @case_nest += 1
+    ret = previous_def
+    @case_nest -= 1
+    ret
+  end
 
   def parse_if(check_end = true)
     @control_nest += 1 if check_end
@@ -34,7 +42,7 @@ class Crystal::Parser
   end
 
   # TODO: lib, macro, union
-  {% for parse_method in %w(case begin unless while until select
+  {% for parse_method in %w(begin unless while until select
                            parenthesized_expression empty_array_literal array_literal
                            percent_macro_control annotation enum_def fun_literal) %}
     def parse_{{parse_method.id}}
