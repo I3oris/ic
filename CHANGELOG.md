@@ -1,3 +1,39 @@
+# 0.5.1 (Mon Sep 12 2022)
+
+### New
+* The auto-completion behavior is improved:
+  * Now entries are narrowed as the user types.
+  * Matching part of the name are now displayed in bright.
+* Auto-completion is available on inner of `def` (Experimental)
+  * It takes account of parameter types:
+  ```cr
+  def foo(a, b : String, c = 0, *args, **options)
+    a.| # => Any
+    b.| # => String
+    c.| # => Int32
+    args.| # => Tuple(Any)
+    options. | # => NamedTuple()
+  ```
+  * It takes account of scope.
+  * A new fictitious type `Any` is introduced, bypassing the semantics check on `Call`. (`foo(<Any>).bar.baz # => Any`)
+  * The following is not yet supported:
+    * Block parameter
+    * Instance var parameter
+    * Free vars
+    * Class def
+    * Def in generic type.
+* Auto-completion now works inside a `Array`.
+* Update to the last crystal version (1.5.1).
+
+### Bugs fix
+* Fix bad unindent on `include` (unindent still work for `in`).
+* Fix broken auto-completion after `.class`.
+* Fix broken auto-completion after a suffix `if`.
+
+### Internal
+* Fix wrong `CRYSTAL_PATH` in Makefile (preventing to add lib dependency).
+* Remove some ameba excludes.
+
 # 0.5.0 (Fry Jul 15 2022)
 
 ### New
@@ -135,7 +171,7 @@
 ### Note
 The project change his goal, it not aims to reproduce an interpreter, it aims to provide a nice interface to wrap crystal interpreter
 
-# 0.2.1 (Fri Nov 12 2022)
+# 0.2.1 (Fri Nov 12 2021)
 
 ### Commits
 * Fix multiline not trigger on `begin\rescue`
