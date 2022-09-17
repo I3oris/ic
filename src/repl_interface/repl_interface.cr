@@ -207,7 +207,9 @@ module IC::ReplInterface
         # Compute auto-completion, return `replacement` (`nil` if no entry, full name if only one entry, or the begin match of entries otherwise)
         replacement = @auto_completion.complete_on(word_on_cursor, expr)
 
-        @auto_completion.open if replacement
+        if replacement && @auto_completion.entries.size >= 2
+          @auto_completion.open
+        end
       end
 
       @editor.update do
