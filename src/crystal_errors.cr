@@ -39,7 +39,7 @@ class Crystal::TopLevelExpressionVirtualFile < Crystal::VirtualFile
   getter initial_line_number
 
   def initialize(source : String, @initial_line_number : Int32 = 0)
-    super(Macro.new(""), source, expanded_location: nil)
+    super(Macro.new(""), source, expanded_location: Location.new("", line_number: initial_line_number, column_number: 0))
   end
 
   def to_s(io)

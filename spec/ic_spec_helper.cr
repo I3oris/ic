@@ -26,6 +26,10 @@ module IC::Spec
   @@repl = Crystal::Repl.new
   @@repl.load_prelude
 
+  def self.verify_run_code(code, should_result_to result)
+    @@repl.run_next_code(code).to_s.should eq result
+  end
+
   def self.auto_completion_handler
     handler = IC::ReplInterface::AutoCompletionHandler.new
     handler.set_context(@@repl)
@@ -131,6 +135,7 @@ end
                   IC::ReplInterface::AutoCompletionHandler
                   IC::ReplInterface::ReplInterface
                   IC::ReplInterface::ExpressionEditor
+                  Crystal::Repl
                 ) %}
   class {{klass.id}}
     include IC::Spec::MakePublic
