@@ -1,32 +1,6 @@
-require "./repl_interface/repl_interface"
-
-class IC::PryInterface < IC::ReplInterface::ReplInterface
-  def self.new
-    new do |_, color?|
-      "ic(#{Crystal::Config.version}):#{"pry".colorize(:magenta).toggle(color?)}> "
-    end
-  end
-
-  def on_ctrl_up
-    yield "whereami"
-  end
-
-  def on_ctrl_down
-    yield "next"
-  end
-
-  def on_ctrl_left
-    yield "finish"
-  end
-
-  def on_ctrl_right
-    yield "step"
-  end
-end
-
 # from compiler/crystal/interpreter/interpreter.cr: (1.3.0-dev)
 class Crystal::Repl::Interpreter
-  getter pry_interface = IC::PryInterface.new
+  getter pry_reader = IC::PryReader.new
 
   private def pry(ip, instructions, stack_bottom, stack)
     # We trigger keyboard interrupt here because only 'pry' can interrupt the running program.
@@ -42,7 +16,7 @@ class Crystal::Repl::Interpreter
     end
 
     # IC ADDING: (+ changed `print` to `output.print`)
-    output = @pry_interface.output
+    output = @pry_reader.output
     # END
     offset = (ip - instructions.instructions.to_unsafe).to_i32
     node = instructions.nodes[offset]?
@@ -108,15 +82,15 @@ class Crystal::Repl::Interpreter
     interpreter = Interpreter.new(self, compiled_def, local_vars, closure_context, stack_bottom, block_level)
 
     # IC MODIFICATION:
-    @pry_interface.color = @context.program.color?
-    @pry_interface.auto_completion.set_context(
+    @pry_reader.color = @context.program.color?
+    @pry_reader.set_context(
       local_vars: interpreter.local_vars,
       program: @context.program,
       main_visitor: main_visitor,
       special_commands: %w(continue step next finish whereami),
     )
 
-    @pry_interface.run do |line|
+    @pry_reader.read_loop do |line|
       # WAS:
       # while @pry
       #   TODO: supoort multi-line expressions
@@ -203,7 +177,7 @@ class Crystal::Repl::Interpreter
     column_number = location.column_number
 
     # IC ADDING:
-    output = @pry_interface.output
+    output = @pry_reader.output
 
     a_def_owner = @context.program.colorize(a_def.owner.to_s).blue.underline
     hashtag = @context.program.colorize("#").dark_gray.bold

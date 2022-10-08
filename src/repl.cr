@@ -1,7 +1,7 @@
 require "compiler/crystal/interpreter"
-require "./repl_interface/repl_interface"
 require "./pry"
 require "./crystal_errors"
+require "./repl_readers"
 
 class Crystal::Repl
   getter? prelude_complete = false
@@ -15,15 +15,14 @@ class Crystal::Repl
       prelude_complete_channel.send(1)
     end
 
-    repl_interface = IC::ReplInterface::ReplInterface.new
-    repl_interface.color = color
-    repl_interface.output = output = @interpreter.pry_interface.output = @program.stdout
-    repl_interface.repl = self
+    reader = IC::ReplReader.new(self)
+    reader.color = color
+    reader.output = output = @interpreter.pry_reader.output = @program.stdout
 
-    repl_interface.run do |expr|
+    reader.read_loop do |expr|
       prelude_complete_channel.receive && prelude_complete_channel.close unless prelude_complete_channel.closed?
 
-      result = run_next_code(expr, initial_line_number: repl_interface.line_number - repl_interface.lines.size - 1)
+      result = run_next_code(expr, initial_line_number: reader.line_number - reader.lines.size - 1)
       output.puts " => #{IC::Highlighter.highlight(result.to_s, toggle: color)}"
 
       # Explicitly exit the debugger
@@ -42,8 +41,6 @@ class Crystal::Repl
     rescue ex : Exception
       ex.inspect_with_backtrace(output)
     end
-
-    output.puts
   end
 
   def create_parser(code, initial_line_number = 0)

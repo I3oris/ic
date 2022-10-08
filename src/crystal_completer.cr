@@ -1,24 +1,7 @@
-require "../crystal_state"
+require "./crystal_state"
 
-module IC::ReplInterface
-  # Handles auto completion.
-  # Provides following important methods:
-  #
-  # * `set_context`: Sets an execution context on auto-completion.
-  # Allow the handler to know program types, methods and local vars.
-  #
-  # * `complete_on`: Trigger the auto-completion given a *word_on_cursor* and expression before.
-  # Stores the list of entries, and returns the *replacement* string.
-  #
-  # * `display_entries`: Displays on screen the stored entries.
-  # Highlight the one selected. (initially `nil`).
-  #
-  # * `selection_next`/`selection_previous`: Increases/decrease the selected entry.
-  #
-  # * `open`/`close`: Toggle display, clear entries if close.
-  #
-  # * `clear`: Like `close`, but display a empty space instead of nothing.
-  class AutoCompletionHandler
+module IC
+  class CrystalCompleter
     record AutoCompletionContext,
       local_vars : Crystal::Repl::LocalVars,
       program : Crystal::Program,
@@ -26,18 +9,11 @@ module IC::ReplInterface
       special_commands : Array(String)
 
     @context : AutoCompletionContext? = nil
-
-    # Store the previous display height in order to properly clear the screen:
-    @previous_completion_display_height : Int32? = nil
     @scope_name = ""
-    @selection_pos : Int32? = nil
     @all_entries = [] of String
-    getter entries = [] of String
-    property name_filter = ""
-    getter? open = false
-    getter? cleared = false
 
-    # Determines the context from a Repl
+    # Determines the context from a Repl.
+    # Allow the handler to know program types, methods and local vars.
     def set_context(repl)
       @context = AutoCompletionContext.new(
         local_vars: repl.@interpreter.local_vars,
@@ -59,18 +35,11 @@ module IC::ReplInterface
     # Stores the `entries` found.
     # returns *replacement* that correspond to the greatest common root of founds entries.
     # return *nil* is no entry found.
-    def complete_on(@name_filter : String, expression_before_word_on_cursor : String) : String?
+    def complete_on(name_filter : String, expression_before_word_on_cursor : String) : Tuple(String, Array(String))
       receiver, scope = semantics(expression_before_word_on_cursor)
 
-      find_entries(receiver, scope, @name_filter)
-      self.name_filter = @name_filter
-
-      return @entries.empty? ? nil : common_root(@entries)
-    end
-
-    def name_filter=(@name_filter)
-      @selection_pos = nil
-      @entries = @all_entries.select(&.starts_with?(@name_filter))
+      find_entries(receiver, scope, name_filter)
+      return @scope_name, @all_entries
     end
 
     # Execute the semantics on *expression_before_word_on_cursor*:
@@ -95,6 +64,9 @@ module IC::ReplInterface
 
       # Save the program state
       state = program.state
+      # TODO: Instead of save the state of program, modify the current program,
+      # then try to restore the program to the saved state, which actually doesn't work well:
+      # We can create a temporary program in which we import the types and definitions, then just discard it.
 
       # Create a temporary `Any` type that implements all types (like `NoReturn`)
       # This type is assigned to any unknown type in a def, and bypass some semantics checks (see `AnyType`).
@@ -399,7 +371,8 @@ module IC::ReplInterface
 
     private def find_require_entries(name)
       name = name.strip('"')
-      @name_filter = %("#{name}) # allow to auto-complete when `require jso` is written. (name_filter = `"jso` instead of `jso`)
+      # TODO re-enable this:
+      # @name_filter = %("#{name}) # allow to auto-complete when `require jso` is written. (name_filter = `"jso` instead of `jso`)
 
       if context = @context
         already_required = context.program.requires
@@ -443,195 +416,6 @@ module IC::ReplInterface
           @scope_name = full_scope.to_s
         end
       end
-    end
-
-    # Finds the common root text between given entries.
-    private def common_root(entries)
-      return "" if entries.empty?
-      return entries[0] if entries.size == 1
-
-      i = 0
-      entry_iterators = entries.map &.each_char
-
-      loop do
-        char_on_first_entry = entries[0][i]?
-        same = entry_iterators.all? do |entry|
-          entry.next == char_on_first_entry
-        end
-        i += 1
-        break if !same
-      end
-      entries[0][...(i - 1)]
-    end
-
-    # If open, displays completion entries by columns, minimizing the height.
-    # Highlight the selected entry (initially `nil`).
-    #
-    # If cleared, displays `clear_size` space.
-    #
-    # If closed, do nothing.
-    #
-    # Returns the actual displayed height.
-    def display_entries(io, color? = true, max_height = 10, min_height = 0) : Int32
-      if cleared?
-        min_height.times { io.puts }
-        return min_height
-      end
-
-      return 0 unless open?
-      return 0 if max_height <= 1
-
-      height = 0
-
-      # Print scope type name:
-      io.print @scope_name.colorize(:blue).underline.toggle(color?)
-      io.puts ":"
-      height += 1
-
-      if @entries.empty?
-        (min_height - height).times { io.puts }
-        return {height, min_height}.max
-      end
-
-      {height, min_height}.max
-
-      nb_rows = compute_nb_row(@entries, max_nb_row: max_height - height)
-
-      columns = @entries.in_groups_of(nb_rows, filled_up_with: "")
-      column_widths = columns.map &.max_of &.size.+(2)
-
-      nb_cols = nb_cols_hold_in_term_width(column_widths)
-
-      col_start = 0
-      if pos = @selection_pos
-        col_end = pos // nb_rows
-
-        if col_end >= nb_cols
-          nb_cols = nb_cols_hold_in_term_width(column_widths: column_widths[..col_end].reverse_each)
-
-          col_start = col_end - nb_cols + 1
-        end
-      end
-
-      nb_rows.times do |r|
-        nb_cols.times do |c|
-          c += col_start
-
-          entry = columns[c][r]
-          col_width = column_widths[c]
-
-          # `...` on the last column and row:
-          if (r == nb_rows - 1) && (c - col_start == nb_cols - 1) && columns[c + 1]?
-            entry += ".."
-          end
-
-          # Entry to display:
-          entry_str = entry.ljust(col_width)
-
-          if r + c*nb_rows == @selection_pos
-            # Colorize selection:
-            if color?
-              io.print entry_str.colorize.bright.on_dark_gray
-            else
-              io.print ">" + entry_str[...-1] # if no color, remove last spaces to let place to '*'.
-            end
-          else
-            # Display entry_str, with @name_filter prefix in bright:
-            unless entry.empty?
-              io.print color? ? @name_filter.colorize.bright : @name_filter
-              io.print entry_str.lchop(@name_filter)
-            end
-          end
-        end
-        io.print Term::Cursor.clear_line_after if color?
-        io.puts
-      end
-
-      height += nb_rows
-
-      (min_height - height).times { io.puts }
-
-      {height, min_height}.max
-    end
-
-    # Increases selected entry.
-    def selection_next
-      return nil if @entries.empty?
-
-      if (pos = @selection_pos).nil?
-        new_pos = 0
-      else
-        new_pos = (pos + 1) % @entries.size
-      end
-      @selection_pos = new_pos
-      @entries[new_pos]
-    end
-
-    # Decreases selected entry.
-    def selection_previous
-      return nil if @entries.empty?
-
-      if (pos = @selection_pos).nil?
-        new_pos = 0
-      else
-        new_pos = (pos - 1) % @entries.size
-      end
-      @selection_pos = new_pos
-      @entries[new_pos]
-    end
-
-    def open
-      @open = true
-      @cleared = false
-    end
-
-    def close
-      @selection_pos = nil
-      @entries.clear
-      @all_entries.clear
-      @open = false
-      @cleared = false
-    end
-
-    def clear
-      close
-      @cleared = true
-    end
-
-    private def nb_cols_hold_in_term_width(column_widths)
-      nb_cols = 0
-      width = 0
-      column_widths.each do |col_width|
-        width += col_width
-        break if width > self.term_width
-        nb_cols += 1
-      end
-      nb_cols
-    end
-
-    # Computes the min number of rows required to display entries:
-    # * if all entries cannot fit in `max_nb_row` rows, returns `max_nb_row`,
-    # * if there are less than 10 entries, returns `entries.size` because in this case, it's more convenient to display them in one column.
-    private def compute_nb_row(entries, max_nb_row)
-      if entries.size > 10
-        # test possible nb rows: (1 to max_nb_row)
-        1.to max_nb_row do |r|
-          width = 0
-          # Sum the width of each given column:
-          entries.each_slice(r, reuse: true) do |col|
-            width += col.max_of &.size + 2
-          end
-
-          # If width fit width terminal, we found min row required:
-          return r if width < self.term_width
-        end
-      end
-
-      {entries.size, max_nb_row}.min
-    end
-
-    private def term_width
-      Term::Size.width
     end
   end
 

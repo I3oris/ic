@@ -4,16 +4,16 @@ description: REPL Interface wrapping Crystal Interpreter (crystal-i).
 authors:
   - I3oris
 
-targets:
-  ic:
-    main: src/main.cr
-
 crystal: 1.1.1
 
 license: MIT
 
 scripts:
   postinstall: make postinstall
+
+dependencies:
+  reply:
+    github: I3oris/reply
 
 development_dependencies:
   ameba:
