@@ -12,6 +12,16 @@ module IC
     @scope_name = ""
     @all_entries = [] of String
 
+    KEYWORD = %w(
+      abstract alias annotation asm begin break case class def do else elsif end ensure enum extend
+      false for fun if in include instance_sizeof lib macro module next nil of offsetof out
+      pointerof private protected require rescue return select self sizeof struct super then
+      true type typeof uninitialized union unless until verbatim when while with yield
+      __DIR__ __END_LINE__ __FILE__ __LINE__
+    )
+
+    KEYWORD_METHODS = %w(as as? is_a? nil? responds_to?)
+
     # Determines the context from a Repl.
     # Allow the handler to know program types, methods and local vars.
     def set_context(repl)
@@ -89,7 +99,7 @@ module IC
 
       # Execute the semantics on the full ast node to compute all types.
       begin
-        ast = program.semantic(ast, main_visitor: main_visitor)
+        ast = program.semantic(ast, main_visitor: main_visitor, cleanup: false)
       rescue
       end
 
@@ -104,6 +114,15 @@ module IC
       if surrounding_def
         # We are in a Def which is not instantiated, so it have been ignored. Compute then the semantics inside it:
         receiver = semantics_on_def(surrounding_def, program, main_visitor, scope)
+      end
+
+      # If receiver have still no type, we try to execute the semantic only on it:
+      # This happen with ArrayLiteral (e.g. `[x.`).
+      #
+      # NOTE:
+      # This is not needed if we executing the cleanup phase, but since 1.6.0 we have to skip the cleanup phase. (otherwise all the auto-completion broke up!)
+      if receiver && !receiver.type?
+        program.visit_main(receiver, visitor: main_visitor, cleanup: false)
       end
 
       return receiver, scope
@@ -177,7 +196,7 @@ module IC
 
         # Execute the semantics on def body:
         begin
-          ast = program.semantic(a_def.body, main_visitor: main_visitor)
+          ast = program.visit_main(a_def.body, visitor: main_visitor, cleanup: false)
         rescue
         end
 
@@ -226,17 +245,22 @@ module IC
           delimiter = delimiter_stack.pop?
           state = :string if delimiter == :interpolation
         when .ident?
-          if token.value.in? %i(if unless)
+          case token.value
+          when Char, String, Nil
+            # nothing
+          when .if?, .unless?
             if is_suffix_if?(previous_noblank_token_kind)
               # nothing: suffix if should not be ended.
             else
               delimiter_stack.push :begin
             end
-          elsif token.value == :class
-            delimiter_stack.push :begin unless previous_noblank_token_kind == Crystal::Token::Kind::OP_PERIOD
-          elsif token.value.in? %i(begin module struct def while until case do annotation lib)
+          when .class?
+            unless previous_noblank_token_kind == Crystal::Token::Kind::OP_PERIOD
+              delimiter_stack.push :begin
+            end
+          when .begin?, .module?, .struct?, .def?, .while?, .until?, .case?, .do?, .annotation?, .lib?
             delimiter_stack.push :begin
-          elsif token.value == :end
+          when .end?
             delimiter_stack.pop?
           end
         when .delimiter_start?
@@ -305,7 +329,7 @@ module IC
         @all_entries += find_entries_on_type(receiver_type).sort
 
         # Add keyword methods (.is_a?, .nil?, ...):
-        @all_entries += Highlighter::KEYWORD_METHODS.map(&.to_s).to_a.sort
+        @all_entries += KEYWORD_METHODS
         @scope_name = receiver_type.to_s
       else
         context = @context || return
@@ -323,8 +347,7 @@ module IC
         @all_entries += find_entries_on_type(scope.metaclass).sort
 
         # Add keywords:
-        keywords = Highlighter::KEYWORDS + Highlighter::TRUE_FALSE_NIL + Highlighter::SPECIAL_VALUES
-        @all_entries += keywords.map(&.to_s).to_a.sort
+        @all_entries += KEYWORD
 
         # Add types:
         if types = scope.types?

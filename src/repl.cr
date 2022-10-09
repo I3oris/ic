@@ -81,7 +81,7 @@ class Crystal::Repl
 
   # Cleans the stack and the main visitor
   private def clean
-    @main_visitor.clean
+    @main_visitor.clean # should be useless since https://github.com/crystal-lang/crystal/pull/12512
   end
 
   def reset

@@ -18,23 +18,18 @@ class IC::Highlighter
   SPECIAL_VALUES_COLOR    = :cyan
   METHOD_COLOR            = {:green, Colorize::Mode::Bold}
 
-  KEYWORDS = {
-    :abstract, :alias, :annotation, :asm, :begin, :break, :case, :class,
-    :def, :do, :else, :elsif, :end, :ensure, :enum, :extend, :for, :fun,
-    :if, :in, :include, :instance_sizeof, :lib, :macro, :module,
-    :next, :of, :offsetof, :out, :pointerof, :private, :protected, :require,
-    :rescue, :return, :select, :sizeof, :struct, :super,
-    :then, :type, :typeof, :union, :uninitialized, :unless, :until,
-    :verbatim, :when, :while, :with, :yield,
-  }
-
   KEYWORD_METHODS = {
-    :as, :as?, :is_a?, :nil?, :responds_to?,
+    Crystal::Keyword::AS, Crystal::Keyword::AS_QUESTION, Crystal::Keyword::IS_A_QUESTION,
+    Crystal::Keyword::NIL_QUESTION, Crystal::Keyword::RESPONDS_TO_QUESTION,
   }
 
   SPECIAL_VALUES = {:__FILE__, :__DIR__, :__LINE__, :__END_LINE__}
-  TRUE_FALSE_NIL = {:true, :false, :nil}
-  SPECIAL_WORDS  = /^(new|loop|raise|record|spawn|(class_)?(getter|property|setter)(\?|!)?)$/
+
+  TRUE_FALSE_NIL = {
+    Crystal::Keyword::TRUE, Crystal::Keyword::FALSE, Crystal::Keyword::NIL,
+  }
+
+  SPECIAL_WORDS = /^(new|loop|raise|record|spawn|(class_)?(getter|property|setter)(\?|!)?)$/
 
   OPERATORS = {
     :+, :-, :*, :/, ://,
@@ -224,18 +219,18 @@ class IC::Highlighter
       last_token = {type: token.type, value: token.value.as?(String) || ""}
 
       unless token.type.space?
-        last_is_def = %i(def class module lib macro).any? { |t| token.keyword?(t) }
+        last_is_def = token.keyword?(:def) || token.keyword?(:class) || token.keyword?(:module) || token.keyword?(:lib) || token.keyword?(:macro)
       end
     end
   end
 
   private def ident_color(token)
     case token.value
-    when .in? KEYWORDS        then KEYWORD_COLOR
-    when .in? KEYWORD_METHODS then KEYWORD_METHODS_COLOR
-    when .in? TRUE_FALSE_NIL  then TRUE_FALSE_NIL_COLOR
-    when :self                then SELF_COLOR
-    else                           IDENT_COLOR
+    when .in? TRUE_FALSE_NIL    then TRUE_FALSE_NIL_COLOR
+    when .in? KEYWORD_METHODS   then KEYWORD_METHODS_COLOR
+    when Crystal::Keyword::SELF then SELF_COLOR
+    else
+      token.keyword? ? KEYWORD_COLOR : IDENT_COLOR
     end
   end
 
