@@ -69,6 +69,10 @@ module IC
       end
     end
 
+    def auto_completion_display_title(io : IO, title : String)
+      io << @highlighter.highlight(title) << ":"
+    end
+
     private def create_parser(code)
       Crystal::Parser.new(code)
     end
@@ -106,10 +110,6 @@ module IC
       # Set auto-completion context from repl, allow auto-completion to take account of previously defined types, methods and local vars.
       @crystal_completer.set_context(@repl)
       @crystal_completer.complete_on(name_filter, expression)
-    end
-
-    def auto_completion_display_title(io : IO, title : String)
-      io << @highlighter.highlight(title)
     end
 
     private def create_parser(code)
