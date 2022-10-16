@@ -7,6 +7,14 @@ module IC
   abstract class CrystalReader < Reply::Reader
     @highlighter = Highlighter.new
 
+    def initialize
+      super
+
+      # `"`, `:`, `'`, are not a delimiter because symbols and strings are treated as one word.
+      # '=', !', '?' are not a delimiter because they could make part of method name.
+      self.word_delimiters = {{" \n\t+-*/,;@&%<>^\\[](){}|.~".chars}}
+    end
+
     def continue?(expression)
       create_parser(expression).parse
       false
@@ -27,12 +35,6 @@ module IC
       parser.parse rescue nil
 
       parser.type_nest + parser.def_nest + parser.fun_nest + parser.control_nest + parser.case_nest
-    end
-
-    def word_delimiters
-      # `"`, `:`, `'`, are not a delimiter because symbols and strings should be treated as one word.
-      # '=', !', '?' are not a delimiter because they could make part of method name.
-      /[ \n\t\+\-\*\/,;@&%<>\^\\\[\]\(\)\{\}\|\.\~]/
     end
 
     def reindent_line(line)
