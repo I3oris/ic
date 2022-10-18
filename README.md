@@ -110,14 +110,22 @@ On the `pry` prompt you can type:
 * `whereami`: To re-display where the execution is.
 * Other     : To interpret code while debugging (e.g. the name of a variable).
 
-### Shortcuts
+### Hotkeys
 
 * `alt-enter`: On multiline input: insert a new line instead of submit edition.
-* `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
-* `ctrl-a`/`home`: Move cursor to begin of the expression.
-* `ctrl-e`/`end`: Move cursor to end of the expression.
 * `ctrl-c`: Keyboard Interruption.
-* `ctrl-d`: Exit (EOF).
+* `ctrl-d`: Delete char or exit (EOF).
+* `ctrl-a`/`home`: Move cursor to begin.
+* `ctrl-e`/`end`: Move cursor to end.
+* `ctrl-k`: Delete after cursor.
+* `ctrl-u`: Delete before cursor.
+* `alt-backspace`/`ctrl-backspace`: Delete word after
+* `alt-d`/`ctrl-delete`: Delete word before.
+* `alt-f`/`ctrl-right`: Move word forward.
+* `alt-b`/`ctrl-left`: Move word backward.
+* `ctrl-up`/`down`: On long multiline input: scroll up/down the view.
+* `ctrl-n`/`ctrl-p`: Move cursor up/down.
+* `ctrl-b`/`ctrl-f`: Move cursor backward/forward.
 
 Only on debugger (pry):
 * `ctrl-up`: `whereami`
