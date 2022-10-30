@@ -14,7 +14,7 @@ scripts:
 dependencies:
   reply:
     github: I3oris/reply
-    version: 0.2.0
+    version: 0.2.1
 
 development_dependencies:
   ameba:
