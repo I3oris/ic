@@ -133,6 +133,10 @@ Only on debugger (pry):
 * `ctrl-left`: `finish`
 * `ctrl-right`: `step`
 
+### History
+
+History is saved in `<home>/.ic_history` and is limited to 10_000 entries. It can be changed with environment variables `IC_HISTORY_FILE` and `IC_HISTORY_SIZE`. Use `IC_HISTORY_FILE=""` to disable saving history in a file.
+
 ### Commands
 You can type the following commands:
 * `# clear_history`: Clear history.

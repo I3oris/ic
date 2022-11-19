@@ -13,6 +13,10 @@ module IC
       # `"`, `:`, `'`, are not a delimiter because symbols and strings are treated as one word.
       # '=', !', '?' are not a delimiter because they could make part of method name.
       self.word_delimiters = {{" \n\t+-*/,;@&%<>^\\[](){}|.~".chars}}
+
+      if size = ENV["IC_HISTORY_SIZE"]?.try &.to_i?
+        self.history.max_size = size
+      end
     end
 
     def continue?(expression)
@@ -54,11 +58,20 @@ module IC
       expression.presence
     end
 
+    def history_file
+      if file = ENV["IC_HISTORY_FILE"]?
+        return nil if file.empty?
+        file
+      else
+        Path.home / ".ic_history"
+      end
+    end
+
     def read_loop(&)
       super do |expr|
         case expr
         when "# clear_history", "#clear_history"
-          self.history.clear
+          self.clear_history
           print_status(true)
         when "# reset", "#reset"
           status = (self.reset; true) rescue false
