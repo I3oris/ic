@@ -249,7 +249,7 @@ module IC
           when Char, String, Nil
             # nothing
           when .if?, .unless?
-            if is_suffix_if?(previous_noblank_token_kind)
+            if suffix_if?(previous_noblank_token_kind)
               # nothing: suffix if should not be ended.
             else
               delimiter_stack.push :begin
@@ -296,7 +296,7 @@ module IC
       end
     end
 
-    private def is_suffix_if?(previous_token_kind)
+    private def suffix_if?(previous_token_kind)
       kind = previous_token_kind
       return false if kind.nil?
 
