@@ -1,5 +1,5 @@
 name: ic
-version: 0.5.1
+version: 0.6.0
 description: REPL Interface wrapping Crystal Interpreter (crystal-i).
 authors:
   - I3oris

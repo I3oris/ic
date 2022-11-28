@@ -1,3 +1,35 @@
+# 0.6.0 (Mon Nov 28 2022)
+
+### New
+* The history is now saved in `<home>/.ic_history`.
+  * The file location can be controlled with the environment variables `IC_HISTORY_FILE`. (`IC_HISTORY_FILE=""` disables history saving)
+  * History max size is 10_000. (Can be controlled with `IC_HISTORY_SIZE`)
+* The new following hotkeys have been added: (thanks @zw963!)
+  * `ctrl-d`: Delete char or exit (EOF).
+  * `ctrl-k`: Delete after cursor.
+  * `ctrl-u`: Delete before cursor.
+  * `alt-backspace`/`ctrl-backspace`: Delete word after
+  * `alt-d`/`ctrl-delete`: Delete word before.
+  * `alt-f`/`ctrl-right`: Move word forward.
+  * `alt-b`/`ctrl-left`: Move word backward.
+  * `ctrl-n`/`ctrl-p`: Move cursor up/down.
+  * `ctrl-b`/`ctrl-f`: Move cursor backward/forward.
+* Behavior when auto-completing on only one match is slightly enhanced.
+* Crystal interpreter version is now 1.6.2.
+
+### Bugs fix
+* Fix #9: repair require of local files, thanks  @lebogan!
+* Fix display of auto-completion title on pry.
+* Reduce blinking on ws-code (computation are now done before clearing the screen). Disallow `sync` and `flush_on_newline` during `update` which help to reduce blinking too, (#10), thanks @cyangle!
+* Align the expression when prompt size change (e.g. line number increase), which avoid a cursor bug in this case.
+* Fix wrong history index after submitting an empty entry.
+* Fix ioctl window size magic number on darwin and bsd (reply#3), thanks @shinzlet!
+
+### Internal
+* Extract `repl_interface`/`expression_editor`/`char_reader`/`history` into a new shard `REPLy` and use it as dependency.
+* Use ameba v1.3.1 and fix lint error.
+* Use REPLy v0.3.1.
+
 # 0.5.1 (Mon Sep 12 2022)
 
 ### New
