@@ -3,7 +3,5 @@
 /bin/
 /.shards/
 *.dwarf
-/ic
-/tests/
 /share/crystal-ic/src/llvm/ext/llvm_ext.o
 shard.lock
