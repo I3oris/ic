@@ -12,8 +12,9 @@ OptionParser.parse do |parser|
   parser.banner = "Usage: ic [file] [--] [arguments]"
 
   parser.on "-v", "--version", "Print the version" do
-    puts "version: #{IC::VERSION}"
-    puts "crystal version: #{Crystal::Config.version}"
+    puts "Version: #{IC::VERSION}"
+    puts "Crystal version: #{Crystal::Config.version}"
+    puts "REPLy version: #{Reply::VERSION}"
     exit
   end
 
