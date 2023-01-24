@@ -370,7 +370,8 @@ module Crystal
           var.bind_to(@program.nil_var)
           var.nil_if_read = false
 
-          bind_to_program_nil_var(meta_var)
+          meta_var.bind_to(@program.nil_var) unless meta_var.dependencies.try &.any? &.same?(@program.nil_var)
+          node.bind_to(@program.nil_var)
         end
 
         check_mutably_closured meta_var, var
@@ -393,10 +394,6 @@ module Crystal
       else
         node.raise "read before assignment to local variable '#{node.name}'"
       end
-    end
-
-    private def bind_to_program_nil_var(node)
-      node.bind_to(@program.nil_var) unless node.dependencies.any? &.same?(@program.nil_var)
     end
 
     def visit(node : TypeDeclaration)
@@ -598,6 +595,19 @@ module Crystal
     def undefined_instance_variable(owner, node)
       similar_name = owner.lookup_similar_instance_var_name(node.name)
       program.undefined_instance_variable(node, owner, similar_name)
+    end
+
+    def first_time_accessing_meta_type_var?(var)
+      return false if var.uninitialized?
+
+      if var.freeze_type
+        deps = var.dependencies?
+        # If no dependencies, it's the case of a global for a regex literal.
+        # If there are dependencies and it's just one, it's the same var
+        deps ? deps.size == 1 : false
+      else
+        !var.dependencies?
+      end
     end
 
     def visit(node : InstanceVar)
@@ -934,7 +944,7 @@ module Crystal
         node.raise "can't use `yield` outside a method"
       end
 
-      if ctx = @fun_literal_context
+      if @fun_literal_context
         node.raise <<-MSG
           can't use `yield` inside a proc literal or captured block
 
@@ -1242,7 +1252,7 @@ module Crystal
         # It can happen that this call is inside an ArrayLiteral or HashLiteral,
         # was expanded but isn't bound to the expansion because the call (together
         # with its expansion) was cloned.
-        if (expanded = node.expanded) && (node.dependencies.empty? || !node.type?)
+        if (expanded = node.expanded) && (!node.dependencies? || !node.type?)
           node.bind_to(expanded)
         end
 
@@ -1398,7 +1408,8 @@ module Crystal
       expansion.accept self
       node.expanded = expansion
       node.bind_to(expanded)
-      return false
+
+      false
     end
 
     # If it's a super or previous_def call inside an initialize we treat
@@ -3245,7 +3256,7 @@ module Crystal
     def define_special_var(name, value)
       meta_var, _ = assign_to_meta_var(name)
       meta_var.bind_to value
-      bind_to_program_nil_var(meta_var)
+      meta_var.bind_to program.nil_var unless meta_var.dependencies.any? &.same?(program.nil_var)
       meta_var.assigned_to = true
       check_closured meta_var
 

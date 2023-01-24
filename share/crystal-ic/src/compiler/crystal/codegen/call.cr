@@ -7,7 +7,7 @@ class Crystal::CodeGenVisitor
     end
 
     target_defs = node.target_defs
-    if target_defs.empty?
+    unless target_defs
       node.raise "BUG: no target defs"
     end
 
@@ -394,7 +394,7 @@ class Crystal::CodeGenVisitor
           position_at_end current_def_label
 
           # Prepare this specific call
-          call.target_defs = ZeroOneOrMany.new(a_def)
+          call.target_defs = [a_def] of Def
           call.obj.try &.set_type(a_def.owner)
           call.args.zip(a_def.args) do |call_arg, a_def_arg|
             call_arg.set_type(a_def_arg.type)
@@ -462,7 +462,7 @@ class Crystal::CodeGenVisitor
 
         @last = self_type.passed_as_self? ? call_args.first : type_id(self_type)
         inline_call_return_value target_def, body
-        return true
+        true
       else
         false
       end

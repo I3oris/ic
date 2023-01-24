@@ -95,7 +95,7 @@ class Crystal::Command
     when command == "eval"
       options.shift
       eval
-    when command == "i" || command == "interactive"
+    when command.in?("i", "interactive")
       options.shift
       {% if flag?(:without_interpreter) %}
         STDERR.puts "Crystal was compiled without interpreter support"
@@ -140,6 +140,14 @@ class Crystal::Command
     exit 1
   rescue ex : Crystal::Error
     report_warnings
+
+    # This unwraps nested errors which could be caused by `require` which wraps
+    # errors in order to trace the require path. The causes are listed similarly
+    # to `#inspect_with_backtrace` but without the backtrace.
+    while cause = ex.cause
+      error ex.message, exit_code: nil
+      ex = cause
+    end
 
     error ex.message
   rescue ex : OptionParser::Exception
@@ -210,7 +218,7 @@ class Crystal::Command
 
     output_filename = Crystal.temp_executable(config.output_filename)
 
-    result = config.compile output_filename
+    config.compile output_filename
 
     unless config.compiler.no_codegen?
       report_warnings
@@ -353,7 +361,7 @@ class Crystal::Command
 
       unless no_codegen
         valid_emit_values = Compiler::EmitTarget.names
-        valid_emit_values.map! { |v| v.gsub('_', '-').downcase }
+        valid_emit_values.map!(&.gsub('_', '-').downcase)
 
         opts.on("--emit [#{valid_emit_values.join('|')}]", "Comma separated list of types of output for the compiler to emit") do |emit_values|
           compiler.emit_targets |= validate_emit_values(emit_values.split(',').map(&.strip))

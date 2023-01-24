@@ -550,6 +550,7 @@ struct Int
     UptoIterator(typeof(self), typeof(to)).new(self, to)
   end
 
+  # Calls the given block with each integer value from self down to `to`.
   def downto(to, &block : self ->) : Nil
     return unless self >= to
     x = self
@@ -560,6 +561,7 @@ struct Int
     end
   end
 
+  # Get an iterator for counting down from self to `to`.
   def downto(to)
     DowntoIterator(typeof(self), typeof(to)).new(self, to)
   end
@@ -876,6 +878,30 @@ struct Int8
     Intrinsics.popcount8(self)
   end
 
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse8(self).to_i8!
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    self
+  end
+
   # Returns the number of leading `0`-bits.
   def leading_zeros_count
     Intrinsics.countleading8(self, false)
@@ -951,6 +977,30 @@ struct Int16
 
   def popcount : Int16
     Intrinsics.popcount16(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse16(self).to_i16!
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap16(self).to_i16!
   end
 
   # Returns the number of leading `0`-bits.
@@ -1030,6 +1080,30 @@ struct Int32
     Intrinsics.popcount32(self)
   end
 
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse32(self).to_i32!
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap32(self).to_i32!
+  end
+
   # Returns the number of leading `0`-bits.
   def leading_zeros_count
     Intrinsics.countleading32(self, false)
@@ -1105,6 +1179,30 @@ struct Int64
 
   def popcount : Int64
     Intrinsics.popcount64(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse64(self).to_i64!
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap64(self).to_i64!
   end
 
   # Returns the number of leading `0`-bits.
@@ -1184,6 +1282,30 @@ struct Int128
 
   def popcount
     Intrinsics.popcount128(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse128(self).to_i128!
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap128(self).to_i128!
   end
 
   # Returns the number of leading `0`-bits.
@@ -1267,6 +1389,30 @@ struct UInt8
     Intrinsics.popcount8(self)
   end
 
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse8(self)
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    self
+  end
+
   # Returns the number of leading `0`-bits.
   def leading_zeros_count
     Intrinsics.countleading8(self, false)
@@ -1346,6 +1492,30 @@ struct UInt16
 
   def popcount : Int16
     Intrinsics.popcount16(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse16(self)
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap16(self)
   end
 
   # Returns the number of leading `0`-bits.
@@ -1429,6 +1599,30 @@ struct UInt32
     Intrinsics.popcount32(self)
   end
 
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse32(self)
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap32(self)
+  end
+
   # Returns the number of leading `0`-bits.
   def leading_zeros_count
     Intrinsics.countleading32(self, false)
@@ -1508,6 +1702,30 @@ struct UInt64
 
   def popcount : Int64
     Intrinsics.popcount64(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse64(self)
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap64(self)
   end
 
   # Returns the number of leading `0`-bits.
@@ -1591,6 +1809,30 @@ struct UInt128
 
   def popcount
     Intrinsics.popcount128(self)
+  end
+
+  # Reverses the bits of `self`; the least significant bit becomes the most
+  # significant, and vice-versa.
+  #
+  # ```
+  # 0b01001011_u8.bit_reverse          # => 0b11010010
+  # 0b1100100001100111_u16.bit_reverse # => 0b1110011000010011
+  # ```
+  def bit_reverse : self
+    Intrinsics.bitreverse128(self)
+  end
+
+  # Swaps the bytes of `self`; a little-endian value becomes a big-endian value,
+  # and vice-versa. The bit order within each byte is unchanged.
+  #
+  # Has no effect on 8-bit integers.
+  #
+  # ```
+  # 0x1234_u16.byte_swap     # => 0x3412
+  # 0x5678ABCD_u32.byte_swap # => 0xCDAB7856
+  # ```
+  def byte_swap : self
+    Intrinsics.bswap128(self)
   end
 
   # Returns the number of leading `0`-bits.
