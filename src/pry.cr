@@ -1,6 +1,6 @@
 # from compiler/crystal/interpreter/interpreter.cr: (1.3.0-dev)
 class Crystal::Repl::Interpreter
-  getter pry_reader = IC::PryReader.new
+  getter pry_reader
 
   private def pry(ip, instructions, stack_bottom, stack)
     # We trigger keyboard interrupt here because only 'pry' can interrupt the running program.

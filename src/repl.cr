@@ -15,7 +15,7 @@ class Crystal::Repl
       prelude_complete_channel.send(1)
     end
 
-    reader = IC::ReplReader.new(self)
+    reader = ReplReader.new(self)
     reader.color = color
     reader.output = output = @interpreter.pry_reader.output = @program.stdout
 
