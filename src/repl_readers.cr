@@ -1,4 +1,4 @@
-require "reply"
+require "../share/crystal-ic/lib/reply/src/reply"
 require "./crystal_completer"
 require "./crystal_parser_nest"
 require "./highlighter"
