@@ -137,7 +137,7 @@ module Crystal
     end
 
     # Keep old behavior
-    def on_ctrl_up
+    def on_ctrl_up(&)
       yield "whereami"
     end
   end
