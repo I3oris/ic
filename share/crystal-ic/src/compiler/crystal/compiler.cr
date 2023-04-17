@@ -285,7 +285,7 @@ module Crystal
       result
     end
 
-    private def with_file_lock(output_dir)
+    private def with_file_lock(output_dir, &)
       File.open(File.join(output_dir, "compiler.lock"), "w") do |file|
         file.flock_exclusive do
           yield
@@ -341,8 +341,8 @@ module Crystal
         {% if flag?(:msvc) %}
           if msvc_path = Crystal::System::VisualStudio.find_latest_msvc_path
             if win_sdk_libpath = Crystal::System::WindowsSDK.find_win10_sdk_libpath
-              host_bits = {{ flag?(:bits64) ? "x64" : "x86" }}
-              target_bits = program.has_flag?("bits64") ? "x64" : "x86"
+              host_bits = {{ flag?(:aarch64) ? "ARM64" : flag?(:bits64) ? "x64" : "x86" }}
+              target_bits = program.has_flag?("aarch64") ? "arm64" : program.has_flag?("bits64") ? "x64" : "x86"
 
               # MSVC build tools and Windows SDK found; recreate `LIB` environment variable
               # that is normally expected on the MSVC developer command prompt
@@ -352,6 +352,8 @@ module Crystal
               link_args << Process.quote_windows("/LIBPATH:#{win_sdk_libpath.join("um", target_bits)}")
 
               # use exact path for compiler instead of relying on `PATH`
+              # (letter case shouldn't matter in most cases but being exact doesn't hurt here)
+              target_bits = target_bits.sub("arm", "ARM")
               cl = Process.quote_windows(msvc_path.join("bin", "Host#{host_bits}", target_bits, "cl.exe").to_s)
             end
           end
@@ -440,7 +442,9 @@ module Crystal
         return all_reused
       end
 
-      {% if flag?(:preview_mt) %}
+      {% if !Crystal::System::Process.class.has_method?("fork") %}
+        raise "Cannot fork compiler. `Crystal::System::Process.fork` is not implemented on this system."
+      {% elsif flag?(:preview_mt) %}
         raise "Cannot fork compiler in multithread mode"
       {% else %}
         jobs_count = 0
@@ -464,7 +468,7 @@ module Crystal
               end
             end
 
-            codegen_process = Process.fork do
+            codegen_process = Crystal::System::Process.fork do
               pipe_w = pw
               slice.each do |unit|
                 unit.compile
@@ -474,7 +478,7 @@ module Crystal
                 end
               end
             end
-            codegen_process.wait
+            Process.new(codegen_process).wait
 
             if pipe_w = pw
               pipe_w.close
@@ -619,9 +623,8 @@ module Crystal
             linker_not_found File::NotFoundError, linker_name
           end
         end
-        msg = status.normal_exit? ? "code: #{status.exit_code}" : "signal: #{status.exit_signal} (#{status.exit_signal.value})"
         code = status.normal_exit? ? status.exit_code : 1
-        error "execution of command failed with #{msg}: `#{command}`", exit_code: code
+        error "execution of command failed with exit status #{status}: #{command}", exit_code: code
       end
     end
 
