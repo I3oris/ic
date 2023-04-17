@@ -2,7 +2,7 @@ require "./repl"
 require "option_parser"
 
 module IC
-  VERSION = "0.6.0"
+  VERSION = "0.7.0"
 end
 
 repl = Crystal::Repl.new

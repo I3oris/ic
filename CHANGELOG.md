@@ -1,3 +1,16 @@
+# 0.7.0 (Mon Apr 17 2023)
+
+### New
+* Update to the last crystal version (1.8.0).
+
+* Now display `REPLy` version on `-v`.
+
+### Internal
+* Use `ameba` v1.4.3 and fix lint error.
+* `REPLy` moved inside the compiler itself (in `./share/crystal-ic/lib`), it's not required as a shards anymore.
+
+> Note: you can use `shards prune` to remove unused version of `REPLy`.
+
 # 0.6.0 (Mon Nov 28 2022)
 
 ### New
