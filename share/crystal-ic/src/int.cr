@@ -369,16 +369,16 @@ struct Int
   def bits(range : Range)
     start_index = range.begin
     if start_index
-      raise IndexError.new("start index (#{start_index}) must be positive") if start_index < 0
+      raise IndexError.new("Start index (#{start_index}) must be positive") if start_index < 0
     else
       start_index = 0
     end
 
     end_index = range.end
     if end_index
-      raise IndexError.new("end index (#{end_index}) must be positive") if end_index < 0
+      raise IndexError.new("End index (#{end_index}) must be positive") if end_index < 0
       end_index += 1 unless range.exclusive?
-      raise IndexError.new("end index (#{end_index}) must be greater than start index (#{start_index})") if end_index <= start_index
+      raise IndexError.new("End index (#{end_index}) must be greater than start index (#{start_index})") if end_index <= start_index
     else
       # if there is no end index then we only need to shift
       return self >> start_index
@@ -890,6 +890,16 @@ struct Int8
     0_i8 - self
   end
 
+  # :nodoc:
+  def abs_unsigned : UInt8
+    self < 0 ? 0_u8 &- self : to_u8!
+  end
+
+  # :nodoc:
+  def neg_signed : self
+    -self
+  end
+
   def popcount : Int8
     Intrinsics.popcount8(self)
   end
@@ -988,6 +998,16 @@ struct Int16
 
   def - : Int16
     0_i16 - self
+  end
+
+  # :nodoc:
+  def abs_unsigned : UInt16
+    self < 0 ? 0_u16 &- self : to_u16!
+  end
+
+  # :nodoc:
+  def neg_signed : self
+    -self
   end
 
   def popcount : Int16
@@ -1090,6 +1110,16 @@ struct Int32
     0 - self
   end
 
+  # :nodoc:
+  def abs_unsigned : UInt32
+    self < 0 ? 0_u32 &- self : to_u32!
+  end
+
+  # :nodoc:
+  def neg_signed : self
+    -self
+  end
+
   def popcount : Int32
     Intrinsics.popcount32(self)
   end
@@ -1188,6 +1218,16 @@ struct Int64
 
   def - : Int64
     0_i64 - self
+  end
+
+  # :nodoc:
+  def abs_unsigned : UInt64
+    self < 0 ? 0_u64 &- self : to_u64!
+  end
+
+  # :nodoc:
+  def neg_signed : self
+    -self
   end
 
   def popcount : Int64
@@ -1291,6 +1331,16 @@ struct Int128
   def -
     # TODO: use 0_i128 - self
     Int128.new(0) - self
+  end
+
+  # :nodoc:
+  def abs_unsigned : UInt128
+    self < 0 ? UInt128.new(0) &- self : to_u128!
+  end
+
+  # :nodoc:
+  def neg_signed : self
+    -self
   end
 
   def popcount
@@ -1397,6 +1447,16 @@ struct UInt8
     self
   end
 
+  # :nodoc:
+  def abs_unsigned : self
+    self
+  end
+
+  # :nodoc:
+  def neg_signed : Int8
+    0_i8 - self
+  end
+
   def popcount : Int8
     Intrinsics.popcount8(self)
   end
@@ -1499,6 +1559,16 @@ struct UInt16
 
   def abs : self
     self
+  end
+
+  # :nodoc:
+  def abs_unsigned : self
+    self
+  end
+
+  # :nodoc:
+  def neg_signed : Int16
+    0_i16 - self
   end
 
   def popcount : Int16
@@ -1605,6 +1675,16 @@ struct UInt32
     self
   end
 
+  # :nodoc:
+  def abs_unsigned : self
+    self
+  end
+
+  # :nodoc:
+  def neg_signed : Int32
+    0_i32 - self
+  end
+
   def popcount : Int32
     Intrinsics.popcount32(self)
   end
@@ -1707,6 +1787,16 @@ struct UInt64
 
   def abs : self
     self
+  end
+
+  # :nodoc:
+  def abs_unsigned : self
+    self
+  end
+
+  # :nodoc:
+  def neg_signed : Int64
+    0_i64 - self
   end
 
   def popcount : Int64
@@ -1813,6 +1903,16 @@ struct UInt128
 
   def abs
     self
+  end
+
+  # :nodoc:
+  def abs_unsigned : self
+    self
+  end
+
+  # :nodoc:
+  def neg_signed : Int128
+    Int128.new(0) - self
   end
 
   def popcount

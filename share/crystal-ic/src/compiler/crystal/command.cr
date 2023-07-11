@@ -19,6 +19,7 @@ class Crystal::Command
     Command:
         init                     generate a new project
         build                    build an executable
+        clear_cache              clear the compiler cache
         docs                     generate documentation
         env                      print Crystal environment information
         eval                     eval code from args or standard input
@@ -112,6 +113,9 @@ class Crystal::Command
     when "tool".starts_with?(command)
       options.shift
       tool
+    when command == "clear_cache"
+      options.shift
+      clear_cache
     when "help".starts_with?(command), "--help" == command, "-h" == command
       puts USAGE
       exit
@@ -327,15 +331,16 @@ class Crystal::Command
     compiler : Compiler,
     sources : Array(Compiler::Source),
     output_filename : String,
-    original_output_filename : String,
+    emit_base_filename : String?,
     arguments : Array(String),
     specified_output : Bool,
     hierarchy_exp : String?,
     cursor_location : String?,
-    output_format : String? do
+    output_format : String?,
+    combine_rpath : Bool do
     def compile(output_filename = self.output_filename)
-      compiler.emit_base_filename = original_output_filename
-      compiler.compile sources, output_filename
+      compiler.emit_base_filename = emit_base_filename || output_filename.rchop(File.extname(output_filename))
+      compiler.compile sources, output_filename, combine_rpath: combine_rpath
     end
 
     def top_level_semantic
@@ -521,17 +526,23 @@ class Crystal::Command
     if has_stdin_filename
       sources << Compiler::Source.new(filenames.shift, STDIN.gets_to_end)
     end
-    sources += gather_sources(filenames)
-    first_filename = sources.first.filename
-    first_file_ext = File.extname(first_filename)
-    original_output_filename = File.basename(first_filename, first_file_ext)
+    sources.concat gather_sources(filenames)
 
-    # Check if we'll overwrite the main source file
-    if first_file_ext.empty? && !output_filename && !no_codegen && !run && first_filename == File.expand_path(original_output_filename)
-      error "compilation will overwrite source file '#{Crystal.relative_filename(first_filename)}', either change its extension to '.cr' or specify an output file with '-o'"
+    output_extension = compiler.cross_compile? ? compiler.codegen_target.object_extension : compiler.codegen_target.executable_extension
+    if output_filename
+      if File.extname(output_filename).empty?
+        output_filename += output_extension
+      end
+    else
+      first_filename = sources.first.filename
+      output_filename = "#{::Path[first_filename].stem}#{output_extension}"
+
+      # Check if we'll overwrite the main source file
+      if !no_codegen && !run && first_filename == File.expand_path(output_filename)
+        error "compilation will overwrite source file '#{Crystal.relative_filename(first_filename)}', either change its extension to '.cr' or specify an output file with '-o'"
+      end
     end
 
-    output_filename ||= original_output_filename
     output_format ||= "text"
     unless output_format.in?("text", "json")
       error "You have input an invalid format, only text and JSON are supported"
@@ -543,7 +554,12 @@ class Crystal::Command
       error "can't use `#{output_filename}` as output filename because it's a directory"
     end
 
-    @config = CompilerConfig.new compiler, sources, output_filename, original_output_filename, arguments, specified_output, hierarchy_exp, cursor_location, output_format
+    if run
+      emit_base_filename = ::Path[sources.first.filename].stem
+    end
+
+    combine_rpath = run && !no_codegen
+    @config = CompilerConfig.new compiler, sources, output_filename, emit_base_filename, arguments, specified_output, hierarchy_exp, cursor_location, output_format, combine_rpath
   end
 
   private def gather_sources(filenames)

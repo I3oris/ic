@@ -43,36 +43,17 @@ struct BigRational < Number
     initialize(num, 1)
   end
 
-  # Creates a exact representation of float as rational.
-  def initialize(num : Float::Primitive)
-    # It ensures that `BigRational.new(f) == f`
-    # It relies on fact, that mantissa is at most 53 bits
-    frac, exp = Math.frexp num
-    ifrac = Math.ldexp(frac.to_f64, Float64::MANT_DIGITS).to_i64
-    exp -= Float64::MANT_DIGITS
-    initialize ifrac, 1
-    if exp >= 0
-      LibGMP.mpq_mul_2exp(out @mpq, self, exp)
-    else
-      LibGMP.mpq_div_2exp(out @mpq, self, -exp)
-    end
+  # Creates an exact representation of float as rational.
+  #
+  # Raises `ArgumentError` if *num* is not finite.
+  def self.new(num : Float::Primitive)
+    raise ArgumentError.new "Can only construct from a finite number" unless num.finite?
+    new { |mpq| LibGMP.mpq_set_d(mpq, num) }
   end
 
-  # :ditto:
-  def initialize(num : BigFloat)
-    frac, exp = Math.frexp num
-    prec = LibGMP.mpf_get_prec(frac)
-    # the mantissa has at most `prec + 1` bits, because the first fractional bit
-    # of `frac` is always 1, and `prec` variable bits follow
-    # TODO: use `Math.ldexp` after #11007
-    ifrac = BigFloat.new { |mpf| LibGMP.mpf_mul_2exp(mpf, frac, prec + 1) }.to_big_i
-    exp -= prec + 1
-    initialize ifrac, 1
-    if exp >= 0
-      LibGMP.mpq_mul_2exp(out @mpq, self, exp)
-    else
-      LibGMP.mpq_div_2exp(out @mpq, self, -exp)
-    end
+  # Creates an exact representation of float as rational.
+  def self.new(num : BigFloat)
+    new { |mpq| LibGMP.mpq_set_f(mpq, num) }
   end
 
   # Creates a `BigRational` from the given *num*.
@@ -97,27 +78,48 @@ struct BigRational < Number
   end
 
   def numerator : BigInt
-    BigInt.new { |mpz| LibGMP.mpq_get_num(mpz, self) }
+    # Returns `LibGMP.mpq_numref(self)`, whose C macro expansion effectively
+    # produces a raw member access. This is only as safe as copying `BigInt`s by
+    # value, as both involve copying `LibGMP::MPZ` around which has reference
+    # semantics, and `BigInt`s cannot be safely mutated in-place this way; see
+    # #9825 for details. Ditto for `#denominator`.
+    BigInt.new(@mpq._mp_num)
   end
 
   def denominator : BigInt
-    BigInt.new { |mpz| LibGMP.mpq_get_den(mpz, self) }
+    BigInt.new(@mpq._mp_den)
   end
 
   def <=>(other : BigRational)
     LibGMP.mpq_cmp(mpq, other)
   end
 
-  def <=>(other : Float32 | Float64)
-    self <=> BigRational.new(other)
+  def <=>(other : Float::Primitive)
+    self <=> BigRational.new(other) unless other.nan?
   end
 
-  def <=>(other : Float)
-    to_big_f <=> other.to_big_f
+  def <=>(other : BigFloat)
+    self <=> other.to_big_r
   end
 
-  def <=>(other : Int)
-    LibGMP.mpq_cmp(mpq, other.to_big_r)
+  def <=>(other : Int::Primitive)
+    if LibGMP::SI::MIN <= other <= LibGMP::UI::MAX
+      if other <= LibGMP::SI::MAX
+        LibGMP.mpq_cmp_si(self, LibGMP::SI.new!(other), 1)
+      else
+        LibGMP.mpq_cmp_ui(self, LibGMP::UI.new!(other), 1)
+      end
+    else
+      self <=> other.to_big_i
+    end
+  end
+
+  def <=>(other : BigInt)
+    LibGMP.mpq_cmp_z(self, other)
+  end
+
+  def ==(other : BigRational) : Bool
+    LibGMP.mpq_equal(self, other) != 0
   end
 
   def +(other : BigRational) : BigRational
@@ -366,6 +368,13 @@ struct Float
     BigRational.new(self)
   end
 
+  def <=>(other : BigRational)
+    cmp = other <=> self
+    -cmp if cmp
+  end
+end
+
+struct BigFloat
   def <=>(other : BigRational)
     -(other <=> self)
   end

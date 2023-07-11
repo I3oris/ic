@@ -285,6 +285,14 @@ class Regex
   # This alias is supposed to replace `Options`.
   alias CompileOptions = Options
 
+  # Returns `true` if the regex engine supports all *options* flags when compiling a pattern.
+  def self.supports_compile_options?(options : CompileOptions) : Bool
+    options.each do |flag|
+      return false unless Engine.supports_compile_flag?(flag)
+    end
+    true
+  end
+
   # Represents options passed to regex match methods such as `Regex#match`.
   @[Flags]
   enum MatchOptions
@@ -306,6 +314,14 @@ class Regex
     # This option has no effect if the pattern was compiled with
     # `CompileOptions::MATCH_INVALID_UTF` when using PCRE2 10.34+.
     NO_UTF_CHECK
+  end
+
+  # Returns `true` if the regex engine supports all *options* flags when matching a pattern.
+  def self.supports_match_options?(options : MatchOptions) : Bool
+    options.each do |flag|
+      return false unless Engine.supports_match_flag?(flag)
+    end
+    true
   end
 
   # Returns a `Regex::CompileOptions` representing the optional flags applied to this `Regex`.
@@ -333,6 +349,15 @@ class Regex
   # ```
   def self.new(source : String, options : Options = Options::None)
     new(_source: source, _options: options)
+  end
+
+  # Creates a new `Regex` instance from a literal consisting of a *pattern* and the named parameter modifiers.
+  def self.literal(pattern : String, *, i : Bool = false, m : Bool = false, x : Bool = false) : self
+    options = CompileOptions::None
+    options |= :ignore_case if i
+    options |= :multiline if m
+    options |= :extended if x
+    new(pattern, options: options)
   end
 
   # Determines Regex's source validity. If it is, `nil` is returned.
@@ -555,6 +580,21 @@ class Regex
   @[Deprecated("Use the overload with `Regex::MatchOptions` instead.")]
   def match(str, pos, _options) : MatchData?
     match(str, pos, options: _options)
+  end
+
+  # Matches a regular expression against *str*. This starts at the character
+  # index *pos* if given, otherwise at the start of *str*. Returns a `Regex::MatchData`
+  # if *str* matched, otherwise raises `Regex::Error`. `$~` will contain the same value
+  # if matched.
+  #
+  # ```
+  # /(.)(.)(.)/.match!("abc")[2]   # => "b"
+  # /(.)(.)/.match!("abc", 1)[2]   # => "c"
+  # /(.)(タ)/.match!("クリスタル", 3)[2] # raises Exception
+  # ```
+  def match!(str : String, pos : Int32 = 0, *, options : Regex::MatchOptions = :none) : MatchData
+    byte_index = str.char_index_to_byte_index(pos) || raise Error.new "Match not found"
+    $~ = match_at_byte_index(str, byte_index, options) || raise Error.new "Match not found"
   end
 
   # Match at byte index. Matches a regular expression against `String`

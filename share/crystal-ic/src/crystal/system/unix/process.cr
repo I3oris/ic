@@ -74,6 +74,12 @@ struct Crystal::System::Process
     # do nothing; `Crystal::System::Signal.start_loop` takes care of this
   end
 
+  def self.setup_default_interrupt_handlers
+    # Status 128 + signal number indicates process exit was caused by the signal.
+    ::Signal::INT.trap { ::exit 128 + ::Signal::INT.value }
+    ::Signal::TERM.trap { ::exit 128 + ::Signal::TERM.value }
+  end
+
   def self.exists?(pid)
     ret = LibC.kill(pid, 0)
     if ret == 0
@@ -209,7 +215,7 @@ struct Crystal::System::Process
 
       if args
         unless command.includes?(%("${@}"))
-          raise ArgumentError.new(%(can't specify arguments in both command and args without including "${@}" into your command))
+          raise ArgumentError.new(%(Can't specify arguments in both command and args without including "${@}" into your command))
         end
 
         {% if flag?(:freebsd) || flag?(:dragonfly) %}
@@ -257,7 +263,7 @@ struct Crystal::System::Process
 
   private def self.raise_exception_from_errno(command, errno = Errno.value)
     case errno
-    when Errno::EACCES, Errno::ENOENT
+    when Errno::EACCES, Errno::ENOENT, Errno::ENOEXEC
       raise ::File::Error.from_os_error("Error executing process", errno, file: command)
     else
       raise IO::Error.from_os_error("Error executing process: '#{command}'", errno)
