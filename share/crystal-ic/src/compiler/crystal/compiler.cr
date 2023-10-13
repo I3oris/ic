@@ -144,6 +144,8 @@ module Crystal
     # Whether to link statically
     property? static = false
 
+    property dependency_printer : DependencyPrinter? = nil
+
     # Program that was created for the last compilation.
     property! program : Program
 
@@ -323,8 +325,9 @@ module Crystal
 
         target_machine.emit_obj_to_file llvm_mod, output_filename
       end
-
-      _, command, args = linker_command(program, [output_filename], output_filename, nil)
+      object_names = [output_filename]
+      output_filename = output_filename.rchop(unit.object_extension)
+      _, command, args = linker_command(program, object_names, output_filename, nil)
       print_command(command, args)
     end
 
@@ -684,7 +687,7 @@ module Crystal
       getter original_name
       getter llvm_mod
       getter? reused_previous_compilation = false
-      @object_extension : String
+      getter object_extension : String
 
       def initialize(@compiler : Compiler, program : Program, @name : String,
                      @llvm_mod : LLVM::Module, @output_dir : String, @bc_flags_changed : Bool)
