@@ -1,5 +1,5 @@
 CRYSTAL_ROOT ?= $(shell pwd)/share/crystal-ic/src
-CRYSTAL_PATH ?= lib:$(CRYSTAL_ROOT)
+CRYSTAL_PATH ?= lib:$(CRYSTAL_ROOT):$(CRYSTAL_ROOT)/../lib
 CRYSTAL_CONFIG_PATH ?= '$$ORIGIN/../share/crystal-ic/src'
 CRYSTAL_LIB_CONFIG_PATH ?= '$$ORIGIN/../lib/ic/share/crystal-ic/src'
 
