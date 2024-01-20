@@ -655,16 +655,27 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
 
       if enum_type.flags?
         unless enum_type.types.has_key?("None")
-          enum_type.add_constant("None", 0)
+          none_member = enum_type.add_constant("None", 0)
+
+          if node_location = node.location
+            none_member.add_location node_location
+          end
+
           define_enum_none_question_method(enum_type, node)
         end
 
         unless enum_type.types.has_key?("All")
           all_value = enum_type.base_type.kind.cast(0).as(Int::Primitive)
+
           enum_type.types.each_value do |member|
             all_value |= interpret_enum_value(member.as(Const).value, enum_type.base_type)
           end
-          enum_type.add_constant("All", all_value)
+
+          all_member = enum_type.add_constant("All", all_value)
+
+          if node_location = node.location
+            all_member.add_location node_location
+          end
         end
       end
 
@@ -802,11 +813,8 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
 
     annotations = read_annotations
 
-    scope, name = lookup_type_def_name(target)
-    if current_type.is_a?(Program)
-      scope = program.check_private(target) || scope
-    end
-
+    name = target.names.last
+    scope = lookup_type_def_scope(target, target)
     type = scope.types[name]?
     if type
       target.raise "already initialized constant #{type}"
@@ -1172,7 +1180,9 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
   end
 
   def lookup_type_def(node : ASTNode)
-    scope, name = lookup_type_def_name(node)
+    path = node.name
+    scope = lookup_type_def_scope(node, path)
+    name = path.names.last
     type = scope.types[name]?
     if type && node.doc
       type.doc = node.doc
@@ -1180,27 +1190,27 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
     {scope, name, type}
   end
 
-  def lookup_type_def_name(node : ASTNode)
-    scope, name = lookup_type_def_name(node.name)
-    if current_type.is_a?(Program)
-      scope = program.check_private(node) || scope
-    end
-    {scope, name}
-  end
+  def lookup_type_def_scope(node : ASTNode, path : Path)
+    scope =
+      if path.names.size == 1
+        if path.global?
+          if node.visibility.private?
+            path.raise "can't declare private type in the global namespace; drop the `private` for the top-level namespace, or drop the leading `::` for the file-private namespace"
+          end
+          program
+        else
+          if current_type.is_a?(Program)
+            file_module = program.check_private(node)
+          end
+          file_module || current_type
+        end
+      else
+        prefix = path.clone
+        prefix.names.pop
+        lookup_type_def_name_creating_modules prefix
+      end
 
-  def lookup_type_def_name(path : Path)
-    if path.names.size == 1 && !path.global?
-      scope = current_type
-      name = path.names.first
-    else
-      path = path.clone
-      name = path.names.pop
-      scope = lookup_type_def_name_creating_modules path
-    end
-
-    scope = check_type_is_type_container(scope, path)
-
-    {scope, name}
+    check_type_is_type_container(scope, path)
   end
 
   def check_type_is_type_container(scope, path)
@@ -1237,14 +1247,6 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
     end
 
     target_type.as(NamedType)
-  end
-
-  def current_type_scope(node)
-    scope = current_type
-    if scope.is_a?(Program) && node.visibility.private?
-      scope = program.check_private(node) || scope
-    end
-    scope
   end
 
   # Turns all finished macros into expanded nodes, and

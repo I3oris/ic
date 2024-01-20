@@ -511,7 +511,13 @@ module Crystal
       when StringInterpolation
         visit_interpolation exp, &.inspect_unquoted.gsub('`', "\\`")
       else
-        raise "Bug: shouldn't happen"
+        # This branch can be reached after the literal expander has expanded
+        # `StringLiteral` nodes to a call to `::String.interpolation` which means
+        # `exp` is a `Call`.
+
+        @str << "\#{"
+        exp.accept(self)
+        @str << "}"
       end
       @str << '`'
       false
@@ -1246,6 +1252,20 @@ module Crystal
 
     def visit(node : InstanceSizeOf)
       @str << "instance_sizeof("
+      node.exp.accept(self)
+      @str << ')'
+      false
+    end
+
+    def visit(node : AlignOf)
+      @str << "alignof("
+      node.exp.accept(self)
+      @str << ')'
+      false
+    end
+
+    def visit(node : InstanceAlignOf)
+      @str << "instance_alignof("
       node.exp.accept(self)
       @str << ')'
       false
