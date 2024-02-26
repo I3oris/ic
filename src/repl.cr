@@ -2,6 +2,7 @@ require "compiler/crystal/interpreter"
 require "./pry"
 require "./crystal_errors"
 require "./repl_readers"
+require "./ext/*"
 
 class Crystal::Repl
   getter? prelude_complete = false
@@ -104,6 +105,11 @@ class Crystal::Repl
 
   def bind_keyboard_interrupt
     @interpreter.bind_keyboard_interrupt
+  end
+
+  private def parse_file(filename)
+    file_contents = File.exists?(filename) ? File.read(filename) : FileStorage.get(filename).gets_to_end
+    parse_code file_contents, filename
   end
 end
 

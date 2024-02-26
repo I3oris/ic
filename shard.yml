@@ -11,6 +11,10 @@ license: MIT
 scripts:
   postinstall: make postinstall
 
+dependencies:
+  baked_file_system:
+    github: schovi/baked_file_system
+
 development_dependencies:
   ameba:
     version: 1.4.3
