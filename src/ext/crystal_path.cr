@@ -1,4 +1,6 @@
 module Crystal
+  # All methods overwritten here directly copied from share/crystal-ic/src/compiler/crystal/crystal_path.cr,
+  # and updated for checking FileStorage
   struct CrystalPath
     private def add_target_path(codegen_target)
       target = "#{codegen_target.architecture}-#{codegen_target.os_name}"

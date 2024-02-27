@@ -1,4 +1,6 @@
 abstract class Crystal::SemanticVisitor < Crystal::Visitor
+  # This is a copy / paste of share/crystal-ic/src/compiler/crystal/semantic/semantic_visitor.cr
+  # with the only update being to support reading files from FileStorage
   private def require_file(node : Require, filename : String)
     parser = @program.new_parser(
       File.exists?(filename) ? File.read(filename) : FileStorage.get(filename).gets_to_end
