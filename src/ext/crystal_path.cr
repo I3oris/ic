@@ -39,7 +39,7 @@ module Crystal
               files << path if path.starts_with?(relative_dir) && (path =~ /#{relative_dir}[^\/]+.cr/)
             end
           end
-          return files
+          return files.sort!
         end
 
         return nil
