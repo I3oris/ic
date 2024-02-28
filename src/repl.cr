@@ -3,6 +3,13 @@ require "./pry"
 require "./crystal_errors"
 require "./repl_readers"
 require "./ext/*"
+require "baked_file_system"
+
+class FileStorage
+  extend BakedFileSystem
+
+  bake_folder "./../share/"
+end
 
 class Crystal::Repl
   getter? prelude_complete = false

@@ -1,12 +1,5 @@
 require "./repl"
 require "option_parser"
-require "baked_file_system"
-
-class FileStorage
-  extend BakedFileSystem
-
-  bake_folder "./../share/"
-end
 
 module IC
   VERSION = "0.7.0"
