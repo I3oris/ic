@@ -96,6 +96,12 @@ module Crystal
       io << @highlighter.highlight(title) << ":"
     end
 
+    # Retrigger auto completion when current word ends with ':'
+    # (useful for nested module FOO::Bar::)
+    def auto_completion_retrigger_when(current_word : String) : Bool
+      current_word.ends_with? ':'
+    end
+
     private def print_status(status)
       icon = status ? "✔".colorize(:green) : "×".colorize(:red)
       self.output.puts " => #{icon}"
