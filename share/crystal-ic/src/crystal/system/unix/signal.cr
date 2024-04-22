@@ -15,19 +15,31 @@ module Crystal::System::Signal
   @@pipe = IO.pipe(read_blocking: false, write_blocking: true)
   @@handlers = {} of ::Signal => Handler
   @@sigset = Sigset.new
-  class_setter child_handler : Handler?
+  class_property child_handler : Handler?
   @@mutex = Mutex.new(:unchecked)
 
   def self.trap(signal, handler) : Nil
     @@mutex.synchronize do
       unless @@handlers[signal]?
         @@sigset << signal
-        LibC.signal(signal.value, ->(value : Int32) {
+        action = LibC::Sigaction.new
+
+        # restart some interrupted syscalls (read, write, accept, ...) instead
+        # of returning EINTR:
+        action.sa_flags = LibC::SA_RESTART
+
+        action.sa_sigaction = LibC::SigactionHandlerT.new do |value, _, _|
           writer.write_bytes(value) unless writer.closed?
-        })
+        end
+        LibC.sigemptyset(pointerof(action.@sa_mask))
+        LibC.sigaction(signal, pointerof(action), nil)
       end
       @@handlers[signal] = handler
     end
+  end
+
+  def self.trap_handler?(signal)
+    @@mutex.synchronize { @@handlers[signal]? }
   end
 
   def self.reset(signal) : Nil
@@ -130,6 +142,9 @@ module Crystal::System::Signal
   @@setup_segfault_handler = Atomic::Flag.new
   @@segfault_handler = LibC::SigactionHandlerT.new { |sig, info, data|
     # Capture fault signals (SEGV, BUS) and finish the process printing a backtrace first
+
+    # This handler must not allocate memory via the GC! Expanding the heap or
+    # triggering a GC cycle here could generate another SEGV
 
     # Determine if the SEGV was inside or 'near' the top of the stack
     # to check for potential stack overflow. 'Near' is a small
