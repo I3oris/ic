@@ -13,8 +13,9 @@ OptionParser.parse do |parser|
 
   parser.on "-v", "--version", "Print the version" do
     puts "Version: #{IC::VERSION}"
-    puts "Crystal version: #{Crystal::Config.version}"
     puts "REPLy version: #{Reply::VERSION}"
+    puts "Running Crystal version: #{Crystal::Config.version}"
+    puts "Compiled with Crystal version: #{Crystal::VERSION}"
     exit
   end
 
