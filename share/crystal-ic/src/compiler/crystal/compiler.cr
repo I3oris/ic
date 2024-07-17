@@ -102,8 +102,26 @@ module Crystal
       # enables with --release flag
       O3 = 3
 
+      # optimize for size, enables most O2 optimizations but aims for smaller
+      # code size
+      Os
+
+      # optimize aggressively for size rather than speed
+      Oz
+
       def suffix
         ".#{to_s.downcase}"
+      end
+
+      def self.from_level?(level : String) : self?
+        case level
+        when "0" then O0
+        when "1" then O1
+        when "2" then O2
+        when "3" then O3
+        when "s" then Os
+        when "z" then Oz
+        end
       end
     end
 
@@ -180,21 +198,12 @@ module Crystal
     # Compiles the given *source*, with *output_filename* as the name
     # of the generated executable.
     #
-    # If *combine_rpath* is true, add the compiler itself's RPATH to the
-    # generated executable via `CrystalLibraryPath.add_compiler_rpath`. This is
-    # used by the `run` / `eval` / `spec` commands as well as the macro `run`
-    # (via `Crystal::Program#macro_compile`), and never during cross-compiling.
-    #
     # Raises `Crystal::CodeError` if there's an error in the
     # source code.
     #
     # Raises `InvalidByteSequenceError` if the source code is not
     # valid UTF-8.
-    def compile(source : Source | Array(Source), output_filename : String, *, combine_rpath : Bool = false) : Result
-      if combine_rpath
-        return CrystalLibraryPath.add_compiler_rpath { compile(source, output_filename, combine_rpath: false) }
-      end
-
+    def compile(source : Source | Array(Source), output_filename : String) : Result
       source = [source] unless source.is_a?(Array)
       program = new_program(source)
       node = parse program, source
@@ -245,7 +254,7 @@ module Crystal
       program.compiler = self
       program.filename = sources.first.filename
       program.codegen_target = codegen_target
-      program.target_machine = target_machine
+      program.target_machine = create_target_machine
       program.flags << "release" if release?
       program.flags << "debug" unless debug.none?
       program.flags << "static" if static?
@@ -425,22 +434,6 @@ module Crystal
             end
 
             link_args = search_result.remaining_args.concat(search_result.library_paths).map { |arg| Process.quote_windows(arg) }
-
-            if program.has_flag?("preview_win32_delay_load")
-              # "LINK : warning LNK4199: /DELAYLOAD:foo.dll ignored; no imports found from foo.dll"
-              # it is harmless to skip this error because not all import libraries are always used, much
-              # less the individual DLLs they refer to
-              link_args << "/IGNORE:4199"
-
-              dlls = Set(String).new
-              search_result.library_paths.each do |library_path|
-                Crystal::System::LibraryArchive.imported_dlls(library_path).each do |dll|
-                  dlls << dll.downcase
-                end
-              end
-              dlls.delete "kernel32.dll"
-              dlls.each { |dll| link_args << "/DELAYLOAD:#{dll}" }
-            end
           end
         {% end %}
 
@@ -463,10 +456,13 @@ module Crystal
       elsif program.has_flag? "wasm32"
         link_flags = @link_flags || ""
         {"wasm-ld", %(wasm-ld "${@}" -o #{Process.quote_posix(output_filename)} #{link_flags} -lc #{program.lib_flags}), object_names}
+      elsif program.has_flag? "avr"
+        link_flags = @link_flags || ""
+        link_flags += " --target=avr-unknown-unknown -mmcu=#{@mcpu} -Wl,--gc-sections"
+        {DEFAULT_LINKER, %(#{DEFAULT_LINKER} "${@}" -o #{Process.quote_posix(output_filename)} #{link_flags} #{program.lib_flags}), object_names}
       else
         link_flags = @link_flags || ""
         link_flags += " -rdynamic"
-
         {DEFAULT_LINKER, %(#{DEFAULT_LINKER} "${@}" -o #{Process.quote_posix(output_filename)} #{link_flags} #{program.lib_flags}), object_names}
       end
     end
@@ -509,8 +505,6 @@ module Crystal
     private def codegen_many_units(program, units, target_triple)
       all_reused = [] of String
 
-      wants_stats_or_progress = @progress_tracker.stats? || @progress_tracker.progress?
-
       # Don't start more processes than compilation units
       n_threads = @n_threads.clamp(1..units.size)
 
@@ -520,7 +514,12 @@ module Crystal
       if n_threads == 1
         units.each do |unit|
           unit.compile
-          all_reused << unit.name if wants_stats_or_progress && unit.reused_previous_compilation?
+          @progress_tracker.stage_progress += 1
+        end
+        if @progress_tracker.stats?
+          units.each do |unit|
+            all_reused << unit.name && unit.reused_previous_compilation?
+          end
         end
         return all_reused
       end
@@ -537,6 +536,9 @@ module Crystal
             result = {name: unit.name, reused: unit.reused_previous_compilation?}
             output.puts result.to_json
           end
+        rescue ex
+          result = {exception: {name: ex.class.name, message: ex.message, backtrace: ex.backtrace}}
+          output.puts result.to_json
         end
 
         overqueue = 1
@@ -558,13 +560,21 @@ module Crystal
             while (index = indexes.add(1)) < units.size
               input.puts index
 
-              response = output.gets(chomp: true).not_nil!
-              channel.send response
+              if response = output.gets(chomp: true)
+                channel.send response
+              else
+                Crystal::System.print_error "\nBUG: a codegen process failed\n"
+                exit 1
+              end
             end
 
             overqueued.times do
-              response = output.gets(chomp: true).not_nil!
-              channel.send response
+              if response = output.gets(chomp: true)
+                channel.send response
+              else
+                Crystal::System.print_error "\nBUG: a codegen process failed\n"
+                exit 1
+              end
             end
 
             input << '\n'
@@ -582,10 +592,17 @@ module Crystal
         end
 
         while response = channel.receive?
-          next unless wants_stats_or_progress
-
           result = JSON.parse(response)
-          all_reused << result["name"].as_s if result["reused"].as_bool
+
+          if ex = result["exception"]?
+            Crystal::System.print_error "\nBUG: a codegen process failed: %s (%s)\n", ex["message"].as_s, ex["name"].as_s
+            ex["backtrace"].as_a?.try(&.each { |frame| Crystal::System.print_error "  from %s\n", frame })
+            exit 1
+          end
+
+          if @progress_tracker.stats?
+            all_reused << result["name"].as_s if result["reused"].as_bool
+          end
           @progress_tracker.stage_progress += 1
         end
 
@@ -666,6 +683,10 @@ module Crystal
     end
 
     getter(target_machine : LLVM::TargetMachine) do
+      create_target_machine
+    end
+
+    def create_target_machine
       @codegen_target.to_target_machine(@mcpu || "", @mattr || "", @optimization_mode, @mcmodel)
     rescue ex : ArgumentError
       stderr.print colorize("Error: ").red.bold
@@ -674,8 +695,8 @@ module Crystal
       exit 1
     end
 
-    {% if LibLLVM::IS_LT_130 %}
-      protected def optimize(llvm_mod)
+    {% if LibLLVM::IS_LT_170 %}
+      private def optimize_with_pass_manager(llvm_mod)
         fun_pass_manager = llvm_mod.new_function_pass_manager
         pass_manager_builder.populate fun_pass_manager
         fun_pass_manager.run llvm_mod
@@ -700,6 +721,8 @@ module Crystal
           registry.initialize_all
 
           builder = LLVM::PassManagerBuilder.new
+          builder.size_level = 0
+
           case optimization_mode
           in .o3?
             builder.opt_level = 3
@@ -712,26 +735,37 @@ module Crystal
             builder.use_inliner_with_threshold = 150
           in .o0?
             # default behaviour, no optimizations
+          in .os?
+            builder.opt_level = 2
+            builder.size_level = 1
+            builder.use_inliner_with_threshold = 50
+          in .oz?
+            builder.opt_level = 2
+            builder.size_level = 2
+            builder.use_inliner_with_threshold = 5
           end
-
-          builder.size_level = 0
 
           builder
         end
       end
-    {% else %}
-      protected def optimize(llvm_mod)
-        LLVM::PassBuilderOptions.new do |options|
-          mode = case @optimization_mode
-                 in .o3? then "default<O3>"
-                 in .o2? then "default<O2>"
-                 in .o1? then "default<O1>"
-                 in .o0? then "default<O0>"
-                 end
-          LLVM.run_passes(llvm_mod, mode, target_machine, options)
-        end
-      end
     {% end %}
+
+    protected def optimize(llvm_mod)
+      {% if LibLLVM::IS_LT_130 %}
+        optimize_with_pass_manager(llvm_mod)
+      {% else %}
+        {% if LibLLVM::IS_LT_170 %}
+          # PassBuilder doesn't support Os and Oz before LLVM 17
+          if @optimization_mode.os? || @optimization_mode.oz?
+            return optimize_with_pass_manager(llvm_mod)
+          end
+        {% end %}
+
+        LLVM::PassBuilderOptions.new do |options|
+          LLVM.run_passes(llvm_mod, "default<#{@optimization_mode}>", target_machine, options)
+        end
+      {% end %}
+    end
 
     private def run_linker(linker_name, command, args)
       print_command(command, args) if verbose?

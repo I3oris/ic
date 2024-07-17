@@ -10,7 +10,11 @@ module Crystal::System::Thread
 
   # def self.current_thread : ::Thread
 
+  # def self.current_thread? : ::Thread?
+
   # def self.current_thread=(thread : ::Thread)
+
+  # def self.sleep(time : ::Time::Span) : Nil
 
   # private def system_join : Exception?
 
@@ -45,6 +49,9 @@ class Thread
   # Returns the Fiber representing the thread's main stack.
   getter! main_fiber : Fiber
 
+  # Returns the Fiber currently running on the thread.
+  property! current_fiber : Fiber
+
   # :nodoc:
   property next : Thread?
 
@@ -54,11 +61,13 @@ class Thread
   getter name : String?
 
   def self.unsafe_each(&)
-    threads.unsafe_each { |thread| yield thread }
+    # nothing to iterate when @@threads is nil + don't lazily allocate in a
+    # method called from a GC collection callback!
+    @@threads.try(&.unsafe_each { |thread| yield thread })
   end
 
   # Creates and starts a new system thread.
-  def initialize(@name : String? = nil, &@func : ->)
+  def initialize(@name : String? = nil, &@func : Thread ->)
     @system_handle = uninitialized Crystal::System::Thread::Handle
     init_handle
   end
@@ -66,9 +75,9 @@ class Thread
   # Used once to initialize the thread object representing the main thread of
   # the process (that already exists).
   def initialize
-    @func = ->{}
+    @func = ->(t : Thread) {}
     @system_handle = Crystal::System::Thread.current_handle
-    @main_fiber = Fiber.new(stack_address, self)
+    @current_fiber = @main_fiber = Fiber.new(stack_address, self)
 
     Thread.threads.push(self)
   end
@@ -92,9 +101,20 @@ class Thread
     end
   end
 
+  # Blocks the current thread for the duration of *time*. Clock precision is
+  # dependent on the operating system and hardware.
+  def self.sleep(time : Time::Span) : Nil
+    Crystal::System::Thread.sleep(time)
+  end
+
   # Returns the Thread object associated to the running system thread.
   def self.current : Thread
     Crystal::System::Thread.current_thread
+  end
+
+  # :nodoc:
+  def self.current? : Thread?
+    Crystal::System::Thread.current_thread?
   end
 
   # Associates the Thread object to the running system thread.
@@ -117,17 +137,22 @@ class Thread
   # :nodoc:
   getter scheduler : Crystal::Scheduler { Crystal::Scheduler.new(self) }
 
+  # :nodoc:
+  def scheduler? : ::Crystal::Scheduler?
+    @scheduler
+  end
+
   protected def start
     Thread.threads.push(self)
     Thread.current = self
-    @main_fiber = fiber = Fiber.new(stack_address, self)
+    @current_fiber = @main_fiber = fiber = Fiber.new(stack_address, self)
 
     if name = @name
       self.system_name = name
     end
 
     begin
-      @func.call
+      @func.call(self)
     rescue ex
       @exception = ex
     ensure

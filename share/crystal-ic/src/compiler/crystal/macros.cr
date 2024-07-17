@@ -1577,7 +1577,7 @@ module Crystal::Macros
     end
   end
 
-  # A `when` or `in` inside a `case`.
+  # A `when` or `in` inside a `case` or `select`.
   class When < ASTNode
     # Returns the conditions of this `when`.
     def conds : ArrayLiteral
@@ -1612,8 +1612,30 @@ module Crystal::Macros
   end
 
   # A `select` expression.
-  # class Select < ASTNode
+  #
+  # Every expression `node` is equivalent to:
+  #
+  # ```
+  # select
+  # {% for when_clause in node.whens %}
+  #   {{ when_clause }}
+  # {% end %}
+  # {% else_clause = node.else %}
+  # {% unless else_clause.is_a?(Nop) %}
+  #   else
+  #     {{ else_clause }}
+  # {% end %}
   # end
+  # ```
+  class Select < ASTNode
+    # Returns the `when`s of this `select`.
+    def whens : ArrayLiteral(When)
+    end
+
+    # Returns the `else` of this `select`.
+    def else : ASTNode
+    end
+  end
 
   # Node that represents an implicit object in:
   #
@@ -2303,15 +2325,33 @@ module Crystal::Macros
     end
   end
 
-  # A macro expression,
-  # surrounded by {{ ... }} (output = true)
-  # or by {% ... %} (output = false)
-  # class MacroExpression < ASTNode
-  # end
+  # A macro expression.
+  #
+  # Every expression *node* is equivalent to:
+  #
+  # ```
+  # {% if node.output? %}
+  #   \{{ {{ node.exp }} }}
+  # {% else %}
+  #   \{% {{ node.exp }} %}
+  # {% end %}
+  # ```
+  class MacroExpression < ASTNode
+    # Returns the expression inside this node.
+    def exp : ASTNode
+    end
 
-  # Free text that is part of a macro
-  # class MacroLiteral < ASTNode
-  # end
+    # Returns whether this node interpolates the expression's result.
+    def output? : BoolLiteral
+    end
+  end
+
+  # Free text that is part of a macro.
+  class MacroLiteral < ASTNode
+    # Returns the text of the literal.
+    def value : MacroId
+    end
+  end
 
   # An `if` inside a macro, e.g.
   #
@@ -2355,6 +2395,35 @@ module Crystal::Macros
     # The body of the `for` loop.
     def body : ASTNode
     end
+  end
+
+  # A macro fresh variable.
+  #
+  # Every variable `node` is equivalent to:
+  #
+  # ```
+  # {{ "%#{name}".id }}{% if expressions = node.expressions %}{{ "{#{expressions.splat}}".id }}{% end %}
+  # ```
+  class MacroVar < ASTNode
+    # Returns the name of the fresh variable.
+    def name : MacroId
+    end
+
+    # Returns the associated indices of the fresh variable.
+    def expressions : ArrayLiteral
+    end
+  end
+
+  # A verbatim expression.
+  #
+  # Every expression `node` is equivalent to:
+  #
+  # ```
+  # \{% verbatim do %}
+  #   {{ node.exp }}
+  # \{% end %}
+  # ```
+  class MacroVerbatim < UnaryExpression
   end
 
   # The `_` expression. May appear in code, such as an assignment target, and in
@@ -2753,6 +2822,18 @@ module Crystal::Macros
 
     # Returns `self`. This method exists so you can safely call `resolve` on a node and resolve it to a type, even if it's a type already.
     def resolve? : TypeNode
+    end
+
+    # Return `true` if `self` is private and `false` otherwise.
+    def private? : BoolLiteral
+    end
+
+    # Return `true` if `self` is public and `false` otherwise.
+    def public? : BoolLiteral
+    end
+
+    # Returns visibility of `self` as `:public` or `:private?`
+    def visibility : SymbolLiteral
     end
 
     # Returns `true` if *other* is an ancestor of `self`.
