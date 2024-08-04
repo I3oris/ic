@@ -96,6 +96,10 @@ class IC::Highlighter
     last_token = {type: nil, value: ""}
 
     loop do
+      if lexer.current_char == '#' && lexer.peek_next_char == '<'
+        highlight_object_state lexer, io
+      end
+
       @pos = lexer.current_pos
       token = lexer.next_token
 
@@ -280,6 +284,29 @@ class IC::Highlighter
       else
         raise "Bug: shouldn't happen"
       end
+    end
+  end
+
+  private def highlight_object_state(lexer, io)
+    2.times { lexer.next_char_no_column_increment }
+    highlight "#<", COMMENT_COLOR, io
+
+    loop do
+      if lexer.current_char == '#' && lexer.peek_next_char == '<'
+        highlight_object_state lexer, io
+      end
+      if lexer.current_char == '>'
+        lexer.next_char_no_column_increment
+        highlight ">", COMMENT_COLOR, io
+        break
+      end
+
+      @pos = lexer.current_pos
+      token = lexer.next_token
+      break if token.type.eof?
+
+      value = String.new(lexer.reader.string.to_slice[@pos...lexer.current_pos])
+      highlight value, COMMENT_COLOR, io
     end
   end
 
