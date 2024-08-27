@@ -111,8 +111,7 @@ On the `pry` prompt you can type:
 * Other     : To interpret code while debugging (e.g. the name of a variable).
 
 ### Hotkeys
-
-* `alt-enter`: On multiline input: insert a new line instead of submit edition.
+* `alt-enter` (`ctrl-enter` on Windows): Insert a new line character instead of submit edition.
 * `ctrl-c`: Keyboard Interruption.
 * `ctrl-d`: Delete char or exit (EOF).
 * `ctrl-a`/`home`: Move cursor to begin.
