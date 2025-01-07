@@ -25,6 +25,22 @@ module Crystal
       @highlighter.highlight(expression)
     end
 
+    def continue?(expression : String) : Bool
+      new_parser(expression).parse
+      @incomplete = false
+      false
+    rescue e : CodeError
+      @incomplete = e.message.in?(CONTINUE_ERROR)
+      if (message = e.message) && message.matches?(/Unterminated heredoc: can't find ".*" anywhere before the end of file/)
+        @incomplete = true
+      elsif e.message == "unexpected token: EOF (expecting ',', ';' or '\\n')"
+        # NOTE: this message should be added in the constant CONTINUE_ERROR at share/crystal-ic/src/compiler/crystal/interpreter/repl_reader.cr.
+        @incomplete = true
+      end
+
+      @incomplete
+    end
+
     # Adding control nest and case nest
     def indentation_level(expression_before_cursor : String) : Int32?
       parser = new_parser(expression_before_cursor)
