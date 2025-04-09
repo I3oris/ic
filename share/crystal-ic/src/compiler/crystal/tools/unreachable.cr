@@ -6,7 +6,7 @@ require "csv"
 module Crystal
   class Command
     private def unreachable
-      config, result = compile_no_codegen "tool unreachable", path_filter: true, unreachable_command: true, allowed_formats: %w[text json csv]
+      config, result = compile_no_codegen "tool unreachable", path_filter: true, unreachable_command: true, allowed_formats: %w[text json csv codecov]
 
       unreachable = UnreachableVisitor.new
 
@@ -42,6 +42,8 @@ module Crystal
         to_json(STDOUT)
       when "csv"
         to_csv(STDOUT)
+      when "codecov"
+        to_codecov(STDOUT)
       else
         to_text(STDOUT)
       end
@@ -111,6 +113,31 @@ module Crystal
         end
       end
     end
+
+    # https://docs.codecov.com/docs/codecov-custom-coverage-format
+    def to_codecov(io)
+      hits = Hash(String, Hash(Int32, Int32)).new { |hash, key| hash[key] = Hash(Int32, Int32).new(0) }
+
+      each do |a_def, location, count|
+        hits[location.filename][location.line_number] = count
+      end
+
+      JSON.build io do |builder|
+        builder.object do
+          builder.string "coverage"
+          builder.object do
+            hits.each do |filename, line_coverage|
+              builder.string filename
+              builder.object do
+                line_coverage.each do |line, count|
+                  builder.field line, count
+                end
+              end
+            end
+          end
+        end
+      end
+    end
   end
 
   # This visitor walks the entire reachable code tree and collect locations
@@ -128,15 +155,6 @@ module Crystal
     property excludes = [] of String
 
     def process_type(type)
-      # Avoid visiting circular hierarchies. There's no use in processing
-      # alias types anyway.
-      # For example:
-      #
-      #     struct Foo
-      #        alias Bar = Foo
-      #     end
-      return if type.is_a?(AliasType) || type.is_a?(TypeDefType)
-
       if type.is_a?(ModuleType)
         track_unused_defs type
       end

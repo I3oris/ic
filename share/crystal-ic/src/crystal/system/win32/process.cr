@@ -37,7 +37,7 @@ struct Crystal::System::Process
       LibC::JOBOBJECTINFOCLASS::AssociateCompletionPortInformation,
       LibC::JOBOBJECT_ASSOCIATE_COMPLETION_PORT.new(
         completionKey: @completion_key.as(Void*),
-        completionPort: Crystal::EventLoop.current.iocp,
+        completionPort: Crystal::EventLoop.current.iocp_handle,
       ),
     )
 
@@ -203,7 +203,7 @@ struct Crystal::System::Process
   def self.start_interrupt_loop : Nil
     return unless @@setup_interrupt_handler.test_and_set
 
-    spawn(name: "Interrupt signal loop") do
+    spawn(name: "interrupt-signal-loop") do
       while true
         @@interrupt_count.wait { sleep 50.milliseconds }
 
@@ -315,7 +315,7 @@ struct Crystal::System::Process
       # > The problem is that the `cmd.exe` has complicated parsing rules for the command arguments, and programming language runtimes fail to escape the command arguments properly.
       # > Because of this, it’s possible to inject commands if someone can control the part of command arguments of the batch file.
       # https://flatt.tech/research/posts/batbadbut-you-cant-securely-execute-commands-on-windows/
-      if command.byte_slice?(-4, 4).try(&.downcase).in?(".bat", ".cmd")
+      if command.rstrip(". ").byte_slice?(-4, 4).try(&.downcase).in?(".bat", ".cmd")
         raise ::File::Error.from_os_error("Error executing process", WinError::ERROR_BAD_EXE_FORMAT, file: command)
       end
 
