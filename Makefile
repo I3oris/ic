@@ -30,12 +30,9 @@ $(O): $(LLVM_EXT_OBJ) $(SOURCES)
 	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr -o $(O)
 
 .PHONY: release
-release: $(LLVM_EXT_OBJ)
+release:
 	mkdir -p bin
 	$(ENV) $(COMPILER) build $(RELEASE_FLAGS) src/ic.cr -o $(O)
-
-$(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
-	$(CXX) -c $(CXXFLAGS) -o $@ $< $(shell $(LLVM_CONFIG) --cxxflags)
 
 .PHONY: spec
 spec: $(LLVM_EXT_OBJ)

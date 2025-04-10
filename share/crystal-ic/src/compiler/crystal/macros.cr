@@ -62,6 +62,12 @@ private macro def_string_methods(klass)
   def includes?(search : StringLiteral | CharLiteral) : BoolLiteral
   end
 
+  # Returns an array of capture hashes for each match of *regex* in this string.
+  #
+  # Capture hashes have the same form as `Regex::MatchData#to_h`.
+  def scan(regex : RegexLiteral) : ArrayLiteral(HashLiteral(NumberLiteral | StringLiteral), StringLiteral | NilLiteral)
+  end
+
   # Similar to `String#size`.
   def size : NumberLiteral
   end
@@ -320,6 +326,43 @@ module Crystal::Macros
   # end
   # ```
   def skip_file : Nop
+  end
+
+  # Returns the size of the given *type* as number of bytes.
+  #
+  # For definition purposes, a type is considered to be **stable** if its size
+  # and alignment do not change as new code is being processed. Currently, all
+  # Crystal types are stable, _except_ the following:
+  #
+  # * Structs, e.g. `Bytes`
+  # * `ReferenceStorage` instances
+  # * Modules, e.g. `Math` (however, `Math.class` is stable)
+  # * Uninstantiated generic types, e.g. `Array`
+  # * `StaticArray`, `Tuple`, `NamedTuple` instances with unstable element types
+  # * Unions containing any unstable types
+  #
+  # *type* must be a constant referring to a stable type. It cannot be evaluated
+  # at macro evaluation time, nor a `typeof` expression.
+  #
+  # ```
+  # {{ sizeof(Int32) }} # => 4
+  # {{ sizeof(Void*) }} # usually 4 or 8
+  # ```
+  def __crystal_pseudo_sizeof(type) : NumberLiteral
+  end
+
+  # Returns the alignment of the given *type* as number of bytes.
+  #
+  # *type* must be a constant referring to a stable type. It cannot be evaluated
+  # at macro evaluation time, nor a `typeof` expression.
+  #
+  # See `sizeof` for the definition of a stable type.
+  #
+  # ```
+  # {{ alignof(Int32) }} # => 4
+  # {{ alignof(Void*) }} # usually 4 or 8
+  # ```
+  def __crystal_pseudo_alignof(type) : NumberLiteral
   end
 
   # This is the base class of all AST nodes. This methods are
@@ -2361,10 +2404,16 @@ module Crystal::Macros
     end
   end
 
-  # An `if` inside a macro, e.g.
+  # An `if`/`unless` inside a macro, e.g.
   #
   # ```
   # {% if cond %}
+  #   puts "Then"
+  # {% else %}
+  #   puts "Else"
+  # {% end %}
+  #
+  # {% unless cond %}
   #   puts "Then"
   # {% else %}
   #   puts "Else"
@@ -2381,6 +2430,10 @@ module Crystal::Macros
 
     # The `else` branch of the `if`.
     def else : ASTNode
+    end
+
+    # Returns `true` if this node represents an `unless` conditional, otherwise returns `false`.
+    def is_unless? : BoolLiteral
     end
   end
 

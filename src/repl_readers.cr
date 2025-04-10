@@ -92,7 +92,7 @@ module Crystal
     end
 
     # Changing prompt
-    def prompt(io : IO, line_number : Int32, color? : Bool) : Nil
+    def prompt(io : IO, line_number : Int32, color : Bool) : Nil
       io << "ic(#{Crystal::Config.version}):"
       io << sprintf("%03d", line_number)
       io << "> "
@@ -137,9 +137,9 @@ module Crystal
   end
 
   class PryReader < ReplReader
-    def prompt(io, line_number, color?)
+    def prompt(io, line_number, color)
       io << "ic(#{Crystal::Config.version}):"
-      io << "pry".colorize(:magenta).toggle(color?)
+      io << "pry".colorize(:magenta).toggle(color)
       io << "> "
     end
 

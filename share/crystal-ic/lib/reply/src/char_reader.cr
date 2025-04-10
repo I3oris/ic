@@ -19,6 +19,7 @@ module Reply
       CTRL_K
       CTRL_N
       CTRL_P
+      CTRL_R
       CTRL_U
       CTRL_X
       CTRL_UP
@@ -141,6 +142,8 @@ module Reply
         Sequence::CTRL_N
       when ctrl('p')
         Sequence::CTRL_P
+      when ctrl('r')
+        Sequence::CTRL_R
       when ctrl('u')
         Sequence::CTRL_U
       when ctrl('x')
