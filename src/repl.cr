@@ -8,6 +8,7 @@ class Crystal::Repl
 
   def run
     color = @program.color?
+    @program.wants_doc = true
 
     prelude_complete_channel = Channel(Int32).new
     spawn do
@@ -50,6 +51,7 @@ class Crystal::Repl
       var_scopes: [@interpreter.local_vars.names_at_block_level_zero.to_set]
     )
     parser.filename = TopLevelExpressionVirtualFile.new(source: code, initial_line_number: initial_line_number)
+    parser.wants_doc = true
     parser
   end
 

@@ -10,7 +10,6 @@ module IC
 
     @context : AutoCompletionContext? = nil
     @scope_name = ""
-    @all_entries = [] of String
 
     KEYWORD = %w(
       abstract alias annotation asm begin break case class def do else elsif end ensure enum extend
@@ -21,6 +20,39 @@ module IC
     )
 
     KEYWORD_METHODS = %w(as as? is_a? nil? responds_to?)
+
+    # A auto-completion entry
+    record Entry, entry : String, order = 1
+
+    # All entries found
+    @entries = [] of Entry
+
+    # The documentation associated with a auto-completion entry
+    record EntryDocumentation, header : String, doc : String?, summary : String? = nil do
+      def initialize(object : Crystal::Def | Crystal::Macro | Crystal::Type)
+        @header = object.to_s.each_line.first
+        @doc = object.doc
+      end
+
+      def initialize(object : {String, String})
+        @header, @doc = object
+      end
+
+      def summary
+        @summary || doc.each_line.first
+      end
+
+      def doc
+        @doc || ":nodoc:"
+      end
+
+      def doc?
+        @doc
+      end
+    end
+
+    # Documentations for each entry
+    @entries_docs = Hash(String, Array(EntryDocumentation)).new { |h, k| h[k] = [] of EntryDocumentation }
 
     # Determines the context from a Repl.
     # Allow the handler to know program types, methods and local vars.
@@ -49,7 +81,35 @@ module IC
       receiver, scope = semantics(expression_before_word_on_cursor)
 
       find_entries(receiver, scope, name_filter)
-      return @scope_name, @all_entries
+      return @scope_name, @entries.map(&.entry)
+    end
+
+    # Gets the documentation for the given *entry*, if any
+    def documentation(entry : String) : String?
+      @entries_docs[entry]?.try do |objects|
+        String.build do |io|
+          io << "# #{entry}\n\n"
+          io << "```\n"
+          objects.uniq(&.header).each do |object|
+            io << object.header << '\n'
+          end
+          io << "```\n"
+          objects.each do |object|
+            if doc = object.doc?
+              io << "\n## `#{object.header}`\n" unless objects.size == 1
+              io << doc
+              io << "\n\n"
+            end
+          end
+        end
+      end
+    end
+
+    # Gets the documentation summary (one line) for the given *entry*, if any
+    def documentation_summary(entry : String) : String?
+      @entries_docs[entry]?.try do |object|
+        object.first.summary
+      end
     end
 
     # Execute the semantics on *expression_before_word_on_cursor*:
@@ -57,6 +117,7 @@ module IC
     private def semantics(expression_before_word_on_cursor) : {Crystal::ASTNode?, Crystal::Type?}
       context = @context || return nil, nil
       program = context.program
+      program.wants_doc = true
 
       if expression_before_word_on_cursor.ends_with?("require ")
         return Crystal::Require.new(""), program
@@ -88,6 +149,7 @@ module IC
         string_pool: program.string_pool,
         var_scopes: [context.local_vars.names_at_block_level_zero.to_set],
       )
+      parser.wants_doc = true
       ast = parser.parse
       ast = program.normalize(ast)
 
@@ -304,8 +366,27 @@ module IC
         kind.op_rparen? || kind.op_rcurly? || kind.op_rsquare? || kind.op_percent_rcurly?
     end
 
+    private def add_entry(entry : String, object = nil, order = 1)
+      @entries << Entry.new(entry, order)
+      @entries_docs[entry] << EntryDocumentation.new(object) if object
+    end
+
+    private def add_entry(entry : String, objects : Array, order = 1)
+      @entries << Entry.new(entry, order)
+      objects.each { |object| @entries_docs[entry] << EntryDocumentation.new(object) }
+    end
+
+    private def add_entries(entries, order = 1, &)
+      entries.each do |entry|
+        add_entry(entry, yield(entry), order)
+      end
+    end
+
     # Finds completion entries matching *word_on_cursor*, on *receiver* type, within a *scope*.
     private def find_entries(receiver, scope, word_on_cursor)
+      @entries.clear
+      @entries_docs.clear
+
       if receiver.is_a? Crystal::Require
         find_require_entries(word_on_cursor)
       else
@@ -316,20 +397,22 @@ module IC
           find_def_entries(receiver, scope)
         end
       end
+      @entries.sort! do |a, b|
+        a.order == b.order ? a.entry <=> b.entry : a.order <=> b.order
+      end.uniq! &.entry
     end
 
     private def find_def_entries(receiver, scope)
-      @all_entries.clear
       @scope_name = ""
 
       if receiver
         scope = receiver_type = receiver.type rescue return
 
         # Add methods from receiver_type:
-        @all_entries += find_entries_on_type(receiver_type).sort
+        find_entries_on_type(receiver_type) # order: 3
 
         # Add keyword methods (.is_a?, .nil?, ...):
-        @all_entries += KEYWORD_METHODS
+        add_entries(KEYWORD_METHODS, order: 4) { |e| {e, "Pseudo method #{e}"} }
         @scope_name = receiver_type.to_s
       else
         context = @context || return
@@ -337,31 +420,30 @@ module IC
         scope ||= context.program
 
         # Add special command:
-        @all_entries += context.special_commands
+        add_entries(context.special_commands, order: 1) { |e| {e, "Command"} }
 
         # Add top-level vars:
         vars = context.local_vars.names_at_block_level_zero
-        @all_entries += vars.reject(&.starts_with? '_').sort!
+        add_entries(vars.reject(&.starts_with? '_'), order: 2) { |e| {e, "Local variable #{e}"} }
 
         # Add methods from receiver_type:
-        @all_entries += find_entries_on_type(scope.metaclass).sort
+        find_entries_on_type(scope.metaclass) # order: 3
 
         # Add keywords:
-        @all_entries += KEYWORD
+        add_entries(KEYWORD, order: 4) { |e| {e, "#{e.titleize} keyword"} }
 
         # Add types:
         if types = scope.types?
-          @all_entries += types.keys.sort!
+          types.each do |type_name, type|
+            add_entry(type_name, type, order: 5) # 5
+          end
         end
+
         @scope_name = scope.to_s
       end
-
-      @all_entries.uniq!
     end
 
     private def find_entries_on_type(type)
-      results = [] of String
-
       # Add methods names from type:
       type.defs.try &.each
         .select do |_def_name, defs|
@@ -371,8 +453,8 @@ module IC
           def_name.starts_with?('_') || def_name == "`" ||           # Avoid special methods e.g `__crystal_raise`, `__crystal_malloc`...
             Highlighter::OPERATORS.any? { |op| op.to_s == def_name } # Avoid operators methods. TODO: allow them?
         end
-        .each do |def_name, _|
-          results << def_name
+        .each do |def_name, defs|
+          add_entry(def_name, defs.map(&.def), order: 3)
         end
 
       # Add macro names from type:
@@ -380,16 +462,14 @@ module IC
         .select do |_macro_name, macros|
           macros.any?(&.visibility.public?)
         end
-        .each do |macro_name, _|
-          results << macro_name
+        .each do |macro_name, macros|
+          add_entry(macro_name, macros, order: 3)
         end
 
       # Recursively add methods names from parents:
       type.parents.try &.each do |parent|
-        results += find_entries_on_type(parent)
+        find_entries_on_type(parent)
       end
-
-      results
     end
 
     private def find_require_entries(name)
@@ -403,26 +483,23 @@ module IC
         already_required = Set(String).new
       end
 
-      @all_entries.clear
       Crystal::CrystalPath.default_paths.each do |path|
         if File.exists?(path)
           Dir.each_child(path) do |file|
             if file.ends_with?(".cr") && file.starts_with?(name)
               unless Path[path, file].normalize.to_s.in? already_required
                 require_name = file.chomp(".cr")
-                @all_entries << %("#{require_name}")
+                add_entry(%("#{require_name}"))
               end
             end
           end
         end
       end
 
-      @all_entries.sort!
       @scope_name = "require"
     end
 
     private def find_const_entries(scope, names)
-      @all_entries.clear
       @scope_name = ""
 
       namespaces, name = names[...-1], names[-1]
@@ -431,11 +508,13 @@ module IC
         return if full_scope.is_a? Crystal::ASTNode # TODO: Foo(42)::Bar is not handled yet.
 
         if full_scope && (types = full_scope.types?)
-          @all_entries = types.compact_map do |const_name, type|
+          types.each do |const_name, type|
             if !type.private? && const_name.starts_with?(name)
-              "#{namespaces.join("::")}::#{const_name}"
+              entry = "#{namespaces.join("::")}::#{const_name}"
+              add_entry(entry, type, order: 1)
             end
-          end.uniq!.sort!
+          end
+
           @scope_name = full_scope.to_s
         end
       end

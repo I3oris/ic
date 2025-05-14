@@ -11,6 +11,11 @@ license: MIT
 scripts:
   postinstall: make postinstall
 
+dependencies:
+  reply:
+    version: 0.4.0
+    github: I3oris/reply
+
 development_dependencies:
   ameba:
     version: 1.4.3

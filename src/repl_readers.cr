@@ -1,6 +1,7 @@
 require "./crystal_completer"
 require "./crystal_parser_nest"
 require "./highlighter"
+require "./documentation_highlighter"
 
 module Crystal
   class ReplReader
@@ -116,6 +117,23 @@ module Crystal
     # (useful for nested module FOO::Bar::)
     def auto_completion_retrigger_when(current_word : String) : Bool
       current_word.ends_with? ':'
+    end
+
+    def documentation(entry : String)
+      @crystal_completer.documentation(entry).try do |doc|
+        IC::DocumentationHighlighter.highlight(doc, toggle: color?)
+      end
+    end
+
+    def documentation_summary(entry : String)
+      if summary = @crystal_completer.documentation_summary(entry)
+        suffix = " (alt-d for full documentation)"
+        max_size = Reply::Term::Size.width - suffix.size - 1
+
+        summary = summary[..max_size - 3] + "..." if summary.size > max_size - 3
+        summary = summary.ljust(max_size + 1) + suffix
+        summary.colorize.dark_gray.toggle(color?).to_s
+      end
     end
 
     private def print_status(status)
