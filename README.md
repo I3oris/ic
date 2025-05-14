@@ -14,6 +14,7 @@ It allows to quickly try and test some crystal code, or debug your code thanks t
 * Auto formatting
 * Auto indentation
 * Auto completion (Experimental)
+* Code documentation
 * History
 * Pasting of large expressions
 * Debugger

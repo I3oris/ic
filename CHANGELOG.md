@@ -1,8 +1,31 @@
+# 0.9.0 (Wen May 14 2025)
+
+### New
+* Update to the last crystal version (1.16.3)
+* Display code documentation on alt-d shortcut. Require reply version >= 0.4.
+
+### Bugs fix
+* Fix #25.
+
+# 0.8.0 (Thu Jan 7 2025)
+
+### New
+* Update to the last crystal version (1.14.0)
+* Clarify ambiguity with crystal version. (#22)
+* Document the 'ctrl-enter' shortcut on windows.
+
+### Bugs fix
+* Allow auto-completion to work well when crossing '::'. Will be effective when Crystal with use the new version of REPLy and IC updated to this new version of Crystal.
+* Fix #12.
+
+### Internal
+* Remove useless require. See #16.
+* Fix shard markd not found anymore.
+
 # 0.7.0 (Mon Apr 17 2023)
 
 ### New
 * Update to the last crystal version (1.8.0).
-
 * Now display `REPLy` version on `-v`.
 
 ### Internal
