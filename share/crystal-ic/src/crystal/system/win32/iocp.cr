@@ -86,6 +86,21 @@ struct Crystal::System::IOCP
         true
       end
     end
+
+    def inspect(io : IO) : Nil
+      to_s(io)
+    end
+
+    def to_s(io : IO) : Nil
+      io << "#<" << self.class.name << ":0x"
+      object_id.to_s(io, 16)
+      io << " @fiber="
+      @fiber.inspect io
+      io << ','
+      io << " @tag="
+      @tag.inspect io
+      io << '>'
+    end
   end
 
   getter handle : LibC::HANDLE
@@ -262,6 +277,11 @@ struct Crystal::System::IOCP
 
   class IOOverlappedOperation < OverlappedOperation
     def initialize(@handle : LibC::HANDLE)
+    end
+
+    def offset=(value : UInt64)
+      @overlapped.union.offset.offset = LibC::DWORD.new!(value)
+      @overlapped.union.offset.offsetHigh = LibC::DWORD.new!(value >> 32)
     end
 
     def wait_for_result(timeout, & : WinError ->)
