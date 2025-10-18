@@ -12,7 +12,14 @@ module Crystal::System::Signal
 
   alias Handler = ::Signal ->
 
-  @@pipe = IO.pipe(read_blocking: false, write_blocking: true)
+  @@pipe : {IO::FileDescriptor, IO::FileDescriptor} = begin
+    IO.pipe(read_blocking: false, write_blocking: true).tap do |reader, writer|
+      # This avoids accidentally closing the pipe from the interpreter.
+      # See https://github.com/crystal-lang/crystal/issues/16040 for details.
+      writer.close_on_finalize = false
+    end
+  end
+
   @@handlers = {} of ::Signal => Handler
   @@sigset = Sigset.new
   class_property child_handler : Handler?
@@ -168,8 +175,8 @@ module Crystal::System::Signal
     LibC._exit(1)
   end
 
-  @@setup_default_handlers = Atomic::Flag.new
-  @@setup_segfault_handler = Atomic::Flag.new
+  @@setup_default_handlers = Atomic(Bool).new(false)
+  @@setup_segfault_handler = Atomic(Bool).new(false)
   @@segfault_handler = LibC::SigactionHandlerT.new { |sig, info, data|
     # Capture fault signals (SEGV, BUS) and finish the process printing a backtrace first
 
@@ -202,7 +209,7 @@ module Crystal::System::Signal
   }
 
   def self.setup_default_handlers : Nil
-    return unless @@setup_default_handlers.test_and_set
+    return if @@setup_default_handlers.swap(true, :relaxed)
     @@sigset.clear
     start_loop
 
@@ -219,7 +226,7 @@ module Crystal::System::Signal
   end
 
   def self.setup_segfault_handler
-    return unless @@setup_segfault_handler.test_and_set
+    return if @@setup_segfault_handler.swap(true, :relaxed)
 
     altstack = LibC::StackT.new
     altstack.ss_sp = LibC.malloc(LibC::SIGSTKSZ)

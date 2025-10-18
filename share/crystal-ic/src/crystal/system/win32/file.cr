@@ -222,7 +222,7 @@ module Crystal::System::File
     raise NotImplementedError.new("File.chown")
   end
 
-  def self.fchown(path : String, fd : Int, uid : Int32, gid : Int32) : Nil
+  private def system_chown(uid : Int, gid : Int) : Nil
     raise NotImplementedError.new("File#chown")
   end
 
@@ -253,7 +253,7 @@ module Crystal::System::File
     end
   end
 
-  private def system_chmod(path : String, mode : Int32 | ::File::Permissions) : Nil
+  private def system_chmod(mode : Int32 | ::File::Permissions) : Nil
     mode = ::File::Permissions.new(mode) unless mode.is_a? ::File::Permissions
     handle = windows_handle
 
@@ -425,8 +425,17 @@ module Crystal::System::File
     end
   end
 
-  def self.readlink(path) : String
-    info = symlink_info?(path) || raise ::File::Error.new("Cannot read link", file: path)
+  def self.readlink(path, &) : String
+    info = symlink_info?(path)
+    unless info
+      {% begin %}
+      if WinError.value.in?({{ NOT_FOUND_ERRORS.splat }}, WinError::ERROR_NOT_A_REPARSE_POINT)
+        yield
+      end
+      {% end %}
+
+      raise ::File::Error.from_winerror("Cannot read link", file: path)
+    end
     path, _is_relative = info
     path
   end
@@ -466,7 +475,7 @@ module Crystal::System::File
     end
   end
 
-  private def system_utime(access_time : ::Time, modification_time : ::Time, path : String) : Nil
+  private def system_utime(access_time : ::Time, modification_time : ::Time) : Nil
     Crystal::System::File.utime(windows_handle, access_time, modification_time, path)
   end
 

@@ -21,6 +21,10 @@ module Crystal::System::Socket
     raise NotImplementedError.new "Crystal::System::Socket#system_listen"
   end
 
+  private def system_accept : {Handle, Bool}?
+    raise NotImplementedError.new "Crystal::System::Socket#system_accept"
+  end
+
   private def system_close_read
     if LibC.shutdown(fd, LibC::SHUT_RD) != 0
       raise ::Socket::Error.from_errno("shutdown read")
@@ -89,30 +93,38 @@ module Crystal::System::Socket
     raise NotImplementedError.new "Crystal::System::Socket#system_linge="
   end
 
-  private def system_getsockopt(fd, optname, optval, level = LibC::SOL_SOCKET, &)
+  private def system_getsockopt(optname, optval, level = LibC::SOL_SOCKET, &)
     raise NotImplementedError.new "Crystal::System::Socket#system_getsockopt"
   end
 
-  private def system_getsockopt(fd, optname, optval, level = LibC::SOL_SOCKET)
+  private def system_getsockopt(optname, optval, level = LibC::SOL_SOCKET)
     raise NotImplementedError.new "Crystal::System::Socket#system_getsockopt"
   end
 
-  private def system_setsockopt(fd, optname, optval, level = LibC::SOL_SOCKET)
+  private def system_setsockopt(optname, optval, level = LibC::SOL_SOCKET)
     raise NotImplementedError.new "Crystal::System::Socket#system_setsockopt"
   end
 
   private def system_blocking?
-    fcntl(LibC::F_GETFL) & LibC::O_NONBLOCK == 0
+    Socket.get_blocking(fd)
   end
 
   private def system_blocking=(value)
-    flags = fcntl(LibC::F_GETFL)
+    Socket.set_blocking(fd, value)
+  end
+
+  def self.get_blocking(fd : Handle)
+    fcntl(fd, LibC::F_GETFL) & LibC::O_NONBLOCK == 0
+  end
+
+  def self.set_blocking(fd : Handle, value : Bool)
+    flags = fcntl(fd, LibC::F_GETFL)
     if value
       flags &= ~LibC::O_NONBLOCK
     else
       flags |= LibC::O_NONBLOCK
     end
-    fcntl(LibC::F_SETFL, flags)
+    fcntl(fd, LibC::F_SETFL, flags)
   end
 
   private def system_close_on_exec?
@@ -129,6 +141,10 @@ module Crystal::System::Socket
     r = LibC.fcntl fd, cmd, arg
     raise ::Socket::Error.from_errno("fcntl() failed") if r == -1
     r
+  end
+
+  private def system_fcntl(cmd, arg = 0)
+    FileDescriptor.system_fcntl(fd, cmd, arg)
   end
 
   private def system_tty?
