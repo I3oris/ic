@@ -4,7 +4,7 @@ require "../system/unix/eventfd"
 require "../system/unix/timerfd"
 
 class Crystal::EventLoop::Epoll < Crystal::EventLoop::Polling
-  def initialize
+  def initialize(parallelism : Int32)
     # the epoll instance
     @epoll = System::Epoll.new
 
@@ -17,16 +17,6 @@ class Crystal::EventLoop::Epoll < Crystal::EventLoop::Polling
     # also allows to avoid locking timers before every epoll_wait call
     @timerfd = System::TimerFD.new
     @epoll.add(@timerfd.fd, LibC::EPOLLIN, u64: @timerfd.fd.to_u64!)
-  end
-
-  def after_fork_before_exec : Nil
-    super
-
-    # O_CLOEXEC would close these automatically, but we don't want to mess with
-    # the parent process fds (it would mess the parent evloop)
-    @epoll.close
-    @eventfd.close
-    @timerfd.close
   end
 
   {% unless flag?(:preview_mt) %}
@@ -132,7 +122,7 @@ class Crystal::EventLoop::Epoll < Crystal::EventLoop::Polling
     @epoll.delete(fd) { yield }
   end
 
-  private def system_set_timer(time : Time::Span?) : Nil
+  private def system_set_timer(time : Time::Instant?) : Nil
     if time
       @timerfd.set(time)
     else

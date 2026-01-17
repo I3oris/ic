@@ -1,7 +1,7 @@
 module Crystal
   class ProgressTracker
     # FIXME: This assumption is not always true
-    STAGES        = 13
+    STAGES        = 14
     STAGE_PADDING = 34
 
     property? stats = false
@@ -18,9 +18,9 @@ module Crystal
       print_stats
       print_progress
 
-      time_start = Time.monotonic
+      time_start = Time.instant
       retval = yield
-      time_taken = Time.monotonic - time_start
+      time_taken = time_start.elapsed
 
       print_stats(time_taken)
       print_progress

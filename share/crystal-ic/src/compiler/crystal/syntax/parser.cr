@@ -177,8 +177,12 @@ module Crystal
 
         next_token_skip_space_or_newline
         if @token.type.op_star?
-          raise "splat assignment already specified" if lhs_splat
-          lhs_splat = {index: i, location: @token.location}
+          if assign_index == -1
+            raise "splat assignment already specified" if lhs_splat
+            lhs_splat = {index: i, location: @token.location}
+          else
+            unexpected_token
+          end
           next_token_skip_space
         end
 
@@ -3276,7 +3280,13 @@ module Crystal
         when .macro_var?
           macro_var_name = @token.value.to_s
           location = @token.location
+          if macro_var_name[0].uppercase? || macro_var_name[0].titlecase?
+            warnings.add_warning_at @token.location, "macro fresh variables with constant names are deprecated"
+          end
           if current_char == '{'
+            if macro_var_name.size == 1
+              warnings.add_warning_at @token.location, "single-letter macro fresh variables with indices are deprecated"
+            end
             macro_var_exps = parse_macro_var_exps
           else
             macro_var_exps = nil
@@ -4841,7 +4851,12 @@ module Crystal
       end
 
       check :OP_RPAREN if allow_newline
-      end_location = token_end_location
+
+      # Prefer the end location of the last named argument when available.
+      # Using `token_end_location` would produce an off-by-one column
+      # in some cases (see issue #16092).
+      end_location = named_args.last?.try(&.end_location) unless allow_newline
+      end_location ||= token_end_location
 
       if allow_newline
         next_token_skip_space
@@ -5038,7 +5053,7 @@ module Crystal
         types << parse_atomic_type_with_suffix
       end
 
-      Union.new(types).at(types.first).at_end(types.last)
+      Union.new(types).at(type).at_end(types.last)
     end
 
     def parse_atomic_type_with_suffix
@@ -5086,6 +5101,9 @@ module Crystal
       when .op_lparen?
         next_token_skip_space_or_newline
         type = parse_type_splat { parse_union_type }
+        if type.is_a?(Union)
+          type.at(location).at_end(@token.location)
+        end
         if @token.type.op_rparen?
           next_token_skip_space
           if @token.type.op_minus_gt? # `(A) -> B` case
@@ -5388,17 +5406,15 @@ module Crystal
     # Looks ahead next tokens to check whether they indicate type.
     def type_start?(*, consume_newlines)
       peek_ahead do
-        begin
-          if consume_newlines
-            next_token_skip_space_or_newline
-          else
-            next_token_skip_space
-          end
-
-          type_start?
-        rescue
-          false
+        if consume_newlines
+          next_token_skip_space_or_newline
+        else
+          next_token_skip_space
         end
+
+        type_start?
+      rescue
+        false
       end
     end
 

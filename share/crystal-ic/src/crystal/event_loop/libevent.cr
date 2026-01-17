@@ -1,4 +1,5 @@
 require "./libevent/event"
+require "./lock"
 
 # :nodoc:
 class Crystal::EventLoop::LibEvent < Crystal::EventLoop
@@ -12,7 +13,7 @@ class Crystal::EventLoop::LibEvent < Crystal::EventLoop
 
   private getter(event_base) { Crystal::EventLoop::LibEvent::Event::Base.new }
 
-  def after_fork_before_exec : Nil
+  def initialize(parallelism : Int32)
   end
 
   {% unless flag?(:preview_mt) %}
@@ -29,6 +30,10 @@ class Crystal::EventLoop::LibEvent < Crystal::EventLoop
   end
 
   {% if flag?(:execution_context) %}
+    # the evloop has a single poll instance for the context and only one
+    # scheduler must wait on the evloop at any time
+    include Lock
+
     def run(queue : Fiber::List*, blocking : Bool) : Nil
       Crystal.trace :evloop, "run", blocking: blocking
       @runnables = queue
@@ -178,10 +183,13 @@ class Crystal::EventLoop::LibEvent < Crystal::EventLoop
     file_descriptor.evented_close
   end
 
-  def close(file_descriptor : Crystal::System::FileDescriptor) : Nil
+  def shutdown(file_descriptor : Crystal::System::FileDescriptor) : Nil
     # perform cleanup before LibC.close. Using a file descriptor after it has
     # been closed is never defined and can always lead to undefined results
     file_descriptor.evented_close
+  end
+
+  def close(file_descriptor : Crystal::System::FileDescriptor) : Nil
     file_descriptor.file_descriptor_close
   end
 
@@ -299,10 +307,13 @@ class Crystal::EventLoop::LibEvent < Crystal::EventLoop
     end
   end
 
-  def close(socket : ::Socket) : Nil
+  def shutdown(socket : ::Socket) : Nil
     # perform cleanup before LibC.close. Using a file descriptor after it has
     # been closed is never defined and can always lead to undefined results
     socket.evented_close
+  end
+
+  def close(socket : ::Socket) : Nil
     socket.socket_close
   end
 

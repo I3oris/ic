@@ -69,7 +69,7 @@ require "./execution_context/*"
 # ```
 @[Experimental]
 module Fiber::ExecutionContext
-  @@default : ExecutionContext?
+  @@default : ExecutionContext::Parallel?
 
   # Returns the default `ExecutionContext` for the process, automatically
   # started when the program started.
@@ -78,7 +78,7 @@ module Fiber::ExecutionContext
   # parallelism set to 1. The parallelism can be changed using
   # `Parallel#resize`.
   @[AlwaysInline]
-  def self.default : ExecutionContext
+  def self.default : ExecutionContext::Parallel
     @@default.not_nil!("expected default execution context to have been setup")
   end
 
@@ -92,18 +92,16 @@ module Fiber::ExecutionContext
   # parallel execution context for example.
   #
   # Respects the `CRYSTAL_WORKERS` environment variable if present and valid,
-  # and otherwise defaults to the minimum number of logical CPUs available to
-  # the process or available on the computer.
+  # and otherwise defaults to the number of logical CPUs available to the
+  # process or on the computer.
   def self.default_workers_count : Int32
-    if count = ENV["CRYSTAL_WORKERS"]?.try(&.to_i?)
-      return count.clamp(1..)
-    end
-
-    total = System.cpu_count.to_i.clamp(1..)
-    effective = Crystal::System.effective_cpu_count.to_i.clamp(1..)
+    count = ENV["CRYSTAL_WORKERS"]?.try(&.to_i?) || -1
+    count = Crystal::System.effective_cpu_count.to_i if count == -1
+    count = System.cpu_count.to_i if count == -1
     # TODO: query for CPU limits (e.g. linux/cgroup, freebsd/rctl, ...)
 
-    Math.min(total, effective)
+    # always report at least 1 worker
+    count.clamp(1..)
   end
 
   # :nodoc:

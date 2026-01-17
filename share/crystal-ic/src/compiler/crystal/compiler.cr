@@ -83,7 +83,9 @@ module Crystal
     property? no_codegen = false
 
     # Maximum number of LLVM modules that are compiled in parallel
-    property n_threads : Int32 = {% if flag?(:preview_mt) %}
+    property n_threads : Int32 = {% if flag?(:execution_context) %}
+      Fiber::ExecutionContext.default_workers_count
+    {% elsif flag?(:preview_mt) %}
       ENV["CRYSTAL_WORKERS"]?.try(&.to_i?) || 4
     {% elsif flag?(:win32) %}
       1
@@ -335,6 +337,13 @@ module Crystal
     end
 
     private def codegen(program, node : ASTNode, sources, output_filename)
+      {% if LibLLVM::IS_LT_130 %}
+        if @codegen_target.architecture == "aarch64"
+          stderr.puts "Error: Target #{@codegen_target} requires a Crystal compiler built with LLVM 13 or a later version."
+          exit 1
+        end
+      {% end %}
+
       llvm_modules = @progress_tracker.stage("Codegen (crystal)") do
         program.codegen node, debug: debug, frame_pointers: frame_pointers,
           single_module: @single_module || @cross_compile || !@emit_targets.none?

@@ -6,6 +6,7 @@ require "c/ntdll"
 require "../system/win32/iocp"
 require "../system/win32/waitable_timer"
 require "./timers"
+require "./lock"
 require "./iocp/*"
 
 # :nodoc:
@@ -26,8 +27,8 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
   @timer_packet = LibC::HANDLE.null
   @timer_key : System::IOCP::CompletionKey?
 
-  def initialize
-    @mutex = Thread::Mutex.new
+  def initialize(parallelism : Int32)
+    @timers_mutex = Thread::Mutex.new
     @timers = Timers(Timer).new
 
     # the completion port
@@ -84,6 +85,10 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
     def run(queue : Fiber::List*, blocking : Bool) : Nil
       run_impl(blocking) { |fiber| queue.value.push(fiber) }
     end
+
+    # the evloop has a single IOCP instance for the context and only one
+    # scheduler must wait on the evloop at any time
+    include EventLoop::Lock
   {% end %}
 
   # Runs the event loop and enqueues the fiber for the next upcoming event or
@@ -94,12 +99,13 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
     if @waitable_timer
       timeout = blocking ? LibC::INFINITE : 0_i64
     elsif blocking
-      if time = @mutex.synchronize { @timers.next_ready? }
+      if time = @timers_mutex.synchronize { @timers.next_ready? }
         # convert absolute time of next timer to relative time, expressed in
         # milliseconds, rounded up
-        seconds, nanoseconds = System::Time.monotonic
-        relative = time - Time::Span.new(seconds: seconds, nanoseconds: nanoseconds)
-        timeout = (relative.to_i * 1000 + (relative.nanoseconds + 999_999) // 1_000_000).clamp(0_i64..)
+        # Cannot use `time.elapsed` here because it calls `::Time.instant` which
+        # could be mocked.
+        relative = Crystal::System::Time.instant.duration_since(time)
+        timeout = (relative.to_i * 1000 + (relative.nanoseconds + 999_999) // 1_000_000)
       else
         timeout = LibC::INFINITE
       end
@@ -120,7 +126,7 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
       yield fiber
     end
 
-    @mutex.synchronize do
+    @timers_mutex.synchronize do
       # cancel the timeout of completed operations
       events.to_slice[0...size].each do |event|
         @timers.delete(pointerof(event.@timer))
@@ -162,20 +168,20 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
   end
 
   protected def add_timer(timer : Pointer(Timer)) : Nil
-    @mutex.synchronize do
+    @timers_mutex.synchronize do
       is_next_ready = @timers.add(timer)
       rearm_waitable_timer(timer.value.wake_at, interruptible: true) if is_next_ready
     end
   end
 
   protected def delete_timer(timer : Pointer(Timer)) : Nil
-    @mutex.synchronize do
+    @timers_mutex.synchronize do
       _, was_next_ready = @timers.delete(timer)
       rearm_waitable_timer(@timers.next_ready?, interruptible: false) if was_next_ready
     end
   end
 
-  protected def rearm_waitable_timer(time : Time::Span?, interruptible : Bool) : Nil
+  protected def rearm_waitable_timer(time : Time::Instant?, interruptible : Bool) : Nil
     if waitable_timer = @waitable_timer
       raise "BUG: @timer_packet was not initialized!" unless @timer_packet
       status = @iocp.cancel_wait_completion_packet(@timer_packet, true)
@@ -305,6 +311,9 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
 
   def reopened(file_descriptor : Crystal::System::FileDescriptor) : Nil
     raise NotImplementedError.new("Crystal::System::IOCP#reopened(FileDescriptor)")
+  end
+
+  def shutdown(file_descriptor : Crystal::System::FileDescriptor) : Nil
   end
 
   def close(file_descriptor : Crystal::System::FileDescriptor) : Nil
@@ -443,6 +452,9 @@ class Crystal::EventLoop::IOCP < Crystal::EventLoop
         false
       end
     end
+  end
+
+  def shutdown(socket : ::Socket) : Nil
   end
 
   def close(socket : ::Socket) : Nil

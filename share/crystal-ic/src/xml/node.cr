@@ -135,13 +135,15 @@ class XML::Node
       # children before replacing the node's contents
       child = @node.value.children
       while child
+        # save next pointer before unlinking, as `xmlUnlinkNode` clears it
+        next_child = child.value.next
         if node = document.cached?(child)
           node.unlink
         else
           document.unlinked_nodes << child
           LibXML.xmlUnlinkNode(child)
         end
-        child = child.value.next
+        child = next_child
       end
     end
 
@@ -719,12 +721,14 @@ class XML::Node
   protected def unlink_cached_children(node : LibXML::Node*) : Nil
     child = node.value.children
     while child
-      if obj = cached?(node)
+      # save next pointer before unlinking, as `xmlUnlinkNode` clears it
+      next_child = child.value.next
+      if obj = cached?(child)
         obj.unlink
       else
         unlink_cached_children(child)
       end
-      child = child.value.next
+      child = next_child
     end
   end
 end

@@ -10,7 +10,7 @@ class Crystal::EventLoop::Kqueue < Crystal::EventLoop::Polling
     @pipe = uninitialized LibC::Int[2]
   {% end %}
 
-  def initialize
+  def initialize(parallelism : Int32)
     # the kqueue instance
     @kqueue = System::Kqueue.new
 
@@ -25,20 +25,6 @@ class Crystal::EventLoop::Kqueue < Crystal::EventLoop::Polling
     {% else %}
       @pipe = System::FileDescriptor.system_pipe
       @kqueue.kevent(@pipe[0], LibC::EVFILT_READ, LibC::EV_ADD)
-    {% end %}
-  end
-
-  def after_fork_before_exec : Nil
-    super
-
-    # O_CLOEXEC would close these automatically but we don't want to mess with
-    # the parent process fds (that would mess the parent evloop)
-
-    # kqueue isn't inherited by fork on darwin/dragonfly, but we still close
-    @kqueue.close
-
-    {% unless LibC.has_constant?(:EVFILT_USER) %}
-      @pipe.each { |fd| LibC.close(fd) }
     {% end %}
   end
 
@@ -212,21 +198,20 @@ class Crystal::EventLoop::Kqueue < Crystal::EventLoop::Polling
     end
   end
 
-  private def system_set_timer(time : Time::Span?) : Nil
+  private def system_set_timer(time : Time::Instant?) : Nil
     if time
       flags = LibC::EV_ADD | LibC::EV_ONESHOT | LibC::EV_CLEAR
 
-      seconds, nanoseconds = System::Time.monotonic
-      now = Time::Span.new(seconds: seconds, nanoseconds: nanoseconds)
-      t = time - now
+      # Cannot use `time.elapsed` here because it calls `::Time.instant` which
+      # could be mocked.
+      t = Crystal::System::Time.instant.duration_since(time)
 
-      data =
-        {% if LibC.has_constant?(:NOTE_NSECONDS) %}
-          t.total_nanoseconds.to_i64!.clamp(0..)
-        {% else %}
-          # legacy BSD (and DragonFly) only have millisecond precision
-          t.positive? ? t.total_milliseconds.to_i64!.clamp(1..) : 0
-        {% end %}
+      data = t.total_nanoseconds.to_i64!
+      {% unless LibC.has_constant?(:NOTE_NSECONDS) %}
+        # legacy BSD (and DragonFly) only have millisecond precision, so we
+        # round up to the next millisecond.
+        data = (data + 999_999) // 1_000_000
+      {% end %}
     else
       flags = LibC::EV_DELETE
       data = 0_u64
