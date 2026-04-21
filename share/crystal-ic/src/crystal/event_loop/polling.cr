@@ -174,8 +174,11 @@ abstract class Crystal::EventLoop::Polling < Crystal::EventLoop
   def open(path : String, flags : Int32, permissions : File::Permissions, blocking : Bool?) : {System::FileDescriptor::Handle, Bool} | Errno
     path.check_no_null_byte
 
-    fd = LibC.open(path, flags | LibC::O_CLOEXEC, permissions)
-    return Errno.value if fd == -1
+    fd, errno = ::Fiber.syscall do
+      ret = LibC.open(path, flags | LibC::O_CLOEXEC, permissions)
+      {ret, Errno.value}
+    end
+    return errno if fd == -1
 
     {% if flag?(:darwin) %}
       # FIXME: poll of non-blocking fifo fd on darwin appears to be broken, so
@@ -361,6 +364,36 @@ abstract class Crystal::EventLoop::Polling < Crystal::EventLoop
         end
       else
         return {size.to_i32, ::Socket::Address.from(sockaddr, addrlen)}
+      end
+    end
+  end
+
+  # Extension to support Kernel TLS in OpenSSL::BIO.
+  def recvmsg(socket : ::Socket, message : Pointer(LibC::Msghdr), flags : Int32) : Int32 | Errno
+    loop do
+      ret = LibC.recvmsg(socket.fd, message, flags)
+      return ret.to_i unless ret == -1
+
+      if Errno.value == Errno::EAGAIN
+        wait_readable(socket, socket.@read_timeout) { return Errno::ETIMEDOUT }
+        return Errno::EBADF if socket.closed?
+      else
+        return Errno.value
+      end
+    end
+  end
+
+  # Extension to support Kernel TLS in OpenSSL::BIO.
+  def sendmsg(socket : ::Socket, message : Pointer(LibC::Msghdr), flags : Int32) : Int32 | Errno
+    loop do
+      ret = LibC.sendmsg(socket.fd, message, flags)
+      return ret.to_i unless ret == -1
+
+      if Errno.value == Errno::EAGAIN
+        wait_writable(socket, socket.@write_timeout) { return Errno::ETIMEDOUT }
+        return Errno::EBADF if socket.closed?
+      else
+        return Errno.value
       end
     end
   end

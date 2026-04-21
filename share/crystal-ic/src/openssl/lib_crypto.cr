@@ -63,6 +63,14 @@ lib LibCrypto
   type X509_STORE = Void*
   type X509_STORE_CTX = Void*
 
+  BIO_TYPE_DESCRIPTOR  = 0x0100
+  BIO_TYPE_SOURCE_SINK = 0x0400
+
+  BIO_FLAGS_KTLS_TX_CTRL_MSG          = 0x1000
+  BIO_FLAGS_KTLS_RX                   = 0x2000
+  BIO_FLAGS_KTLS_TX                   = 0x4000
+  BIO_FLAGS_KTLS_TX_ZEROCOPY_SENDFILE = 0x8000
+
   struct Bio
     method : Void*
     callback : BIO_callback_fn
@@ -86,28 +94,27 @@ lib LibCrypto
   alias BIO_callback_fn = (Bio*, Int, Char*, Int, Long, Long) -> Long
   alias BIO_callback_fn_ex = (Bio*, Int, Char, SizeT, Int, Long, Int, SizeT*) -> Long
 
-  PKCS5_SALT_LEN     =  8
-  EVP_MAX_KEY_LENGTH = 32
-  EVP_MAX_IV_LENGTH  = 16
+  PKCS5_SALT_LEN      =  8
+  EVP_MAX_KEY_LENGTH  = 32
+  EVP_MAX_IV_LENGTH   = 16
+  EVP_GCM_TLS_TAG_LEN = 16
 
-  CTRL_EOF           =  2
-  CTRL_PUSH          =  6
-  CTRL_POP           =  7
-  CTRL_FLUSH         = 11
-  CTRL_SET_KTLS_SEND = 72
-  CTRL_GET_KTLS_SEND = 73
-  CTRL_GET_KTLS_RECV = 76
+  SSL3_RT_HEADER_LENGTH = 5
 
-  alias BioMethodWrite = (Bio*, Char*, SizeT, SizeT*) -> Int
-  alias BioMethodWriteOld = (Bio*, Char*, Int) -> Int
-  alias BioMethodRead = (Bio*, Char*, SizeT, SizeT*) -> Int
-  alias BioMethodReadOld = (Bio*, Char*, Int) -> Int
-  alias BioMethodPuts = (Bio*, Char*) -> Int
-  alias BioMethodGets = (Bio*, Char*, Int) -> Int
-  alias BioMethodCtrl = (Bio*, Int, Long, Void*) -> Long
-  alias BioMethodCreate = Bio* -> Int
-  alias BioMethodDestroy = Bio* -> Int
-  alias BioMethodCallbackCtrl = (Bio*, Int, Void*) -> Long
+  TLS1_2_VERSION_MAJOR = 0x03
+  TLS1_2_VERSION_MINOR = 0x03
+
+  CTRL_EOF                           =   2
+  CTRL_PUSH                          =   6
+  CTRL_POP                           =   7
+  CTRL_FLUSH                         =  11
+  CTRL_SET_KTLS                      =  72
+  CTRL_GET_KTLS_SEND                 =  73
+  CTRL_SET_KTLS_TX_SEND_CTRL_MSG     =  74
+  CTRL_CLEAR_KTLS_TX_CTRL_MSG        =  75
+  CTRL_GET_KTLS_RECV                 =  76
+  CTRL_SET_KTLS_TX_ZEROCOPY_SENDFILE =  90
+  BIO_C_GET_FD                       = 105
 
   type BioMethod = Void
 
@@ -119,15 +126,29 @@ lib LibCrypto
   fun BIO_set_init(Bio*, Int)
   fun BIO_set_shutdown(Bio*, Int)
 
+  fun BIO_set_flags(Bio*, Int)
+  fun BIO_test_flags(Bio*, Int) : Int
+  fun BIO_clear_flags(Bio*, Int)
+
+  fun BIO_ctrl(Bio*, Int, Long, Void*) : Long
+
+  fun BIO_get_new_index : Int
   fun BIO_meth_new(Int, Char*) : BioMethod*
-  fun BIO_meth_set_read(BioMethod*, BioMethodReadOld)
-  fun BIO_meth_set_write(BioMethod*, BioMethodWriteOld)
-  fun BIO_meth_set_puts(BioMethod*, BioMethodPuts)
-  fun BIO_meth_set_gets(BioMethod*, BioMethodGets)
-  fun BIO_meth_set_ctrl(BioMethod*, BioMethodCtrl)
-  fun BIO_meth_set_create(BioMethod*, BioMethodCreate)
-  fun BIO_meth_set_destroy(BioMethod*, BioMethodDestroy)
-  fun BIO_meth_set_callback_ctrl(BioMethod*, BioMethodCallbackCtrl)
+  fun BIO_meth_set_read(BioMethod*, (Bio*, Char*, Int) -> Int)
+  fun BIO_meth_set_write(BioMethod*, (Bio*, Char*, Int) -> Int)
+
+  {% unless compare_versions(LIBRESSL_VERSION, "0.0.0") > 0 %}
+    # LibreSSL doesn't support the _ex functions
+    fun BIO_meth_set_read_ex(BioMethod*, (Bio*, Char*, SizeT, SizeT*) -> Int)
+    fun BIO_meth_set_write_ex(BioMethod*, (Bio*, Char*, SizeT, SizeT*) -> Int)
+  {% end %}
+
+  fun BIO_meth_set_puts(BioMethod*, (Bio*, Char*) -> Int)
+  fun BIO_meth_set_gets(BioMethod*, (Bio*, Char*, Int) -> Int)
+  fun BIO_meth_set_ctrl(BioMethod*, (Bio*, Int, Long, Void*) -> Long)
+  fun BIO_meth_set_create(BioMethod*, (Bio*) -> Int)
+  fun BIO_meth_set_destroy(BioMethod*, (Bio*) -> Int)
+  fun BIO_meth_set_callback_ctrl(BioMethod*, (Bio*, Int, Void*) -> Long)
 
   fun sha1 = SHA1(data : Char*, length : SizeT, md : Char*) : Char*
 
