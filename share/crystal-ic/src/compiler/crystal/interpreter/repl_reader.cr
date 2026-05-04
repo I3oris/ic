@@ -16,6 +16,7 @@ class Crystal::ReplReader < Reply::Reader
     "expecting token 'CONST', not 'EOF'",
     "expecting any of these tokens: IDENT, CONST, `, <<, <, <=, ==, ===, !=, =~, !~, >>, >, >=, +, -, *, /, //, !, ~, %, &, |, ^, **, [], []?, []=, <=>, &+, &-, &*, &** (not 'EOF')",
     "expecting any of these tokens: ;, NEWLINE (not 'EOF')",
+    "expecting any of these tokens: ;, NEWLINE, SPACE (not 'EOF')",
     "expecting token ')', not 'EOF'",
     "expecting token ']', not 'EOF'",
     "expecting token '}', not 'EOF'",

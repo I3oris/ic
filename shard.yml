@@ -15,6 +15,10 @@ dependencies:
   reply:
     version: 0.4.0
     github: I3oris/reply
+  markd:
+    github: icyleaf/markd
+    commit: 03cd4f5d6f4e56054502a6548b4c2ff92fb3dc20
+
 
 development_dependencies:
   ameba:

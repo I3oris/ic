@@ -41,6 +41,11 @@ class IC::DocumentationHighlighter
     in .line_break?     then nil
     in .custom_in_line? then nil
     in .custom_block?   then nil
+    in .strikethrough?  then text(node)
+    in .alert?          then text(node)
+    in .table?          then text(node)
+    in .table_cell?     then text(node)
+    in .table_row?      then text(node)
     end
 
     render(node.next?)
