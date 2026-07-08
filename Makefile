@@ -15,7 +15,7 @@ O := bin/ic
 # LLVM:
 LLVM_EXT_DIR := $(CRYSTAL_ROOT)/llvm/ext
 LLVM_EXT_OBJ := $(LLVM_EXT_DIR)/llvm_ext.o
-LLVM_CONFIG ?= $(shell $(CRYSTAL_ROOT)/llvm/ext/find-llvm-config)
+LLVM_CONFIG ?= $(shell $(CRYSTAL_ROOT)/llvm/ext/find-llvm-config.sh)
 
 # INSTALL:
 DESTDIR ?= /usr/local
@@ -28,6 +28,9 @@ all: $(O)
 $(O): $(LLVM_EXT_OBJ) $(SOURCES)
 	mkdir -p bin
 	$(ENV) $(COMPILER) build $(FLAGS) src/ic.cr -o $(O)
+
+$(LLVM_EXT_OBJ): $(LLVM_EXT_DIR)/llvm_ext.cc
+	$(CXX) -c $(CXXFLAGS) -o $@ $< $(if $(LLVM_CONFIG),$(shell $(LLVM_CONFIG) --cxxflags))
 
 .PHONY: release
 release:
