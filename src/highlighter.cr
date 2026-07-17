@@ -268,7 +268,7 @@ class IC::Highlighter
     loop do
       consume_space_or_newline(lexer, io)
       @pos = lexer.current_pos
-      token = lexer.next_string_array_token
+      token = lexer.next_string_token(token.delimiter_state)
       case token.type
       when .string?
         highlight token.raw, STRING_COLOR, io
