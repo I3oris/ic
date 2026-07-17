@@ -18,6 +18,7 @@ require "compiler/crystal/codegen/**"
 require "compiler/crystal/tools/implementations"
 require "compiler/crystal/tools/context"
 require "compiler/crystal/interpreter/**"
+require "./crystal_command"
 
 require "./pry"
 require "./crystal_errors"
