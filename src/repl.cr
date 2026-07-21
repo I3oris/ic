@@ -30,8 +30,11 @@ class Crystal::Repl
     color = @program.color?
     @program.wants_doc = true
 
+    Fiber::ExecutionContext.default.resize(maximum: System.cpu_count.to_i32)
+    parallel = Fiber::ExecutionContext::Parallel.new("MT", maximum: System.cpu_count.to_i32)
+
     prelude_complete_channel = Channel(Int32).new
-    spawn do
+    parallel.spawn do
       load_prelude
       prelude_complete_channel.send(1)
     end
