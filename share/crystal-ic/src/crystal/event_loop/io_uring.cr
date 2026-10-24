@@ -168,7 +168,6 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
       System::IoUring.supports_opcode?(LibC::IORING_OP_POLL_ADD) &&         # 5.1
       System::IoUring.supports_opcode?(LibC::IORING_OP_READ) &&             # 5.6
       System::IoUring.supports_opcode?(LibC::IORING_OP_RECVMSG) &&          # 5.3
-      System::IoUring.supports_opcode?(LibC::IORING_OP_TIMEOUT) &&          # 5.4
       System::IoUring.supports_opcode?(LibC::IORING_OP_SEND) &&             # 5.6
       System::IoUring.supports_opcode?(LibC::IORING_OP_SHUTDOWN) &&         # 5.11
       System::IoUring.supports_opcode?(LibC::IORING_OP_SOCKET) &&           # 5.19 (unused, smoke test for EBADR/IORING_ASYNC_CANCEL_FD)
@@ -214,11 +213,6 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
     @mutex = Thread::Mutex.new
   end
 
-  {% if flag?(:without_mt) %}
-    def after_fork : Nil
-    end
-  {% end %}
-
   private def ring : Ring
     {% if !flag?(:without_mt) && !flag?(:preview_mt) || flag?(:execution_context) %}
       Fiber::ExecutionContext::Scheduler.current.__evloop_ring
@@ -247,8 +241,8 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
   end
 
   {% if !flag?(:without_mt) && !flag?(:preview_mt) || flag?(:execution_context) %}
-    def run(queue : Fiber::List*, blocking : Bool) : Nil
-      system_run(blocking) { |fiber| queue.value.push(fiber) }
+    def run(blocking : Bool, & : Fiber ->) : Nil
+      system_run(blocking) { |fiber| yield fiber }
     end
 
     # no lock: the evloop expects every scheduler to wait on its dedicated ring
@@ -431,7 +425,10 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
       else
         event.value.res = cqe.value.res
         # event.value.flags = cqe.value.flags
-        yield event.value.fiber
+
+        if fiber = event.value.fiber?
+          yield fiber
+        end
       end
     end
   end
@@ -456,11 +453,15 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
     timers.to_slice[0, count].each do |event|
       fiber = event.value.fiber
 
-      if event.value.type.select_timeout?
-        next unless select_action = fiber.timeout_select_action
-        fiber.timeout_select_action = nil
+      case event.value.type
+      when .select_timeout?
+        next unless select_action = event.value.timeout_select_action
         next unless select_action.time_expired?
-        fiber.@timeout_event.as(FiberEvent).clear
+        event.value.wake_at = nil
+      when .sleep?
+        event.value.timed_out = true
+      else
+        raise RuntimeError.new("BUG: unexpected event in timers: #{event.value}")
       end
 
       yield fiber
@@ -555,16 +556,20 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
   # fiber interface, see Crystal::EventLoop
 
   def sleep(duration : Time::Span) : Nil
-    async_impl(:sleep) do |event|
-      event.value.timeout = duration
+    event = Event.new(:sleep, Fiber.current)
+    event.wake_at = System::Time.instant + duration
+    add_timer pointerof(event)
 
-      ring.submit do |sqe|
-        sqe.value.opcode = LibC::IORING_OP_TIMEOUT
-        sqe.value.user_data = event.address.to_u64!
-        sqe.value.addr = event.value.timespec.address.to_u64!
-        sqe.value.len = 1
-      end
-    end
+    Fiber.suspend
+
+    # safety check
+    return if event.timed_out?
+
+    # try to avoid a double resume if possible, but another thread might be
+    # running the evloop and dequeue the event in parallel, so a "can't resume
+    # dead fiber" can still happen in a MT execution context.
+    delete_timer(pointerof(event))
+    raise "BUG: #{event.fiber} called sleep but was manually resumed before the timer expired!"
   end
 
   def create_timeout_event(fiber : Fiber) : FiberEvent
@@ -849,40 +854,87 @@ class Crystal::EventLoop::IoUring < Crystal::EventLoop
     pipe = System::FileDescriptor.system_pipe
 
     begin
-      res = async_impl do |event|
-        count = link_timeout ? 3 : 2
+      # we need two events to know the result of each splice, yet only need the
+      # second splice to resume the fiber
+      event1 = Event.new(:async, nil)
+      event2 = Event.new(:async, Fiber.current)
 
-        ring.submit(sqes.to_slice[0, count]) do
-          # file -> pipe
-          sqes[0].value.opcode = LibC::IORING_OP_SPLICE | LibC::IOSQE_IO_LINK
-          sqes[0].value.splice_fd_in = fd
-          sqes[0].value.fd = pipe[1]
-          sqes[0].value.splice_off_in = offset
-          sqes[0].value.off = -1
-          sqes[0].value.len = len
+      sqe_count = link_timeout ? 3 : 2
+      ring.submit(sqes.to_slice[0, sqe_count]) do
+        # file -> pipe
+        sqes[0].value.opcode = LibC::IORING_OP_SPLICE
+        sqes[0].value.flags = LibC::IOSQE_IO_LINK
+        sqes[0].value.splice_fd_in = fd
+        sqes[0].value.fd = pipe[1]
+        sqes[0].value.splice_off_in = offset
+        sqes[0].value.off = -1
+        sqes[0].value.len = len
+        sqes[0].value.user_data = pointerof(event1).address.to_u64!
 
-          # pipe -> socket
-          sqes[1].value.opcode = LibC::IORING_OP_SPLICE | (link_timeout ? LibC::IOSQE_IO_LINK : 0_u32)
-          sqes[1].value.splice_fd_in = pipe[0]
-          sqes[1].value.fd = socket.fd
-          sqes[1].value.splice_off_in = -1
-          sqes[1].value.off = -1
-          sqes[1].value.len = len
-          sqes[1].value.user_data = event.address.to_u64!
+        # pipe -> socket
+        sqes[1].value.opcode = LibC::IORING_OP_SPLICE
+        sqes[1].value.splice_fd_in = pipe[0]
+        sqes[1].value.fd = socket.fd
+        sqes[1].value.splice_off_in = -1
+        sqes[1].value.off = -1
+        sqes[1].value.len = len
+        sqes[1].value.user_data = pointerof(event2).address.to_u64!
 
-          if link_timeout
-            event.value.timeout = link_timeout
+        if link_timeout
+          sqes[1].value.flags = LibC::IOSQE_IO_LINK
 
-            sqes[2].value.opcode = LibC::IORING_OP_LINK_TIMEOUT
-            sqes[2].value.addr = event.value.timespec.address.to_u64!
-            sqes[2].value.len = 1
-          end
+          event2.timeout = link_timeout
+          sqes[2].value.opcode = LibC::IORING_OP_LINK_TIMEOUT
+          sqes[2].value.addr = event2.timespec.address.to_u64!
+          sqes[2].value.len = 1
         end
       end
-      res < 0 ? Errno.new(-res) : res.to_i64
+
+      Fiber.suspend
+
+      if event2.res == -LibC::ECANCELED
+        if event1.res < 0
+          # read failed
+          return Errno.new(-event1.res)
+        elsif event1.res == 0
+          # read nothing (e.g. offset > file.size)
+          return 0_i64
+        elsif event1.res < len
+          # read less than expected, (e.g. offset + len > file.size) but still
+          # read something into the pipe
+          ring.submit(sqes.to_slice[0, sqe_count - 1]) do
+            # pipe -> socket (retry)
+            sqes[0].value.opcode = LibC::IORING_OP_SPLICE
+            sqes[0].value.splice_fd_in = pipe[0]
+            sqes[0].value.fd = socket.fd
+            sqes[0].value.splice_off_in = -1
+            sqes[0].value.off = -1
+            sqes[0].value.len = event1.res
+            sqes[0].value.user_data = pointerof(event2).address.to_u64!
+
+            if link_timeout
+              sqes[0].value.flags = LibC::IOSQE_IO_LINK
+
+              sqes[1].value.opcode = LibC::IORING_OP_LINK_TIMEOUT
+              sqes[1].value.addr = event2.timespec.address.to_u64!
+              sqes[1].value.len = 1
+            end
+          end
+
+          Fiber.suspend
+        end
+      end
+
+      if event2.res < 0
+        errno = Errno.new(-event2.res)
+        raise IO::TimeoutError.new("Sendfile timed out") if errno == Errno::ECANCELED
+        errno
+      else
+        event2.res.to_i64
+      end
     ensure
       # async close (single submit, no wait)
-      ring.submit(sqes.to_slice[0, 2]) do
+      ring.submit(sqes.to_slice[0, 1]) do
         sqes[0].value.opcode = LibC::IORING_OP_CLOSE
         sqes[0].value.fd = pipe[0]
 
