@@ -23,12 +23,16 @@ class HTTP::Server::RequestProcessor
   end
 
   def process(input : IO, output : IO) : Nil
-    response = Response.new(output)
+    process(IO::Stapled.new(input, output))
+  end
+
+  def process(io : IO) : Nil
+    response = Response.new(io)
 
     begin
       until @wants_close
         request = HTTP::Request.from_io(
-          input,
+          io,
           max_request_line_size: max_request_line_size,
           max_headers_size: max_headers_size,
         )
@@ -54,7 +58,15 @@ class HTTP::Server::RequestProcessor
 
         response.version = request.version
         response.headers["Connection"] = "keep-alive" if request.keep_alive?
-        context = Context.new(request, response)
+        if io.responds_to?(:remote_address)
+          remote_address = io.remote_address
+        end
+
+        if io.responds_to?(:local_address)
+          local_address = io.local_address
+        end
+        context = Context.new(request, response,
+          remote_address: remote_address, local_address: local_address)
 
         Log.with_context do
           @handler.call(context)
@@ -72,7 +84,7 @@ class HTTP::Server::RequestProcessor
           response.output.close
         end
 
-        output.flush
+        io.flush
 
         # If there is an upgrade handler, hand over
         # the connection to it and return
@@ -91,11 +103,11 @@ class HTTP::Server::RequestProcessor
             # At this point the request handler has already initiated the
             # connection upgrade, so we cannot respond with an 400 error here.
             # Instead we drop the connection before continuing with the upgrade.
-            input.close
+            io.close
             return
           end
 
-          upgrade_handler.call(output)
+          upgrade_handler.call(io)
           return
         end
 
